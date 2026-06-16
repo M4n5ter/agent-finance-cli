@@ -84,7 +84,10 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           set -euo pipefail
-          for package_dir in npm-dist/*; do
+          find npm-dist -name package.json -mindepth 2 -maxdepth 3 -print0 \
+            | sort -z \
+            | while IFS= read -r -d '' package_json; do
+            package_dir="$(dirname "$package_json")"
             npm publish "$package_dir" --access public
           done
       - name: publish main package
