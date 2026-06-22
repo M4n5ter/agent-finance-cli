@@ -229,7 +229,8 @@ fn document_from_content(
 }
 
 fn parse_frontmatter(content: &str) -> Result<Frontmatter> {
-    let content = content.trim_start();
+    let normalized = content.trim_start().replace("\r\n", "\n");
+    let content = normalized.as_str();
     let Some(rest) = content.strip_prefix("---\n") else {
         return Err(anyhow!("missing YAML frontmatter"));
     };
@@ -348,6 +349,15 @@ mod tests {
         assert_eq!(frontmatter.name, "agent-finance");
         assert_eq!(frontmatter.description, "First line second line");
         assert!(frontmatter.hidden);
+    }
+
+    #[test]
+    fn parse_frontmatter_accepts_windows_line_endings() {
+        let content = "---\r\nname: core\r\ndescription: Core guide.\r\n---\r\n\r\n# Body\r\n";
+        let frontmatter = parse_frontmatter(content).expect("frontmatter");
+
+        assert_eq!(frontmatter.name, "core");
+        assert_eq!(frontmatter.description, "Core guide.");
     }
 
     #[test]
