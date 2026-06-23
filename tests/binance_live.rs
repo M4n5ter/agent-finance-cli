@@ -507,6 +507,7 @@ enum SignedProfileEnvironment {
 
 struct SignedProfileEnv {
     root: PathBuf,
+    data_home: PathBuf,
 }
 
 impl SignedProfileEnv {
@@ -520,7 +521,8 @@ impl SignedProfileEnv {
             std::process::id(),
         ));
         fs::create_dir_all(&root).expect("signed profile test root");
-        Self { root }
+        let data_home = root.join("data");
+        Self { root, data_home }
     }
 
     fn write_profile(&self, profile: &str, environment: SignedProfileEnvironment) {
@@ -543,7 +545,7 @@ impl SignedProfileEnv {
     fn command_output(&self, args: &[&str]) -> std::process::Output {
         Command::new(env!("CARGO_BIN_EXE_agent-finance"))
             .env("XDG_CONFIG_HOME", self.root.join("config"))
-            .env("XDG_DATA_HOME", self.root.join("data"))
+            .env("XDG_DATA_HOME", &self.data_home)
             .args(args)
             .output()
             .expect("agent-finance command should start")
@@ -598,7 +600,7 @@ margin_type = "isolated"
 
 [risk.allowed_symbols.BTCUSDT]
 markets = ["spot", "usds-futures"]
-order_kinds = ["market", "limit"]
+order_kinds = ["market", "limit", "limit-maker"]
 max_order_notional_usdt = "25"
 "#
     )

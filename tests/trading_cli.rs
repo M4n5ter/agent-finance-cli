@@ -253,6 +253,53 @@ fn market_order_uses_valuation_only_for_risk_and_test_is_non_consuming() {
 }
 
 #[test]
+fn spot_limit_maker_order_dry_run_uses_post_only_exchange_shape() {
+    let env = default_env("limit-maker-order");
+    let order = env.json(command(&[
+        "order",
+        "intent",
+        "BTCUSDT",
+        "--profile",
+        "default",
+        "--market",
+        "spot",
+        "--side",
+        "buy",
+        "--kind",
+        "limit-maker",
+        "--quantity",
+        "0.0001",
+        "--price",
+        "50000",
+        "--json",
+    ]));
+    assert_eq!(order["risk"]["allowed"], true);
+    let order_id = order["intent"]["id"].as_str().expect("order intent id");
+
+    let submit = env.json(command(&[
+        "order",
+        "submit",
+        order_id,
+        "--profile",
+        "default",
+        "--json",
+    ]));
+    let params = submit["response"]["request"]["params"]
+        .as_array()
+        .expect("request params");
+    assert!(
+        params
+            .iter()
+            .any(|param| param[0] == "type" && param[1] == "LIMIT_MAKER"),
+        "dry-run should map limit-maker to Binance LIMIT_MAKER: {submit}"
+    );
+    assert!(
+        !params.iter().any(|param| param[0] == "timeInForce"),
+        "Binance LIMIT_MAKER dry-run must not send timeInForce: {submit}"
+    );
+}
+
+#[test]
 fn order_query_requires_exactly_one_order_identifier_before_credentials() {
     let env = default_env("order-query");
     let missing_target = env.output(command(&[

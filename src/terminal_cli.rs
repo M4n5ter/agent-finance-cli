@@ -421,6 +421,7 @@ impl From<TradingSide> for agent_finance_core::OrderSide {
 pub enum TradingOrderKind {
     Market,
     Limit,
+    LimitMaker,
     StopLoss,
     TakeProfit,
 }
@@ -430,6 +431,7 @@ impl From<TradingOrderKind> for agent_finance_core::OrderKind {
         match value {
             TradingOrderKind::Market => Self::Market,
             TradingOrderKind::Limit => Self::Limit,
+            TradingOrderKind::LimitMaker => Self::PostOnlyLimit,
             TradingOrderKind::StopLoss => Self::StopLoss,
             TradingOrderKind::TakeProfit => Self::TakeProfit,
         }

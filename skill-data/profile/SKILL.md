@@ -33,6 +33,7 @@ agent-finance risk explain --profile default
 
 ```bash
 agent-finance order intent BTCUSDT --profile default --market spot --side buy --kind limit --quantity 0.001 --price 50000 --time-in-force gtc
+agent-finance order intent BTCUSDT --profile default --market spot --side buy --kind limit-maker --quantity 0.001 --price 50000
 agent-finance order intent BTCUSDT --profile default --market spot --side buy --kind market --quantity 0.001 --valuation-price 50000
 agent-finance risk check INTENT_ID --profile default
 agent-finance order submit INTENT_ID --profile default
@@ -86,6 +87,37 @@ Testnet signed order-test smoke, uses Binance test endpoints and does not place 
 AGENT_FINANCE_TESTNET_BINANCE_SIGNED=1 cargo test --test binance_live binance_testnet_signed_order_test_surface_is_usable -- --ignored --exact --nocapture
 ```
 
+Live place-and-cancel smoke places a real Binance spot `LIMIT_MAKER` post-only order and then cancels it.
+The test also reads the live Binance order book and fails before submit unless buy price is below best bid or sell price is above best ask.
+Use only with a deliberately non-marketable tiny order that still satisfies Binance min-notional filters; do not fix min-notional failures by making the price marketable.
+Set `AGENT_FINANCE_LIVE_BINANCE_SMOKE_DATA_HOME` to a persistent local directory so audit events and daily live notional limits survive between smoke runs.
+
+```bash
+AGENT_FINANCE_LIVE_BINANCE_PLACE_AND_CANCEL_ORDER=1 \
+AGENT_FINANCE_LIVE_BINANCE_WRITE_ACK=I_UNDERSTAND_THIS_PLACES_A_LIVE_ORDER \
+AGENT_FINANCE_LIVE_BINANCE_SMOKE_DATA_HOME=$HOME/.local/state/agent-finance-live-smoke \
+AGENT_FINANCE_LIVE_BINANCE_ORDER_SYMBOL=BTCUSDT \
+AGENT_FINANCE_LIVE_BINANCE_ORDER_MARKET=spot \
+AGENT_FINANCE_LIVE_BINANCE_ORDER_SIDE=buy \
+AGENT_FINANCE_LIVE_BINANCE_ORDER_QUANTITY=0.0004 \
+AGENT_FINANCE_LIVE_BINANCE_ORDER_PRICE=30000 \
+AGENT_FINANCE_LIVE_BINANCE_ORDER_MAX_NOTIONAL_USDT=15 \
+cargo test --test binance_live_write binance_live_order_cancel_smoke_is_usable -- --ignored --exact --nocapture
+```
+
+Live transfer smoke moves real funds between Spot and USD-M. Run it only with a tiny amount and an explicit direction:
+
+```bash
+AGENT_FINANCE_LIVE_BINANCE_TRANSFERS=1 \
+AGENT_FINANCE_LIVE_BINANCE_TRANSFER_ACK=I_UNDERSTAND_THIS_MOVES_FUNDS \
+AGENT_FINANCE_LIVE_BINANCE_SMOKE_DATA_HOME=$HOME/.local/state/agent-finance-live-smoke \
+AGENT_FINANCE_LIVE_BINANCE_TRANSFER_ASSET=USDT \
+AGENT_FINANCE_LIVE_BINANCE_TRANSFER_DIRECTION=spot-to-usds-futures \
+AGENT_FINANCE_LIVE_BINANCE_TRANSFER_AMOUNT=0.1 \
+AGENT_FINANCE_LIVE_BINANCE_TRANSFER_MAX_AMOUNT=0.1 \
+cargo test --test binance_live_write binance_live_transfer_smoke_is_usable -- --ignored --exact --nocapture
+```
+
 ## Guardrails
 
 - Never put API secrets in TOML, Markdown, command history, audit logs, or prompts.
@@ -94,7 +126,7 @@ AGENT_FINANCE_TESTNET_BINANCE_SIGNED=1 cargo test --test binance_live binance_te
 - `max_daily_order_notional_usdt` is enforced from the local append-only audit log for `risk check --live` and live order submit. Matching live-submit events with missing notional data fail closed.
 - `order submit` without flags is an offline dry-run; `--test` calls an exchange test endpoint where available but does not consume the intent; only `--live` consumes the intent.
 - `order submit --test` and `order submit --live` fetch Binance `exchangeInfo` and block orders that violate locally checkable symbol status, price tick, lot size, or notional filters. Dry-run is offline and prints the `exchangeInfo` request that will be checked later.
-- Limit orders use `--price` as the exchange price. Market orders use `--valuation-price` for risk notional checks and never send an exchange `price` parameter; exchange notional for market orders is reported as not locally checked because it depends on execution price.
+- Limit orders use `--price` as the exchange price. Spot `limit-maker` orders map to Binance `LIMIT_MAKER`, do not accept `--time-in-force`, and rely on the exchange to reject orders that would immediately take liquidity. Market orders use `--valuation-price` for risk notional checks and never send an exchange `price` parameter; exchange notional for market orders is reported as not locally checked because it depends on execution price.
 - Live universal transfers require explicit `[[risk.allowed_transfers]]` entries with direction, asset, and max amount.
 - Live futures state changes require explicit `[[risk.allowed_futures_state_changes]]` entries. Order submit does not change leverage or margin type implicitly.
 - Transfer history reads Binance SAPI live account data and requires a reviewed live profile.

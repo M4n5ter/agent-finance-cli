@@ -79,6 +79,8 @@ impl fmt::Display for OrderSide {
 pub enum OrderKind {
     Market,
     Limit,
+    #[serde(rename = "limit-maker")]
+    PostOnlyLimit,
     StopLoss,
     TakeProfit,
 }
@@ -88,6 +90,7 @@ impl fmt::Display for OrderKind {
         match self {
             Self::Market => formatter.write_str("market"),
             Self::Limit => formatter.write_str("limit"),
+            Self::PostOnlyLimit => formatter.write_str("limit-maker"),
             Self::StopLoss => formatter.write_str("stop-loss"),
             Self::TakeProfit => formatter.write_str("take-profit"),
         }
@@ -249,6 +252,10 @@ pub enum OrderSpec {
         price: DecimalValue,
         time_in_force: TimeInForce,
     },
+    #[serde(rename = "limit-maker")]
+    PostOnlyLimit {
+        price: DecimalValue,
+    },
     StopLoss {
         stop_price: DecimalValue,
     },
@@ -287,6 +294,19 @@ impl OrderSpec {
                         .ok_or_else(|| anyhow!("limit order requires time in force"))?,
                 })
             }
+            OrderKind::PostOnlyLimit if market == Market::UsdsFutures => Err(anyhow!(
+                "{kind} is not supported for usds-futures yet; use spot post-only limit orders"
+            )),
+            OrderKind::PostOnlyLimit => {
+                reject_present("valuation price", valuation_price.as_ref())?;
+                reject_present("stop price", stop_price.as_ref())?;
+                if time_in_force.is_some() {
+                    return Err(anyhow!("limit-maker order does not accept time in force"));
+                }
+                Ok(Self::PostOnlyLimit {
+                    price: price.ok_or_else(|| anyhow!("limit-maker order requires price"))?,
+                })
+            }
             OrderKind::StopLoss | OrderKind::TakeProfit if market == Market::UsdsFutures => {
                 Err(anyhow!(
                     "{kind} is not supported for usds-futures yet; use a provider-specific order model once futures conditional orders are modeled"
@@ -321,6 +341,7 @@ impl OrderSpec {
         match self {
             Self::Market { .. } => OrderKind::Market,
             Self::Limit { .. } => OrderKind::Limit,
+            Self::PostOnlyLimit { .. } => OrderKind::PostOnlyLimit,
             Self::StopLoss { .. } => OrderKind::StopLoss,
             Self::TakeProfit { .. } => OrderKind::TakeProfit,
         }
@@ -330,6 +351,7 @@ impl OrderSpec {
         match self {
             Self::Market { valuation_price } => valuation_price,
             Self::Limit { price, .. } => price,
+            Self::PostOnlyLimit { price } => price,
             Self::StopLoss { stop_price } | Self::TakeProfit { stop_price } => stop_price,
         }
     }

@@ -29,7 +29,7 @@ margin_type = "isolated"
 
 [risk.allowed_symbols.BTCUSDT]
 markets = ["spot", "usds-futures"]
-order_kinds = ["market", "limit"]
+order_kinds = ["market", "limit", "limit-maker"]
 max_order_notional_usdt = "25"
 "#
     )
@@ -57,6 +57,7 @@ pub fn provider_capability() -> ProviderCapability {
                 strings(["spot", "usds-futures"]),
                 strings([
                     "Intent-first; live submit requires profile policy and --live.",
+                    "Spot post-only orders are modeled as order kind limit-maker and mapped to Binance LIMIT_MAKER.",
                     "Daily live order notional limits are enforced from local audit events.",
                     "Test/live order submit checks locally checkable Binance exchangeInfo filters before sending the order.",
                     "Signed order query is available by exchange order id or client order id.",

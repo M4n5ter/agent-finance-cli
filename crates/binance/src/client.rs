@@ -565,6 +565,9 @@ fn order_params(intent: &OrderIntent) -> Result<Vec<(String, String)>> {
             params.push(("price".to_string(), price.to_string()));
             params.push(("timeInForce".to_string(), time_in_force.to_string()));
         }
+        OrderSpec::PostOnlyLimit { price } => {
+            params.push(("price".to_string(), price.to_string()));
+        }
         OrderSpec::StopLoss { stop_price } | OrderSpec::TakeProfit { stop_price } => {
             params.push(("stopPrice".to_string(), stop_price.to_string()));
         }
@@ -702,11 +705,13 @@ fn order_type(market: Market, kind: OrderKind) -> Result<&'static str> {
     match (market, kind) {
         (_, OrderKind::Market) => Ok("MARKET"),
         (_, OrderKind::Limit) => Ok("LIMIT"),
+        (Market::Spot, OrderKind::PostOnlyLimit) => Ok("LIMIT_MAKER"),
         (Market::Spot, OrderKind::StopLoss) => Ok("STOP_LOSS"),
         (Market::Spot, OrderKind::TakeProfit) => Ok("TAKE_PROFIT"),
-        (Market::UsdsFutures, OrderKind::StopLoss | OrderKind::TakeProfit) => {
-            Err(anyhow!("{kind} is not supported for usds-futures yet"))
-        }
+        (
+            Market::UsdsFutures,
+            OrderKind::PostOnlyLimit | OrderKind::StopLoss | OrderKind::TakeProfit,
+        ) => Err(anyhow!("{kind} is not supported for usds-futures yet")),
     }
 }
 

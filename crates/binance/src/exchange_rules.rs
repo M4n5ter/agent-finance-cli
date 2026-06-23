@@ -364,6 +364,7 @@ fn exchange_price(intent: &OrderIntent) -> Option<&DecimalValue> {
     match &intent.spec {
         OrderSpec::Market { .. } => None,
         OrderSpec::Limit { price, .. } => Some(price),
+        OrderSpec::PostOnlyLimit { price } => Some(price),
         OrderSpec::StopLoss { stop_price } | OrderSpec::TakeProfit { stop_price } => {
             Some(stop_price)
         }
@@ -382,7 +383,10 @@ fn exchange_rule_notional(
             );
             None
         }
-        OrderSpec::Limit { .. } | OrderSpec::StopLoss { .. } | OrderSpec::TakeProfit { .. } => {
+        OrderSpec::Limit { .. }
+        | OrderSpec::PostOnlyLimit { .. }
+        | OrderSpec::StopLoss { .. }
+        | OrderSpec::TakeProfit { .. } => {
             let Some(notional) = intent.notional_usdt() else {
                 check.block("order-notional-overflow", "order notional overflowed");
                 return None;
