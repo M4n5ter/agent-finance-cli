@@ -276,7 +276,7 @@ pub struct StateArgs {
 
 #[derive(Subcommand, Debug)]
 pub enum StateCommand {
-    /// Create and persist a USD-M futures state-change intent.
+    /// Create and persist a Binance futures state-change intent.
     Intent(StateIntentArgs),
     /// Submit an existing state-change intent as dry-run or live write.
     Submit(StateSubmitArgs),
@@ -298,6 +298,9 @@ pub struct StateIntentArgs {
 
     #[arg(long, value_enum)]
     pub margin_type: Option<TradingMarginType>,
+
+    #[arg(long, value_enum)]
+    pub position_mode: Option<TradingPositionMode>,
 
     #[arg(long, default_value_t = 300)]
     pub ttl_seconds: i64,
@@ -482,6 +485,7 @@ pub enum TradingTransferDirection {
 pub enum TradingFuturesStateChangeKind {
     Leverage,
     MarginType,
+    PositionMode,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
@@ -490,11 +494,26 @@ pub enum TradingMarginType {
     Isolated,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
+pub enum TradingPositionMode {
+    OneWay,
+    Hedge,
+}
+
 impl From<TradingMarginType> for agent_finance_core::MarginType {
     fn from(value: TradingMarginType) -> Self {
         match value {
             TradingMarginType::Cross => Self::Cross,
             TradingMarginType::Isolated => Self::Isolated,
+        }
+    }
+}
+
+impl From<TradingPositionMode> for agent_finance_core::PositionMode {
+    fn from(value: TradingPositionMode) -> Self {
+        match value {
+            TradingPositionMode::OneWay => Self::OneWay,
+            TradingPositionMode::Hedge => Self::Hedge,
         }
     }
 }

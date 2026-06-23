@@ -4,7 +4,7 @@ use serde_json::json;
 use crate::cli::{StateArgs, StateCommand};
 use crate::terminal_write::{
     ExpectedIntentKind, WriteMode, load_profile, print_json_or_text, print_submit_report,
-    save_intent_with_audit, submit_intent,
+    risk_findings_text, save_intent_with_audit, submit_intent,
 };
 
 pub(crate) async fn run(args: StateArgs, timeout_seconds: u64) -> Result<()> {
@@ -31,10 +31,12 @@ pub(crate) async fn run(args: StateArgs, timeout_seconds: u64) -> Result<()> {
                 args.json,
                 &json!({ "intent": envelope, "risk": risk, "path": path }),
                 || {
+                    let findings = risk_findings_text(&risk);
                     format!(
-                        "created futures state intent {}\nrisk allowed: {}\npath: {}",
+                        "created futures state intent {}\nrisk allowed: {}\n{}path: {}",
                         envelope.id,
                         risk.allowed,
+                        findings,
                         path.display()
                     )
                 },
@@ -62,6 +64,7 @@ fn futures_state_change(
     match args.kind {
         crate::cli::TradingFuturesStateChangeKind::Leverage => {
             reject_present("margin type", args.margin_type.as_ref())?;
+            reject_present("position mode", args.position_mode.as_ref())?;
             Ok(agent_finance_core::FuturesStateChange::Leverage {
                 symbol: required_symbol(args)?.to_ascii_uppercase(),
                 leverage: args
@@ -71,11 +74,23 @@ fn futures_state_change(
         }
         crate::cli::TradingFuturesStateChangeKind::MarginType => {
             reject_present("leverage", args.leverage.as_ref())?;
+            reject_present("position mode", args.position_mode.as_ref())?;
             Ok(agent_finance_core::FuturesStateChange::MarginType {
                 symbol: required_symbol(args)?.to_ascii_uppercase(),
                 margin_type: args
                     .margin_type
                     .ok_or_else(|| anyhow!("margin-type state change requires --margin-type"))?
+                    .into(),
+            })
+        }
+        crate::cli::TradingFuturesStateChangeKind::PositionMode => {
+            reject_present("symbol", args.symbol.as_ref())?;
+            reject_present("leverage", args.leverage.as_ref())?;
+            reject_present("margin type", args.margin_type.as_ref())?;
+            Ok(agent_finance_core::FuturesStateChange::PositionMode {
+                mode: args
+                    .position_mode
+                    .ok_or_else(|| anyhow!("position-mode state change requires --position-mode"))?
                     .into(),
             })
         }

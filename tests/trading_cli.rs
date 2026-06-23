@@ -543,6 +543,92 @@ fn futures_state_intent_is_policy_checked_and_dry_runs() {
             .any(|param| param[0] == "marginType" && param[1] == "ISOLATED")
     );
 
+    env.append_profile_toml(
+        "default",
+        r#"
+[[risk.allowed_futures_state_changes]]
+kind = "position-mode"
+mode = "hedge"
+"#,
+    );
+    let position_mode = env.json(command(&[
+        "state",
+        "intent",
+        "--profile",
+        "default",
+        "--kind",
+        "position-mode",
+        "--position-mode",
+        "hedge",
+        "--json",
+    ]));
+    assert_eq!(position_mode["risk"]["allowed"], true);
+    assert!(
+        position_mode["risk"]["findings"]
+            .as_array()
+            .expect("findings")
+            .iter()
+            .any(|finding| finding["code"] == "futures-position-mode-account-wide")
+    );
+    let position_plan = env.json(command(&[
+        "state",
+        "submit",
+        position_mode["intent"]["id"]
+            .as_str()
+            .expect("position mode intent id"),
+        "--profile",
+        "default",
+        "--json",
+    ]));
+    assert_eq!(
+        position_plan["response"]["request"]["url"],
+        "https://testnet.binancefuture.com/fapi/v1/positionSide/dual"
+    );
+    assert!(
+        position_plan["response"]["request"]["params"]
+            .as_array()
+            .expect("params")
+            .iter()
+            .any(|param| param[0] == "dualSidePosition" && param[1] == "true")
+    );
+    let position_text = env.output(command(&[
+        "state",
+        "intent",
+        "--profile",
+        "default",
+        "--kind",
+        "position-mode",
+        "--position-mode",
+        "hedge",
+    ]));
+    assert!(
+        position_text.status.success(),
+        "text state intent should succeed"
+    );
+    let stdout = String::from_utf8_lossy(&position_text.stdout);
+    assert!(
+        stdout.contains("risk findings:") && stdout.contains("futures-position-mode-account-wide"),
+        "text state intent output should show account-wide risk findings; stdout={stdout}"
+    );
+    let submit_text = env.output(command(&[
+        "state",
+        "submit",
+        position_mode["intent"]["id"]
+            .as_str()
+            .expect("position mode intent id"),
+        "--profile",
+        "default",
+    ]));
+    assert!(
+        submit_text.status.success(),
+        "text state submit should succeed"
+    );
+    let stdout = String::from_utf8_lossy(&submit_text.stdout);
+    assert!(
+        stdout.contains("risk findings:") && stdout.contains("futures-position-mode-account-wide"),
+        "text state submit output should show account-wide risk findings; stdout={stdout}"
+    );
+
     let audit = env.json(command(&["audit", "tail", "--limit", "10", "--json"]));
     assert!(
         audit
@@ -644,18 +730,157 @@ fn futures_state_policy_and_argument_boundaries_are_enforced() {
             .any(|finding| finding["code"] == "futures-margin-type-not-allowed")
     );
 
-    let unsupported_position_mode = env.output(command(&[
+    let position_mode_with_symbol = env.output(command(&[
         "state",
         "intent",
         "--profile",
         "default",
         "--kind",
         "position-mode",
+        "--symbol",
+        "BTCUSDT",
+        "--position-mode",
+        "hedge",
         "--json",
     ]));
     assert!(
-        !unsupported_position_mode.status.success(),
-        "position-mode is intentionally not exposed as a USD-M scoped state change"
+        !position_mode_with_symbol.status.success(),
+        "position-mode is account-scoped and must reject symbol-scoped arguments"
+    );
+
+    let missing_position_policy = env.json(command(&[
+        "state",
+        "intent",
+        "--profile",
+        "default",
+        "--kind",
+        "position-mode",
+        "--position-mode",
+        "hedge",
+        "--json",
+    ]));
+    assert_eq!(missing_position_policy["risk"]["allowed"], false);
+    assert!(
+        missing_position_policy["risk"]["findings"]
+            .as_array()
+            .expect("findings")
+            .iter()
+            .any(
+                |finding| finding["code"] == "futures-state-change-not-allowed"
+                    && finding["message"]
+                        .as_str()
+                        .expect("message")
+                        .contains("binance-futures-account")
+            )
+    );
+
+    env.append_profile_toml(
+        "default",
+        r#"
+[[risk.allowed_futures_state_changes]]
+kind = "position-mode"
+mode = "hedge"
+"#,
+    );
+    let blocked_one_way = env.json(command(&[
+        "state",
+        "intent",
+        "--profile",
+        "default",
+        "--kind",
+        "position-mode",
+        "--position-mode",
+        "one-way",
+        "--json",
+    ]));
+    assert_eq!(blocked_one_way["risk"]["allowed"], false);
+    assert!(
+        blocked_one_way["risk"]["findings"]
+            .as_array()
+            .expect("findings")
+            .iter()
+            .any(|finding| finding["code"] == "futures-position-mode-not-allowed")
+    );
+
+    let allowed_hedge = env.json(command(&[
+        "state",
+        "intent",
+        "--profile",
+        "default",
+        "--kind",
+        "position-mode",
+        "--position-mode",
+        "hedge",
+        "--json",
+    ]));
+    assert_eq!(allowed_hedge["risk"]["allowed"], true);
+    let hedge_plan = env.json(command(&[
+        "state",
+        "submit",
+        allowed_hedge["intent"]["id"]
+            .as_str()
+            .expect("hedge position mode intent id"),
+        "--profile",
+        "default",
+        "--json",
+    ]));
+    assert!(
+        hedge_plan["response"]["request"]["params"]
+            .as_array()
+            .expect("params")
+            .iter()
+            .any(|param| param[0] == "dualSidePosition" && param[1] == "true")
+    );
+
+    env.replace_once_in_profile("default", "mode = \"hedge\"", "mode = \"one-way\"");
+    let blocked_hedge = env.json(command(&[
+        "state",
+        "intent",
+        "--profile",
+        "default",
+        "--kind",
+        "position-mode",
+        "--position-mode",
+        "hedge",
+        "--json",
+    ]));
+    assert_eq!(blocked_hedge["risk"]["allowed"], false);
+    assert!(
+        blocked_hedge["risk"]["findings"]
+            .as_array()
+            .expect("findings")
+            .iter()
+            .any(|finding| finding["code"] == "futures-position-mode-not-allowed")
+    );
+
+    let allowed_one_way = env.json(command(&[
+        "state",
+        "intent",
+        "--profile",
+        "default",
+        "--kind",
+        "position-mode",
+        "--position-mode",
+        "one-way",
+        "--json",
+    ]));
+    assert_eq!(allowed_one_way["risk"]["allowed"], true);
+    let one_way_plan = env.json(command(&[
+        "state",
+        "submit",
+        allowed_one_way["intent"]["id"]
+            .as_str()
+            .expect("one-way position mode intent id"),
+        "--profile",
+        "default",
+        "--json",
+    ]));
+    assert!(
+        one_way_plan["response"]["request"]["params"]
+            .as_array()
+            .expect("params")
+            .iter()
+            .any(|param| param[0] == "dualSidePosition" && param[1] == "false")
     );
 }
 
@@ -750,6 +975,37 @@ fn malformed_futures_state_policy_fails_closed_at_profile_parse() {
     assert!(
         stderr.contains("max_leverage") || stderr.contains("unknown field"),
         "malformed futures state policy should fail before creating an intent; stderr={stderr}"
+    );
+
+    let scoped_position_env = default_env("futures-state-position-policy-parse");
+    scoped_position_env.append_profile_toml(
+        "default",
+        r#"
+[[risk.allowed_futures_state_changes]]
+kind = "position-mode"
+symbol = "BTCUSDT"
+mode = "hedge"
+"#,
+    );
+    let scoped_position = scoped_position_env.output(command(&[
+        "state",
+        "intent",
+        "--profile",
+        "default",
+        "--kind",
+        "position-mode",
+        "--position-mode",
+        "hedge",
+        "--json",
+    ]));
+    let stderr = String::from_utf8_lossy(&scoped_position.stderr);
+    assert!(
+        !scoped_position.status.success(),
+        "position-mode policy must reject symbol-scoped fields"
+    );
+    assert!(
+        stderr.contains("symbol") || stderr.contains("unknown field"),
+        "position-mode policy with symbol should fail at profile parse; stderr={stderr}"
     );
 }
 

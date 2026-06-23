@@ -1,3 +1,5 @@
+use std::fmt;
+
 use serde::{Deserialize, Serialize};
 
 use crate::profile::Profile;
@@ -23,12 +25,29 @@ pub enum RiskSeverity {
     Block,
 }
 
+impl fmt::Display for RiskSeverity {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Info => formatter.write_str("info"),
+            Self::Block => formatter.write_str("block"),
+        }
+    }
+}
+
 impl RiskDecision {
     pub fn allow() -> Self {
         Self {
             allowed: true,
             findings: Vec::new(),
         }
+    }
+
+    fn push_info(&mut self, code: &str, message: impl Into<String>) {
+        self.findings.push(RiskFinding {
+            severity: RiskSeverity::Info,
+            code: code.to_string(),
+            message: message.into(),
+        });
     }
 
     fn push_block(&mut self, code: &str, message: impl Into<String>) {
@@ -234,6 +253,12 @@ pub fn check_futures_state_intent(
             format!("requested leverage {leverage} is outside Binance USD-M range 1..=125"),
         );
     }
+    if matches!(intent.change, FuturesStateChange::PositionMode { .. }) {
+        decision.push_info(
+            "futures-position-mode-account-wide",
+            "Binance position mode changes every symbol and UM/CM share dualSidePosition; Binance rejects the change if either side has open orders or open positions",
+        );
+    }
     let matching_policies = matching_futures_state_policies(profile, intent);
     if matching_policies.is_empty() {
         decision.push_block(
@@ -241,7 +266,7 @@ pub fn check_futures_state_intent(
             format!(
                 "futures state change {} for {} is not allowed by profile risk.allowed_futures_state_changes",
                 intent.change_kind(),
-                intent.symbol().to_ascii_uppercase()
+                intent.scope_label()
             ),
         );
         return decision;
@@ -270,6 +295,17 @@ pub fn check_futures_state_intent(
                     format!(
                         "requested margin type {margin_type} is not allowed by matching policies"
                     ),
+                );
+            }
+        }
+        FuturesStateChange::PositionMode { mode } => {
+            if !matching_policies
+                .iter()
+                .any(|policy| policy.allows_change(&intent.change))
+            {
+                decision.push_block(
+                    "futures-position-mode-not-allowed",
+                    format!("requested position mode {mode} is not allowed by matching policies"),
                 );
             }
         }

@@ -75,11 +75,11 @@ pub fn provider_capability() -> ProviderCapability {
             Capability::new(
                 "futures-state",
                 "signed/write-gated",
-                strings(["usds-futures"]),
+                strings(["usds-futures-symbols", "binance-futures-account"]),
                 strings([
-                    "Intent-first leverage and margin type changes.",
+                    "Intent-first leverage, margin type, and position mode changes.",
                     "Live submit requires explicit risk.allowed_futures_state_changes policy.",
-                    "Position mode is intentionally unsupported because Binance treats it as broader account state.",
+                    "Position mode changes every symbol; Binance UM/CM share dualSidePosition and the exchange rejects the change when either side has open orders or open positions.",
                 ]),
             ),
         ],

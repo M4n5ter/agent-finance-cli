@@ -154,6 +154,7 @@ impl fmt::Display for MarginType {
 pub enum FuturesStateChangeKind {
     Leverage,
     MarginType,
+    PositionMode,
 }
 
 impl fmt::Display for FuturesStateChangeKind {
@@ -161,6 +162,23 @@ impl fmt::Display for FuturesStateChangeKind {
         match self {
             Self::Leverage => formatter.write_str("leverage"),
             Self::MarginType => formatter.write_str("margin-type"),
+            Self::PositionMode => formatter.write_str("position-mode"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum PositionMode {
+    OneWay,
+    Hedge,
+}
+
+impl fmt::Display for PositionMode {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::OneWay => formatter.write_str("one-way"),
+            Self::Hedge => formatter.write_str("hedge"),
         }
     }
 }
@@ -413,8 +431,8 @@ impl FuturesStateIntent {
         self.change.kind()
     }
 
-    pub fn symbol(&self) -> &str {
-        self.change.symbol()
+    pub fn scope_label(&self) -> String {
+        self.change.scope_label()
     }
 }
 
@@ -429,6 +447,9 @@ pub enum FuturesStateChange {
         symbol: String,
         margin_type: MarginType,
     },
+    PositionMode {
+        mode: PositionMode,
+    },
 }
 
 impl FuturesStateChange {
@@ -436,12 +457,16 @@ impl FuturesStateChange {
         match self {
             Self::Leverage { .. } => FuturesStateChangeKind::Leverage,
             Self::MarginType { .. } => FuturesStateChangeKind::MarginType,
+            Self::PositionMode { .. } => FuturesStateChangeKind::PositionMode,
         }
     }
 
-    pub fn symbol(&self) -> &str {
+    pub fn scope_label(&self) -> String {
         match self {
-            Self::Leverage { symbol, .. } | Self::MarginType { symbol, .. } => symbol,
+            Self::Leverage { symbol, .. } | Self::MarginType { symbol, .. } => {
+                symbol.to_ascii_uppercase()
+            }
+            Self::PositionMode { .. } => "binance-futures-account".to_string(),
         }
     }
 }
@@ -497,6 +522,9 @@ pub enum FuturesStatePolicy {
         symbol: String,
         margin_type: MarginType,
     },
+    PositionMode {
+        mode: PositionMode,
+    },
 }
 
 impl FuturesStatePolicy {
@@ -516,6 +544,7 @@ impl FuturesStatePolicy {
                     ..
                 },
             ) => symbol.eq_ignore_ascii_case(intent_symbol),
+            (Self::PositionMode { .. }, FuturesStateChange::PositionMode { .. }) => true,
             _ => false,
         }
     }
@@ -536,6 +565,10 @@ impl FuturesStatePolicy {
                     ..
                 },
             ) => requested == margin_type,
+            (
+                Self::PositionMode { mode, .. },
+                FuturesStateChange::PositionMode { mode: requested },
+            ) => requested == mode,
             _ => false,
         }
     }
@@ -543,7 +576,7 @@ impl FuturesStatePolicy {
     pub fn max_leverage(&self) -> Option<u8> {
         match self {
             Self::Leverage { max_leverage, .. } => Some(*max_leverage),
-            Self::MarginType { .. } => None,
+            Self::MarginType { .. } | Self::PositionMode { .. } => None,
         }
     }
 }
@@ -569,6 +602,7 @@ impl fmt::Display for FuturesStatePolicy {
                 symbol.to_ascii_uppercase(),
                 margin_type
             ),
+            Self::PositionMode { mode } => write!(formatter, "position-mode={mode}"),
         }
     }
 }

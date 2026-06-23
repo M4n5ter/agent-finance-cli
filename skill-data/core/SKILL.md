@@ -84,6 +84,7 @@ agent-finance risk explain --profile default
 agent-finance order submit INTENT_ID --profile default
 agent-finance order query BTCUSDT --profile default --market spot --client-order-id CLIENT_ORDER_ID
 agent-finance state intent --profile default --kind leverage --symbol BTCUSDT --leverage 2
+agent-finance state intent --profile default --kind position-mode --position-mode hedge
 agent-finance state submit INTENT_ID --profile default
 agent-finance audit export --json
 ```
@@ -98,7 +99,9 @@ agent-finance audit export --json
 - Use `skills get profile` before touching signed account, order, transfer, futures state, risk, or audit commands.
 - Signed order test/live submit checks locally checkable Binance exchangeInfo filters before sending an order; dry-run remains offline.
 - Live market orders are blocked until risk notional can be derived from fresh exchange data instead of user-supplied `valuation_price`.
-- USD-M futures leverage and margin type changes use separate `state` intents; order submit never changes account state implicitly. Position mode is intentionally unsupported because Binance treats it as broader account state.
+- USD-M futures leverage, margin type, and Binance futures account position mode changes use separate `state` intents; order submit never changes account state implicitly.
+- Position mode changes every symbol; Binance UM/CM share `dualSidePosition`, and the exchange rejects the change when either side has open orders or open positions.
+- Position mode policy is not in the default profile template; add an explicit `[[risk.allowed_futures_state_changes]]` entry with `kind = "position-mode"` and the intended `mode` before creating that intent.
 - Treat crypto as 24/7 market data. Use Binance/Coinbase/OKX/CoinGecko through capability-first crypto commands, then force providers only for cross-checking.
 - Spot is crypto spot; USD-M futures / TradFi perps are derivatives and proxy instruments.
 - Treat Polymarket as quantifiable prediction-market sentiment and event-probability evidence only; it is not an equity quote or primary-source fact.

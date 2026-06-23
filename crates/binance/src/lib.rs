@@ -1,5 +1,6 @@
 mod client;
 mod exchange_rules;
+mod futures_state;
 mod metadata;
 mod signer;
 

@@ -1,9 +1,8 @@
 use std::time::Duration;
 
 use agent_finance_core::{
-    CancelIntent, Environment, FuturesStateChange, FuturesStateIntent, MarginType, Market,
-    OrderIdentifier, OrderIntent, OrderKind, OrderSide, OrderSpec, TransferDirection,
-    TransferIntent,
+    CancelIntent, Environment, FuturesStateIntent, Market, OrderIdentifier, OrderIntent, OrderKind,
+    OrderSide, OrderSpec, TransferDirection, TransferIntent,
 };
 use anyhow::{Context, Result, anyhow};
 use chrono::Utc;
@@ -13,6 +12,7 @@ use url::Url;
 use wreq::Client;
 
 use crate::exchange_rules::{ExchangeRuleCheck, check_order_exchange_rules};
+use crate::futures_state;
 use crate::signer::{HmacSha256Signer, Signer};
 
 const LIVE_SPOT_BASE_URL: &str = "https://api.binance.com";
@@ -628,36 +628,11 @@ fn transfer_history_params(
 }
 
 fn futures_state_path(intent: &FuturesStateIntent) -> &'static str {
-    match intent.change {
-        FuturesStateChange::Leverage { .. } => "/fapi/v1/leverage",
-        FuturesStateChange::MarginType { .. } => "/fapi/v1/marginType",
-    }
+    futures_state::path(intent)
 }
 
 fn futures_state_params(intent: &FuturesStateIntent) -> Vec<(String, String)> {
-    match &intent.change {
-        FuturesStateChange::Leverage { symbol, leverage } => vec![
-            ("symbol".to_string(), symbol.to_ascii_uppercase()),
-            ("leverage".to_string(), leverage.to_string()),
-        ],
-        FuturesStateChange::MarginType {
-            symbol,
-            margin_type,
-        } => vec![
-            ("symbol".to_string(), symbol.to_ascii_uppercase()),
-            (
-                "marginType".to_string(),
-                binance_margin_type(*margin_type).to_string(),
-            ),
-        ],
-    }
-}
-
-fn binance_margin_type(value: MarginType) -> &'static str {
-    match value {
-        MarginType::Cross => "CROSSED",
-        MarginType::Isolated => "ISOLATED",
-    }
+    futures_state::params(intent)
 }
 
 fn order_base_url(endpoints: &BinanceEndpoints, market: Market) -> &str {

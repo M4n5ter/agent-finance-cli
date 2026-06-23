@@ -387,12 +387,30 @@ fn plan_intent(
 
 pub(crate) fn print_submit_report(json_output: bool, report: &SubmitReport) -> Result<()> {
     print_json_or_text(json_output, report, || {
+        let findings = risk_findings_text(&report.risk);
         format!(
-            "submitted intent {}\n{}",
+            "submitted intent {}\nrisk allowed: {}\n{}{}",
             report.intent_id,
+            report.risk.allowed,
+            findings,
             serde_json::to_string_pretty(&report.response).unwrap()
         )
     })
+}
+
+pub(crate) fn risk_findings_text(risk: &agent_finance_core::RiskDecision) -> String {
+    if risk.findings.is_empty() {
+        return String::new();
+    }
+    let mut text = String::from("risk findings:");
+    for finding in &risk.findings {
+        text.push_str(&format!(
+            "\n- {} {}: {}",
+            finding.severity, finding.code, finding.message
+        ));
+    }
+    text.push('\n');
+    text
 }
 
 pub(crate) fn save_intent_with_audit(

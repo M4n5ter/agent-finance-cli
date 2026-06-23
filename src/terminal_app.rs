@@ -9,7 +9,8 @@ use crate::cli::{
 };
 use crate::terminal_write::{
     ExpectedIntentKind, WriteMode, binance_client, check_order_with_runtime_limits, load_profile,
-    print_json_or_text, print_submit_report, save_intent_with_audit, submit_intent,
+    print_json_or_text, print_submit_report, risk_findings_text, save_intent_with_audit,
+    submit_intent,
 };
 
 pub(crate) fn run_capabilities(args: CapabilitiesArgs) -> Result<()> {
@@ -366,15 +367,10 @@ pub(crate) fn run_risk(args: RiskArgs) -> Result<()> {
                 }
             };
             print_json_or_text(args.json, &risk, || {
-                if risk.findings.is_empty() {
+                let findings = risk_findings_text(&risk);
+                if findings.is_empty() {
                     format!("allowed: {}", risk.allowed)
                 } else {
-                    let findings = risk
-                        .findings
-                        .iter()
-                        .map(|finding| format!("- {}: {}", finding.code, finding.message))
-                        .collect::<Vec<_>>()
-                        .join("\n");
                     format!("allowed: {}\n{findings}", risk.allowed)
                 }
             })

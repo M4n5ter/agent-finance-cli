@@ -598,6 +598,10 @@ kind = "margin-type"
 symbol = "BTCUSDT"
 margin_type = "isolated"
 
+[[risk.allowed_futures_state_changes]]
+kind = "position-mode"
+mode = "hedge"
+
 [risk.allowed_symbols.BTCUSDT]
 markets = ["spot", "usds-futures"]
 order_kinds = ["market", "limit", "limit-maker"]

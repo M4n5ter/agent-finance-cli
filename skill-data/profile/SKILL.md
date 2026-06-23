@@ -15,7 +15,8 @@ Also use it before USD-M futures `state` changes.
 - The default HMAC secret env is `BINANCE_PRIVATE_KEY`; in Binance HMAC mode this is the API Secret string, not an RSA or Ed25519 private key.
 - Live writes require all of these: profile `allow_live = true`, the relevant order/transfer/futures-state whitelist, intent id, and `--live`.
 - Live market orders are blocked until risk notional can be derived from fresh exchange data instead of user-supplied `valuation_price`.
-- USD-M futures leverage and margin type changes require explicit `risk.allowed_futures_state_changes` policy and use separate `state` intents. Position mode is intentionally unsupported because Binance treats it as broader account state.
+- USD-M futures leverage, margin type, and Binance futures account position mode changes require explicit `risk.allowed_futures_state_changes` policy and use separate `state` intents.
+- Binance position mode changes every symbol; UM/CM share `dualSidePosition`, and Binance rejects the change when either side has open orders or open positions.
 - Order, cancel, transfer, and futures state writes are intent-first. Create the intent, inspect it, run `risk check`, then submit.
 - Audit logging is append-only JSONL in the user data directory.
 
@@ -45,9 +46,18 @@ agent-finance order cancel-intent BTCUSDT --profile default --market spot --clie
 
 ## Futures State Flow
 
+Add Binance futures account position mode policy manually before using `--kind position-mode`; it is not included in the default profile template:
+
+```toml
+[[risk.allowed_futures_state_changes]]
+kind = "position-mode"
+mode = "hedge"
+```
+
 ```bash
 agent-finance state intent --profile default --kind leverage --symbol BTCUSDT --leverage 2
 agent-finance state intent --profile default --kind margin-type --symbol BTCUSDT --margin-type isolated
+agent-finance state intent --profile default --kind position-mode --position-mode hedge
 agent-finance risk check INTENT_ID --profile default --live
 agent-finance state submit INTENT_ID --profile default
 agent-finance state submit INTENT_ID --profile default --live
@@ -128,6 +138,7 @@ cargo test --test binance_live_write binance_live_transfer_smoke_is_usable -- --
 - `order submit --test` and `order submit --live` fetch Binance `exchangeInfo` and block orders that violate locally checkable symbol status, price tick, lot size, or notional filters. Dry-run is offline and prints the `exchangeInfo` request that will be checked later.
 - Limit orders use `--price` as the exchange price. Spot `limit-maker` orders map to Binance `LIMIT_MAKER`, do not accept `--time-in-force`, and rely on the exchange to reject orders that would immediately take liquidity. Market orders use `--valuation-price` for risk notional checks and never send an exchange `price` parameter; exchange notional for market orders is reported as not locally checked because it depends on execution price.
 - Live universal transfers require explicit `[[risk.allowed_transfers]]` entries with direction, asset, and max amount.
-- Live futures state changes require explicit `[[risk.allowed_futures_state_changes]]` entries. Order submit does not change leverage or margin type implicitly.
+- Live futures state changes require explicit `[[risk.allowed_futures_state_changes]]` entries. Order submit does not change leverage, margin type, or position mode implicitly.
+- Review `risk check` findings before live position-mode submit; the CLI warns that Binance applies it account-wide across every symbol and that UM/CM share the setting.
 - Transfer history reads Binance SAPI live account data and requires a reviewed live profile.
 - Do not use this CLI for withdrawals, margin, COIN-M, options, earn, or external transfers.
