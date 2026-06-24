@@ -18,7 +18,8 @@ pub use intent::{
 };
 pub use profile::{Profile, ProfileStore};
 pub use risk::{
-    OrderRuntimeRisk, RiskDecision, RiskFinding, check_cancel_intent, check_futures_state_intent,
-    check_order_intent, check_order_intent_with_runtime, check_transfer_intent,
+    OrderRuntimeRisk, ProfilePermissionPolicyCheck, RiskDecision, RiskFinding, check_cancel_intent,
+    check_futures_state_intent, check_order_intent, check_order_intent_with_runtime,
+    check_profile_permission_policy, check_transfer_intent,
 };
 pub use types::*;

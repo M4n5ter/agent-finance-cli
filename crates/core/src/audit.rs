@@ -309,6 +309,11 @@ mod tests {
                 usds_futures_base_url: None,
                 sapi_base_url: None,
             },
+            permissions: crate::types::ProfilePermissions {
+                spot_trading: true,
+                usds_futures: true,
+                universal_transfer: false,
+            },
             risk: crate::types::RiskPolicy {
                 allow_live: true,
                 max_daily_order_notional_usdt: Some("50".parse().expect("decimal")),

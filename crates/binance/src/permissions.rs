@@ -1,4 +1,4 @@
-use agent_finance_core::{IntentKind, Market, Profile, RiskPolicy, SymbolPolicy, TransferPolicy};
+use agent_finance_core::{IntentKind, Profile, ProfilePermission, ProfilePermissionSet};
 use serde::Serialize;
 use serde_json::Value;
 
@@ -11,13 +11,11 @@ pub struct PermissionCheck {
 }
 
 pub fn profile_permission_checks(profile: &Profile, payload: &Value) -> Vec<PermissionCheck> {
-    let requirements = requirements_for_risk(&profile.risk);
-    permission_checks(requirements, payload)
+    permission_checks(profile.permissions.declared_profile_permissions(), payload)
 }
 
 pub fn intent_permission_checks(intent: &IntentKind, payload: &Value) -> Vec<PermissionCheck> {
-    let requirements = requirements_for_intent(intent);
-    permission_checks(requirements, payload)
+    permission_checks(intent.required_profile_permissions(), payload)
 }
 
 pub fn blocking_permission_error(checks: &[PermissionCheck]) -> Option<String> {
@@ -36,39 +34,23 @@ pub fn blocking_permission_error(checks: &[PermissionCheck]) -> Option<String> {
     }
 }
 
-fn permission_checks(
-    requirements: PermissionRequirements,
-    payload: &Value,
-) -> Vec<PermissionCheck> {
-    [
-        permission_check(
-            "binance-spot-trading",
-            requirements.spot_trading,
-            bool_any(payload, &["enableSpotAndMarginTrading"]),
-            "spot trading is required for live spot orders and cancels",
-        ),
-        permission_check(
-            "binance-usds-futures",
-            requirements.usds_futures,
-            bool_any(payload, &["enableFutures"]),
-            "USD-M futures permission is required for futures orders and state changes",
-        ),
-        permission_check(
-            "binance-universal-transfer",
-            requirements.universal_transfer,
-            bool_any(payload, &["permitsUniversalTransfer"]),
-            "universal transfer permission is required for Spot <-> USD-M transfers",
-        ),
-    ]
-    .into_iter()
-    .collect()
+fn permission_checks(requirements: ProfilePermissionSet, payload: &Value) -> Vec<PermissionCheck> {
+    ProfilePermission::ALL
+        .into_iter()
+        .map(|permission| {
+            permission_check(
+                permission,
+                requirements.contains(permission),
+                bool_any(payload, &[binance_payload_field(permission)]),
+            )
+        })
+        .collect()
 }
 
 fn permission_check(
-    name: &'static str,
+    permission: ProfilePermission,
     required: bool,
     granted: Option<bool>,
-    required_message: &str,
 ) -> PermissionCheck {
     let ok = !required || granted == Some(true);
     let message = match (required, granted) {
@@ -76,89 +58,63 @@ fn permission_check(
         (false, Some(false)) => "permission is absent and not required by this profile".to_string(),
         (false, None) => "permission field is missing and not required by this profile".to_string(),
         (true, Some(true)) => "required permission is present".to_string(),
-        (true, Some(false)) => format!("required permission is disabled; {required_message}"),
-        (true, None) => format!("required permission field is missing; {required_message}"),
+        (true, Some(false)) => format!(
+            "required permission is disabled; {}",
+            binance_required_message(permission)
+        ),
+        (true, None) => format!(
+            "required permission field is missing; {}",
+            binance_required_message(permission)
+        ),
     };
     PermissionCheck {
-        name,
+        name: binance_check_name(permission),
         ok,
         required,
         message,
     }
 }
 
-#[derive(Debug, Clone, Copy, Default)]
-struct PermissionRequirements {
-    spot_trading: bool,
-    usds_futures: bool,
-    universal_transfer: bool,
-}
-
-fn requirements_for_risk(risk: &RiskPolicy) -> PermissionRequirements {
-    PermissionRequirements {
-        spot_trading: risk.allowed_symbols.values().any(policy_allows_spot),
-        usds_futures: risk
-            .allowed_symbols
-            .values()
-            .any(policy_allows_usds_futures)
-            || !risk.allowed_futures_state_changes.is_empty(),
-        universal_transfer: risk
-            .allowed_transfers
-            .iter()
-            .any(transfer_requires_universal),
-    }
-}
-
-fn requirements_for_intent(intent: &IntentKind) -> PermissionRequirements {
-    match intent {
-        IntentKind::Order(intent) => market_requirements(intent.market),
-        IntentKind::Cancel(intent) => market_requirements(intent.market),
-        IntentKind::Transfer(_) => PermissionRequirements {
-            universal_transfer: true,
-            ..PermissionRequirements::default()
-        },
-        IntentKind::FuturesState(_) => PermissionRequirements {
-            usds_futures: true,
-            ..PermissionRequirements::default()
-        },
-    }
-}
-
-fn market_requirements(market: Market) -> PermissionRequirements {
-    match market {
-        Market::Spot => PermissionRequirements {
-            spot_trading: true,
-            ..PermissionRequirements::default()
-        },
-        Market::UsdsFutures => PermissionRequirements {
-            usds_futures: true,
-            ..PermissionRequirements::default()
-        },
-    }
-}
-
-fn policy_allows_spot(policy: &SymbolPolicy) -> bool {
-    policy.markets.contains(&Market::Spot)
-}
-
-fn policy_allows_usds_futures(policy: &SymbolPolicy) -> bool {
-    policy.markets.contains(&Market::UsdsFutures)
-}
-
-fn transfer_requires_universal(_policy: &TransferPolicy) -> bool {
-    true
-}
-
 fn bool_any(payload: &Value, keys: &[&str]) -> Option<bool> {
     keys.iter().find_map(|key| payload.get(*key)?.as_bool())
+}
+
+const fn binance_check_name(permission: ProfilePermission) -> &'static str {
+    match permission {
+        ProfilePermission::SpotTrading => "binance-spot-trading",
+        ProfilePermission::UsdsFutures => "binance-usds-futures",
+        ProfilePermission::UniversalTransfer => "binance-universal-transfer",
+    }
+}
+
+const fn binance_payload_field(permission: ProfilePermission) -> &'static str {
+    match permission {
+        ProfilePermission::SpotTrading => "enableSpotAndMarginTrading",
+        ProfilePermission::UsdsFutures => "enableFutures",
+        ProfilePermission::UniversalTransfer => "permitsUniversalTransfer",
+    }
+}
+
+const fn binance_required_message(permission: ProfilePermission) -> &'static str {
+    match permission {
+        ProfilePermission::SpotTrading => {
+            "spot trading is required for live spot orders and cancels"
+        }
+        ProfilePermission::UsdsFutures => {
+            "USD-M futures permission is required for futures orders and state changes"
+        }
+        ProfilePermission::UniversalTransfer => {
+            "universal transfer permission is required for Spot <-> USD-M transfers"
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use agent_finance_core::{
-        DecimalValue, Environment, FuturesStateIntent, OrderIntent, OrderSide, OrderSpec, Provider,
-        ProviderConfig, RiskPolicy, TimeInForce,
+        DecimalValue, Environment, FuturesStateIntent, Market, OrderIntent, OrderSide, OrderSpec,
+        ProfilePermissions, Provider, ProviderConfig, RiskPolicy, TimeInForce,
     };
     use rust_decimal::Decimal;
     use serde_json::json;
@@ -200,6 +156,33 @@ mod tests {
     }
 
     #[test]
+    fn profile_api_probe_checks_declared_permissions_even_when_risk_is_empty() {
+        let profile = profile_with_risk(RiskPolicy {
+            allow_live: true,
+            max_daily_order_notional_usdt: None,
+            allowed_symbols: BTreeMap::new(),
+            allowed_transfers: Vec::new(),
+            allowed_futures_state_changes: Vec::new(),
+        });
+
+        let checks = profile_permission_checks(
+            &profile,
+            &json!({
+                "enableSpotAndMarginTrading": false,
+                "enableFutures": false,
+                "permitsUniversalTransfer": false
+            }),
+        );
+
+        assert!(
+            !check(&checks, "binance-spot-trading").ok,
+            "declared permissions should drive API key validation even before risk needs them"
+        );
+        assert!(!check(&checks, "binance-usds-futures").ok);
+        assert!(!check(&checks, "binance-universal-transfer").ok);
+    }
+
+    #[test]
     fn intent_checks_are_scoped_to_the_live_write() {
         let payload = json!({
             "enableSpotAndMarginTrading": false,
@@ -208,11 +191,17 @@ mod tests {
         });
         let spot = intent_permission_checks(&spot_order(), &payload);
         let futures = intent_permission_checks(&futures_state(), &payload);
+        let cancel = intent_permission_checks(&spot_cancel(), &payload);
+        let transfer = intent_permission_checks(&transfer(), &payload);
 
         assert!(!check(&spot, "binance-spot-trading").ok);
         assert!(!check(&spot, "binance-usds-futures").required);
+        assert!(!check(&cancel, "binance-spot-trading").ok);
+        assert!(!check(&cancel, "binance-usds-futures").required);
         assert!(check(&futures, "binance-usds-futures").ok);
         assert!(!check(&futures, "binance-spot-trading").required);
+        assert!(!check(&transfer, "binance-universal-transfer").ok);
+        assert!(!check(&transfer, "binance-spot-trading").required);
     }
 
     fn check<'a>(checks: &'a [PermissionCheck], name: &str) -> &'a PermissionCheck {
@@ -230,6 +219,11 @@ mod tests {
                 spot_base_url: None,
                 usds_futures_base_url: None,
                 sapi_base_url: None,
+            },
+            permissions: ProfilePermissions {
+                spot_trading: true,
+                usds_futures: true,
+                universal_transfer: true,
             },
             risk,
         }
@@ -251,6 +245,31 @@ mod tests {
             reduce_only: false,
             position_side: None,
             client_order_id: "af-test".to_string(),
+        })
+    }
+
+    fn spot_cancel() -> IntentKind {
+        IntentKind::Cancel(agent_finance_core::CancelIntent {
+            profile: "test".to_string(),
+            provider: Provider::Binance,
+            environment: Environment::Live,
+            market: Market::Spot,
+            symbol: "BTCUSDT".to_string(),
+            target: agent_finance_core::OrderIdentifier::ClientOrderId {
+                client_order_id: "af-test".to_string(),
+            },
+        })
+    }
+
+    fn transfer() -> IntentKind {
+        IntentKind::Transfer(agent_finance_core::TransferIntent {
+            profile: "test".to_string(),
+            provider: Provider::Binance,
+            environment: Environment::Live,
+            direction: agent_finance_core::TransferDirection::SpotToUsdsFutures,
+            asset: "USDT".to_string(),
+            amount: decimal("1"),
+            client_transfer_id: "af-transfer".to_string(),
         })
     }
 

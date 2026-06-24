@@ -100,7 +100,7 @@ agent-finance audit export --json
 agent-finance transfer history --profile live --direction spot-to-usds-futures --size 20
 ```
 
-Use `profile doctor` to inspect Binance API key restrictions and provider permissions before live writes. Use `risk explain` to inspect profile limits and the local audit-backed daily order notional counter before live writes.
+Use `profile doctor` to inspect profile `[permissions]`, risk-policy consistency, Binance API key restrictions, and provider permissions before live writes. Use `risk explain` to inspect profile limits and the local audit-backed daily order notional counter before live writes.
 Order test/live submit checks locally checkable Binance exchangeInfo filters before sending the order; market-order notional is reported as not locally checked because the exchange execution price is unknown before submit. Live market orders are blocked until risk notional can be derived from fresh exchange data instead of user-supplied `valuation_price`. Dry-run remains offline and prints the exchangeInfo request for later verification.
 USD-M futures leverage, margin type, and Binance futures account position mode changes use separate `state` intents and require explicit `risk.allowed_futures_state_changes` policy before live submit. Position mode policy is not in the default profile template; add an explicit `kind = "position-mode"` entry with the intended `mode`. Position mode changes every symbol; Binance UM/CM share `dualSidePosition`, and the exchange rejects the change when either side has open orders or open positions.
 Transfer history reads Binance SAPI live account data and requires a reviewed live profile.

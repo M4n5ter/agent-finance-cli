@@ -56,6 +56,157 @@ fn order_intent_can_be_risk_checked_and_dry_run_repeatedly() {
 }
 
 #[test]
+fn profile_permissions_are_live_policy_not_just_doctor_metadata() {
+    let env = default_env("profile-permissions");
+    env.replace_once_in_profile("default", "spot_trading = true", "spot_trading = false");
+
+    let order = create_limit_order(&env);
+    assert_eq!(order["risk"]["allowed"], false);
+    assert!(
+        order["risk"]["findings"]
+            .as_array()
+            .expect("findings")
+            .iter()
+            .any(|finding| finding["code"] == "profile-permission-spot-trading-disabled"),
+        "risk should block spot orders when profile permissions do not declare spot trading: {order}"
+    );
+    let cancel = env.json(command(&[
+        "order",
+        "cancel",
+        "BTCUSDT",
+        "--profile",
+        "default",
+        "--market",
+        "spot",
+        "--client-order-id",
+        "af-test",
+        "--json",
+    ]));
+    assert_eq!(cancel["risk"]["allowed"], false);
+    assert_risk_finding(&cancel, "profile-permission-spot-trading-disabled");
+
+    let doctor = env.json(command(&[
+        "profile",
+        "doctor",
+        "--profile",
+        "default",
+        "--json",
+    ]));
+    assert!(
+        doctor["checks"]
+            .as_array()
+            .expect("doctor checks")
+            .iter()
+            .any(|check| check["name"] == "profile-permission-spot-trading"
+                && check["ok"] == false),
+        "doctor should report profile permission and risk policy mismatch: {doctor}"
+    );
+}
+
+#[test]
+fn missing_or_partial_profile_permissions_fail_closed_with_diagnostics() {
+    let legacy_env = default_env("legacy-profile-permissions");
+    legacy_env.edit_profile("default", |content| {
+        content.replace(
+            "[permissions]\nspot_trading = true\nusds_futures = true\nuniversal_transfer = false\n\n",
+            "",
+        )
+    });
+
+    let order = create_limit_order(&legacy_env);
+    assert_eq!(order["risk"]["allowed"], false);
+    assert_risk_finding(&order, "profile-permission-spot-trading-disabled");
+
+    let doctor = legacy_env.json(command(&[
+        "profile",
+        "doctor",
+        "--profile",
+        "default",
+        "--json",
+    ]));
+    assert!(
+        doctor["checks"]
+            .as_array()
+            .expect("doctor checks")
+            .iter()
+            .any(|check| check["name"] == "profile-permission-spot-trading"
+                && check["ok"] == false),
+        "legacy profiles without [permissions] should parse and produce actionable doctor output: {doctor}"
+    );
+
+    let partial_env = default_env("partial-profile-permissions");
+    partial_env.edit_profile("default", |content| {
+        content.replace(
+            "[permissions]\nspot_trading = true\nusds_futures = true\nuniversal_transfer = false",
+            "[permissions]\nspot_trading = true",
+        )
+    });
+    let state = partial_env.json(command(&[
+        "state",
+        "create",
+        "--profile",
+        "default",
+        "--kind",
+        "leverage",
+        "--symbol",
+        "BTCUSDT",
+        "--leverage",
+        "2",
+        "--json",
+    ]));
+    assert_eq!(state["risk"]["allowed"], false);
+    assert_risk_finding(&state, "profile-permission-usds-futures-disabled");
+}
+
+#[test]
+fn transfer_and_futures_state_use_profile_permissions_as_live_guards() {
+    let transfer_env = default_env("transfer-profile-permission");
+    transfer_env.replace_once_in_profile(
+        "default",
+        "allowed_transfers = []",
+        r#"
+[[risk.allowed_transfers]]
+direction = "spot-to-usds-futures"
+asset = "USDT"
+max_amount = "10"
+"#
+        .trim(),
+    );
+    let transfer = transfer_env.json(command(&[
+        "transfer",
+        "create",
+        "USDT",
+        "--profile",
+        "default",
+        "--direction",
+        "spot-to-usds-futures",
+        "--amount",
+        "1",
+        "--json",
+    ]));
+    assert_eq!(transfer["risk"]["allowed"], false);
+    assert_risk_finding(&transfer, "profile-permission-universal-transfer-disabled");
+
+    let state_env = default_env("state-profile-permission");
+    state_env.replace_once_in_profile("default", "usds_futures = true", "usds_futures = false");
+    let state = state_env.json(command(&[
+        "state",
+        "create",
+        "--profile",
+        "default",
+        "--kind",
+        "leverage",
+        "--symbol",
+        "BTCUSDT",
+        "--leverage",
+        "2",
+        "--json",
+    ]));
+    assert_eq!(state["risk"]["allowed"], false);
+    assert_risk_finding(&state, "profile-permission-usds-futures-disabled");
+}
+
+#[test]
 fn cancel_test_failure_does_not_consume_intent() {
     let env = default_env("cancel-flow");
     let cancel = env.json(command(&[
@@ -1250,6 +1401,17 @@ fn create_limit_order(env: &TestEnv) -> Value {
         "gtc",
         "--json",
     ]))
+}
+
+fn assert_risk_finding(value: &Value, code: &str) {
+    assert!(
+        value["risk"]["findings"]
+            .as_array()
+            .expect("risk findings")
+            .iter()
+            .any(|finding| finding["code"] == code),
+        "expected risk finding {code}: {value}"
+    );
 }
 
 struct TestEnv {

@@ -615,6 +615,11 @@ usds_futures_base_url = "https://testnet.binancefuture.com"
         r#"name = "{profile}"
 
 {provider_block}
+[permissions]
+spot_trading = true
+usds_futures = true
+universal_transfer = false
+
 [risk]
 allow_live = false
 max_daily_order_notional_usdt = "50"

@@ -507,6 +507,8 @@ impl LiveTransferSmokeSpec {
 }
 
 fn signed_live_order_profile_toml(spec: &LiveOrderSmokeSpec) -> String {
+    let spot_trading = spec.market == "spot";
+    let usds_futures = spec.market == "usds-futures";
     format!(
         r#"name = "live-binance-order"
 
@@ -515,6 +517,11 @@ provider = "binance"
 environment = "live"
 api_key_env = "BINANCE_API_KEY"
 api_secret_env = "BINANCE_PRIVATE_KEY"
+
+[permissions]
+spot_trading = {spot_trading}
+usds_futures = {usds_futures}
+universal_transfer = false
 
 [risk]
 allow_live = true
@@ -541,6 +548,11 @@ provider = "binance"
 environment = "live"
 api_key_env = "BINANCE_API_KEY"
 api_secret_env = "BINANCE_PRIVATE_KEY"
+
+[permissions]
+spot_trading = false
+usds_futures = false
+universal_transfer = true
 
 [risk]
 allow_live = true

@@ -18,6 +18,14 @@ pub struct RiskFinding {
     pub message: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProfilePermissionPolicyCheck {
+    pub name: &'static str,
+    pub ok: bool,
+    pub required: bool,
+    pub message: String,
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum RiskSeverity {
@@ -77,6 +85,11 @@ pub fn check_order_intent(profile: &Profile, intent: &OrderIntent, live: bool) -
     );
 
     let symbol_key = intent.symbol.to_ascii_uppercase();
+    check_required_permissions(
+        &mut decision,
+        profile,
+        intent.required_profile_permissions(),
+    );
     let Some(symbol_policy) =
         check_symbol_market(&mut decision, profile, &symbol_key, intent.market)
     else {
@@ -140,6 +153,11 @@ pub fn check_cancel_intent(profile: &Profile, intent: &CancelIntent, live: bool)
         &intent.symbol.to_ascii_uppercase(),
         intent.market,
     );
+    check_required_permissions(
+        &mut decision,
+        profile,
+        intent.required_profile_permissions(),
+    );
     decision
 }
 
@@ -200,6 +218,11 @@ pub fn check_transfer_intent(
             "signed transfer is a live-only capability; use a live profile after reviewing the intent",
         );
     }
+    check_required_permissions(
+        &mut decision,
+        profile,
+        intent.required_profile_permissions(),
+    );
     let asset = intent.asset.to_ascii_uppercase();
     let Some(policy) = profile.risk.allowed_transfers.iter().find(|policy| {
         policy.direction == intent.direction && policy.asset.to_ascii_uppercase() == asset
@@ -253,6 +276,11 @@ pub fn check_futures_state_intent(
             format!("requested leverage {leverage} is outside Binance USD-M range 1..=125"),
         );
     }
+    check_required_permissions(
+        &mut decision,
+        profile,
+        intent.required_profile_permissions(),
+    );
     if matches!(intent.change, FuturesStateChange::PositionMode { .. }) {
         decision.push_info(
             "futures-position-mode-account-wide",
@@ -311,6 +339,60 @@ pub fn check_futures_state_intent(
         }
     }
     decision
+}
+
+fn check_required_permissions(
+    decision: &mut RiskDecision,
+    profile: &Profile,
+    permissions: ProfilePermissionSet,
+) {
+    for permission in permissions.iter() {
+        if !profile.permissions.allows(permission) {
+            decision.push_block(
+                permission.disabled_code(),
+                format!("profile permissions.{} is false", permission.field_name()),
+            );
+        }
+    }
+}
+
+pub fn check_profile_permission_policy(profile: &Profile) -> Vec<ProfilePermissionPolicyCheck> {
+    let required = profile.risk.required_profile_permissions();
+    ProfilePermission::ALL
+        .into_iter()
+        .map(|permission| {
+            profile_permission_policy_check(
+                permission,
+                required.contains(permission),
+                profile.permissions.allows(permission),
+            )
+        })
+        .collect()
+}
+
+fn profile_permission_policy_check(
+    permission: ProfilePermission,
+    required: bool,
+    declared: bool,
+) -> ProfilePermissionPolicyCheck {
+    let ok = !required || declared;
+    let message = match (required, declared) {
+        (false, true) => "permission is declared but not required by risk policy".to_string(),
+        (false, false) => "permission is not declared and not required by risk policy".to_string(),
+        (true, true) => "permission is declared and required by risk policy".to_string(),
+        (true, false) => {
+            format!(
+                "permission is required by risk policy but not declared; {}",
+                permission.policy_reason()
+            )
+        }
+    };
+    ProfilePermissionPolicyCheck {
+        name: permission.policy_check_name(),
+        ok,
+        required,
+        message,
+    }
 }
 
 fn matching_futures_state_policies<'a>(
@@ -379,4 +461,111 @@ fn check_symbol_market<'a>(
         );
     }
     Some(symbol_policy)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+
+    use rust_decimal::Decimal;
+
+    use super::*;
+
+    #[test]
+    fn profile_permission_policy_checks_are_core_owned() {
+        let mut profile = profile();
+        profile.permissions.spot_trading = false;
+
+        let checks = check_profile_permission_policy(&profile);
+        let spot = check(&checks, "profile-permission-spot-trading");
+        assert!(spot.required);
+        assert!(!spot.ok);
+        assert!(spot.message.contains("risk.allowed_symbols"));
+    }
+
+    #[test]
+    fn missing_symbol_does_not_hide_missing_profile_permission() {
+        let mut profile = profile();
+        profile.permissions.spot_trading = false;
+        let mut intent = order_intent();
+        intent.symbol = "ETHUSDT".to_string();
+
+        let decision = check_order_intent(&profile, &intent, false);
+
+        assert!(!decision.allowed);
+        assert_finding(&decision, "profile-permission-spot-trading-disabled");
+        assert_finding(&decision, "symbol-not-allowed");
+    }
+
+    fn check<'a>(
+        checks: &'a [ProfilePermissionPolicyCheck],
+        name: &str,
+    ) -> &'a ProfilePermissionPolicyCheck {
+        checks.iter().find(|check| check.name == name).expect(name)
+    }
+
+    fn assert_finding(decision: &RiskDecision, code: &str) {
+        assert!(
+            decision.findings.iter().any(|finding| finding.code == code),
+            "expected finding {code}: {:?}",
+            decision.findings
+        );
+    }
+
+    fn profile() -> Profile {
+        Profile {
+            name: "test".to_string(),
+            provider: ProviderConfig {
+                provider: Provider::Binance,
+                environment: Environment::Testnet,
+                api_key_env: "BINANCE_API_KEY".to_string(),
+                api_secret_env: "BINANCE_PRIVATE_KEY".to_string(),
+                spot_base_url: None,
+                usds_futures_base_url: None,
+                sapi_base_url: None,
+            },
+            permissions: ProfilePermissions {
+                spot_trading: true,
+                usds_futures: false,
+                universal_transfer: false,
+            },
+            risk: RiskPolicy {
+                allow_live: false,
+                max_daily_order_notional_usdt: None,
+                allowed_symbols: BTreeMap::from([(
+                    "BTCUSDT".to_string(),
+                    SymbolPolicy {
+                        markets: vec![Market::Spot],
+                        order_kinds: vec![OrderKind::Limit],
+                        max_order_notional_usdt: decimal("10"),
+                    },
+                )]),
+                allowed_transfers: Vec::new(),
+                allowed_futures_state_changes: Vec::new(),
+            },
+        }
+    }
+
+    fn order_intent() -> OrderIntent {
+        OrderIntent {
+            profile: "test".to_string(),
+            provider: Provider::Binance,
+            environment: Environment::Testnet,
+            market: Market::Spot,
+            symbol: "BTCUSDT".to_string(),
+            side: OrderSide::Buy,
+            quantity: decimal("0.0001"),
+            spec: OrderSpec::Limit {
+                price: decimal("50000"),
+                time_in_force: TimeInForce::Gtc,
+            },
+            reduce_only: false,
+            position_side: None,
+            client_order_id: "af-test".to_string(),
+        }
+    }
+
+    fn decimal(value: &str) -> DecimalValue {
+        DecimalValue(value.parse::<Decimal>().expect("decimal"))
+    }
 }

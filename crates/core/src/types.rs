@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::str::FromStr;
 
@@ -47,6 +47,15 @@ impl fmt::Display for Environment {
 pub enum Market {
     Spot,
     UsdsFutures,
+}
+
+impl Market {
+    pub const fn required_profile_permission(self) -> ProfilePermission {
+        match self {
+            Self::Spot => ProfilePermission::SpotTrading,
+            Self::UsdsFutures => ProfilePermission::UsdsFutures,
+        }
+    }
 }
 
 impl fmt::Display for Market {
@@ -258,6 +267,10 @@ impl OrderIntent {
     pub fn notional_usdt(&self) -> Option<DecimalValue> {
         self.quantity.checked_mul(self.spec.notional_price())
     }
+
+    pub fn required_profile_permissions(&self) -> ProfilePermissionSet {
+        ProfilePermissionSet::one(self.market.required_profile_permission())
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -407,6 +420,12 @@ impl OrderIdentifier {
     }
 }
 
+impl CancelIntent {
+    pub fn required_profile_permissions(&self) -> ProfilePermissionSet {
+        ProfilePermissionSet::one(self.market.required_profile_permission())
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TransferIntent {
     pub profile: String,
@@ -416,6 +435,12 @@ pub struct TransferIntent {
     pub asset: String,
     pub amount: DecimalValue,
     pub client_transfer_id: String,
+}
+
+impl TransferIntent {
+    pub fn required_profile_permissions(&self) -> ProfilePermissionSet {
+        ProfilePermissionSet::one(ProfilePermission::UniversalTransfer)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -433,6 +458,10 @@ impl FuturesStateIntent {
 
     pub fn scope_label(&self) -> String {
         self.change.scope_label()
+    }
+
+    pub fn required_profile_permissions(&self) -> ProfilePermissionSet {
+        ProfilePermissionSet::one(ProfilePermission::UsdsFutures)
     }
 }
 
@@ -482,6 +511,117 @@ pub struct ProviderConfig {
     pub sapi_base_url: Option<String>,
 }
 
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ProfilePermission {
+    SpotTrading,
+    UsdsFutures,
+    UniversalTransfer,
+}
+
+impl ProfilePermission {
+    pub const ALL: [Self; 3] = [
+        Self::SpotTrading,
+        Self::UsdsFutures,
+        Self::UniversalTransfer,
+    ];
+
+    pub const fn field_name(self) -> &'static str {
+        match self {
+            Self::SpotTrading => "spot_trading",
+            Self::UsdsFutures => "usds_futures",
+            Self::UniversalTransfer => "universal_transfer",
+        }
+    }
+
+    pub const fn disabled_code(self) -> &'static str {
+        match self {
+            Self::SpotTrading => "profile-permission-spot-trading-disabled",
+            Self::UsdsFutures => "profile-permission-usds-futures-disabled",
+            Self::UniversalTransfer => "profile-permission-universal-transfer-disabled",
+        }
+    }
+
+    pub const fn policy_check_name(self) -> &'static str {
+        match self {
+            Self::SpotTrading => "profile-permission-spot-trading",
+            Self::UsdsFutures => "profile-permission-usds-futures",
+            Self::UniversalTransfer => "profile-permission-universal-transfer",
+        }
+    }
+
+    pub const fn policy_reason(self) -> &'static str {
+        match self {
+            Self::SpotTrading => "risk.allowed_symbols includes spot markets",
+            Self::UsdsFutures => {
+                "risk.allowed_symbols or risk.allowed_futures_state_changes includes USD-M futures"
+            }
+            Self::UniversalTransfer => "risk.allowed_transfers is not empty",
+        }
+    }
+}
+
+impl fmt::Display for ProfilePermission {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(self.field_name())
+    }
+}
+
+#[derive(Debug, Clone, Default, Eq, PartialEq)]
+pub struct ProfilePermissionSet {
+    permissions: BTreeSet<ProfilePermission>,
+}
+
+impl ProfilePermissionSet {
+    pub fn one(permission: ProfilePermission) -> Self {
+        let mut set = Self::default();
+        set.insert(permission);
+        set
+    }
+
+    pub fn insert(&mut self, permission: ProfilePermission) {
+        self.permissions.insert(permission);
+    }
+
+    pub fn contains(&self, permission: ProfilePermission) -> bool {
+        self.permissions.contains(&permission)
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = ProfilePermission> + '_ {
+        self.permissions.iter().copied()
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
+pub struct ProfilePermissions {
+    #[serde(default)]
+    pub spot_trading: bool,
+    #[serde(default)]
+    pub usds_futures: bool,
+    #[serde(default)]
+    pub universal_transfer: bool,
+}
+
+impl ProfilePermissions {
+    pub fn allows(self, permission: ProfilePermission) -> bool {
+        match permission {
+            ProfilePermission::SpotTrading => self.spot_trading,
+            ProfilePermission::UsdsFutures => self.usds_futures,
+            ProfilePermission::UniversalTransfer => self.universal_transfer,
+        }
+    }
+
+    pub fn declared_profile_permissions(self) -> ProfilePermissionSet {
+        let mut set = ProfilePermissionSet::default();
+        for permission in ProfilePermission::ALL {
+            if self.allows(permission) {
+                set.insert(permission);
+            }
+        }
+        set
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RiskPolicy {
     pub allow_live: bool,
@@ -493,6 +633,24 @@ pub struct RiskPolicy {
     pub allowed_transfers: Vec<TransferPolicy>,
     #[serde(default)]
     pub allowed_futures_state_changes: Vec<FuturesStatePolicy>,
+}
+
+impl RiskPolicy {
+    pub fn required_profile_permissions(&self) -> ProfilePermissionSet {
+        let mut permissions = ProfilePermissionSet::default();
+        for symbol in self.allowed_symbols.values() {
+            for market in &symbol.markets {
+                permissions.insert(market.required_profile_permission());
+            }
+        }
+        if !self.allowed_transfers.is_empty() {
+            permissions.insert(ProfilePermission::UniversalTransfer);
+        }
+        if !self.allowed_futures_state_changes.is_empty() {
+            permissions.insert(ProfilePermission::UsdsFutures);
+        }
+        permissions
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

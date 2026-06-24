@@ -52,6 +52,17 @@ pub enum IntentKind {
     FuturesState(FuturesStateIntent),
 }
 
+impl IntentKind {
+    pub fn required_profile_permissions(&self) -> ProfilePermissionSet {
+        match self {
+            Self::Order(intent) => intent.required_profile_permissions(),
+            Self::Cancel(intent) => intent.required_profile_permissions(),
+            Self::Transfer(intent) => intent.required_profile_permissions(),
+            Self::FuturesState(intent) => intent.required_profile_permissions(),
+        }
+    }
+}
+
 impl IntentEnvelope {
     pub fn is_expired(&self) -> bool {
         Utc::now() > self.metadata.expires_at_utc

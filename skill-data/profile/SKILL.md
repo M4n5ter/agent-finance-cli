@@ -13,12 +13,30 @@ Also use it before USD-M futures `state` changes.
 - A profile is a TOML file in the user config directory.
 - The profile stores environment variable names for Binance HMAC keys, not secrets.
 - The default HMAC secret env is `BINANCE_PRIVATE_KEY`; in Binance HMAC mode this is the API Secret string, not an RSA or Ed25519 private key.
-- Live writes require all of these: profile `allow_live = true`, the relevant order/transfer/futures-state whitelist, matching Binance API permissions, intent id, and `--live`.
+- Live writes require all of these: profile `allow_live = true`, matching `[permissions]` declarations, the relevant order/transfer/futures-state whitelist, matching Binance API key permissions, intent id, and `--live`.
 - Live market orders are blocked until risk notional can be derived from fresh exchange data instead of user-supplied `valuation_price`.
 - USD-M futures leverage, margin type, and Binance futures account position mode changes require explicit `risk.allowed_futures_state_changes` policy and use separate `state` intents.
 - Binance position mode changes every symbol; UM/CM share `dualSidePosition`, and Binance rejects the change when either side has open orders or open positions.
 - Order, cancel, transfer, and futures state writes are intent-first. Create the intent, inspect it, run `risk check`, then submit.
 - Audit logging is append-only JSONL in the user data directory.
+
+## Profile Permissions
+
+`[permissions]` declares what this profile is allowed to attempt before API-key probing:
+
+```toml
+[permissions]
+spot_trading = true
+usds_futures = true
+universal_transfer = false
+```
+
+- `spot_trading`: required for Spot order and cancel intents.
+- `usds_futures`: required for USD-M order/cancel intents and futures state changes.
+- `universal_transfer`: required for Spot `<->` USD-M internal transfers.
+- `profile doctor` reports both profile/risk consistency and live Binance API-key permission checks when HMAC env vars are set.
+- `risk check` and submit block an intent when the matching profile permission is `false`, even if the risk whitelist would otherwise allow it.
+- Profiles that omit `[permissions]` or omit individual fields parse with those permissions defaulting to `false`; this is fail-closed and `profile doctor` will report which declarations are missing for the risk policy.
 
 ## Setup
 
@@ -143,7 +161,8 @@ cargo test --test binance_live_write binance_live_transfer_smoke_is_usable -- --
 - Never put API secrets in TOML, Markdown, command history, audit logs, or prompts.
 - Use Binance testnet profiles first.
 - For live profiles, keep whitelist and notional limits small.
-- `profile doctor` reads Binance API restrictions when HMAC env vars are set and reports specific permission checks for spot trading, USD-M futures, and universal transfer.
+- `profile doctor` first checks that `[permissions]` covers the risk policy, then reads Binance API restrictions when HMAC env vars are set and reports specific permission checks for spot trading, USD-M futures, and universal transfer.
+- Missing `[permissions]` fields default to `false`; add explicit declarations instead of assuming older profiles are live-write capable.
 - Live submit checks the required Binance API permissions before claiming the intent, so a permission failure does not consume the intent.
 - `max_daily_order_notional_usdt` is enforced from the local append-only audit log for `risk check --live` and live order submit. Matching live-submit events with missing notional data fail closed.
 - `order submit` without flags is an offline dry-run; `--test` calls an exchange test endpoint where available but does not consume the intent; only `--live` consumes the intent.

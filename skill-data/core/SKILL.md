@@ -97,7 +97,7 @@ agent-finance audit export --json
 - Use `market providers --json` when an Agent needs a machine-readable capability matrix.
 - Use `capabilities --json` for the unified terminal surface, including account/order/transfer/futures-state safety boundaries.
 - Use `skills get profile` before touching signed account, order, transfer, futures state, risk, or audit commands.
-- Run `profile doctor` before live writes; it reports Binance API permission checks, and live submit rechecks the permissions before claiming the intent.
+- Run `profile doctor` before live writes; it checks `[permissions]` against the risk policy, reports Binance API permission checks when HMAC env vars are set, and live submit rechecks exchange permissions before claiming the intent.
 - Signed order test/live submit checks locally checkable Binance exchangeInfo filters before sending an order; dry-run remains offline.
 - Live market orders are blocked until risk notional can be derived from fresh exchange data instead of user-supplied `valuation_price`.
 - USD-M futures leverage, margin type, and Binance futures account position mode changes use separate `state` intents; order submit never changes account state implicitly.

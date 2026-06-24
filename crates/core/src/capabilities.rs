@@ -14,7 +14,7 @@ impl CapabilityReport {
             providers,
             safety_model: vec![
                 "Secrets are referenced by environment variable name; they are never stored in profile or audit logs.".to_string(),
-                "Live writes require profile allow_live, whitelist checks, intent id, and explicit --live.".to_string(),
+                "Live writes require profile allow_live, declared profile permissions, whitelist checks, intent id, and explicit --live.".to_string(),
                 "Audit logging is append-only JSONL in the user data directory.".to_string(),
             ],
         }

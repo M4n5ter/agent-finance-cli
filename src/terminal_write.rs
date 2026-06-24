@@ -592,6 +592,11 @@ mod tests {
                 usds_futures_base_url: None,
                 sapi_base_url: None,
             },
+            permissions: agent_finance_core::ProfilePermissions {
+                spot_trading: false,
+                usds_futures: true,
+                universal_transfer: false,
+            },
             risk: RiskPolicy {
                 allow_live: true,
                 max_daily_order_notional_usdt: None,

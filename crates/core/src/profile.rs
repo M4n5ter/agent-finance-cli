@@ -11,6 +11,8 @@ use crate::types::*;
 pub struct Profile {
     pub name: String,
     pub provider: ProviderConfig,
+    #[serde(default)]
+    pub permissions: ProfilePermissions,
     pub risk: RiskPolicy,
 }
 

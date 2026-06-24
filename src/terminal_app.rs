@@ -92,6 +92,14 @@ pub(crate) async fn run_profile(args: ProfileArgs, timeout_seconds: u64) -> Resu
                 "ok": secret_ok,
                 "message": format!("{} {}", profile.provider.api_secret_env, if secret_ok { "is set" } else { "is missing" }),
             }));
+            for check in agent_finance_core::check_profile_permission_policy(&profile) {
+                checks.push(json!({
+                    "name": check.name,
+                    "ok": check.ok,
+                    "required": check.required,
+                    "message": check.message,
+                }));
+            }
             if key_ok && secret_ok {
                 match binance_client(&profile, timeout_seconds)?
                     .account_permissions()
@@ -394,6 +402,7 @@ pub(crate) fn run_risk(args: RiskArgs) -> Result<()> {
                 "profile": profile.name,
                 "provider": profile.provider.provider,
                 "environment": profile.provider.environment,
+                "permissions": profile.permissions,
                 "allow_live": profile.risk.allow_live,
                 "max_daily_order_notional_usdt": profile.risk.max_daily_order_notional_usdt,
                 "daily_order_notional_used_utc": used.to_string(),
@@ -465,10 +474,13 @@ fn explain_profile(profile: &agent_finance_core::Profile) -> String {
         .collect::<Vec<_>>()
         .join(",");
     format!(
-        "profile: {}\nprovider: {}\nenvironment: {:?}\nallow_live: {}\nallowed_symbols: {}\nallowed_transfers: {}\nallowed_futures_state_changes: {}",
+        "profile: {}\nprovider: {}\nenvironment: {:?}\npermissions: spot_trading={}, usds_futures={}, universal_transfer={}\nallow_live: {}\nallowed_symbols: {}\nallowed_transfers: {}\nallowed_futures_state_changes: {}",
         profile.name,
         profile.provider.provider,
         profile.provider.environment,
+        profile.permissions.spot_trading,
+        profile.permissions.usds_futures,
+        profile.permissions.universal_transfer,
         profile.risk.allow_live,
         symbols,
         profile
