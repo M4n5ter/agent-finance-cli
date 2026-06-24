@@ -88,6 +88,9 @@ Use Polymarket for quantifiable sentiment and event-probability signals. It does
 ```bash
 agent-finance skills get profile
 agent-finance profile doctor --profile default
+agent-finance account permissions --profile default --json
+agent-finance account balances --profile default --json
+agent-finance account positions --profile default --json
 agent-finance risk explain --profile default
 agent-finance risk check INTENT_ID --profile default --live
 agent-finance order query BTCUSDT --profile default --market spot --client-order-id CLIENT_ORDER_ID
@@ -101,6 +104,14 @@ agent-finance transfer history --profile live --direction spot-to-usds-futures -
 ```
 
 Use `profile doctor` to inspect profile `[permissions]`, risk-policy consistency, Binance API key restrictions, and provider permissions before live writes. Use `risk explain` to inspect profile limits and the local audit-backed daily order notional counter before live writes.
+Signed `account` JSON commands return a typed snapshot envelope; provider-native account data is under `payload`.
+
+| Command | `kind` | Common payload path |
+| --- | --- | --- |
+| `account permissions` | `api-permissions` | `payload` |
+| `account balances` | `spot-balances` | `payload.balances` |
+| `account positions` | `usds-futures-positions` | `payload.assets`, `payload.positions` |
+
 Order test/live submit checks locally checkable Binance exchangeInfo filters before sending the order; market-order notional is reported as not locally checked because the exchange execution price is unknown before submit. Live market orders are blocked until risk notional can be derived from fresh exchange data instead of user-supplied `valuation_price`. Dry-run remains offline and prints the exchangeInfo request for later verification.
 USD-M futures leverage, margin type, and Binance futures account position mode changes use separate `state` intents and require explicit `risk.allowed_futures_state_changes` policy before live submit. Position mode policy is not in the default profile template; add an explicit `kind = "position-mode"` entry with the intended `mode`. Position mode changes every symbol; Binance UM/CM share `dualSidePosition`, and the exchange rejects the change when either side has open orders or open positions.
 Transfer history reads Binance SAPI live account data and requires a reviewed live profile.

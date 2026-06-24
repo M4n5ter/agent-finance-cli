@@ -80,6 +80,9 @@ agent-finance market crypto discover --provider coingecko --kind trending
 
 ```bash
 agent-finance skills get profile
+agent-finance account permissions --profile default --json
+agent-finance account balances --profile default --json
+agent-finance account positions --profile default --json
 agent-finance risk explain --profile default
 agent-finance order submit INTENT_ID --profile default
 agent-finance order query BTCUSDT --profile default --market spot --client-order-id CLIENT_ORDER_ID
@@ -97,6 +100,8 @@ agent-finance audit export --json
 - Use `market providers --json` when an Agent needs a machine-readable capability matrix.
 - Use `capabilities --json` for the unified terminal surface, including account/order/transfer/futures-state safety boundaries.
 - Use `skills get profile` before touching signed account, order, transfer, futures state, risk, or audit commands.
+- Signed `account` commands return a typed snapshot envelope with `profile`, `provider`, `environment`, `kind`, and raw provider data under `payload`.
+- Account snapshot kinds are command discriminators: `account permissions` -> `api-permissions` with data under `payload`; `account balances` -> `spot-balances` with balances under `payload.balances`; `account positions` -> `usds-futures-positions` with futures account data under `payload.assets` and `payload.positions`.
 - Run `profile doctor` before live writes; it checks `[permissions]` against the risk policy, reports Binance API permission checks when HMAC env vars are set, and live submit rechecks exchange permissions before claiming the intent.
 - Signed order test/live submit checks locally checkable Binance exchangeInfo filters before sending an order; dry-run remains offline.
 - Live market orders are blocked until risk notional can be derived from fresh exchange data instead of user-supplied `valuation_price`.

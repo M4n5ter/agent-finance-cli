@@ -165,29 +165,68 @@ pub(crate) async fn run_account(args: AccountArgs, timeout_seconds: u64) -> Resu
             let payload = binance_client(&profile, timeout_seconds)?
                 .account_permissions()
                 .await?;
-            print_json_or_text(args.json, &payload, || {
-                serde_json::to_string_pretty(&payload).unwrap()
-            })
+            let snapshot = account_snapshot(
+                &profile,
+                agent_finance_core::AccountSnapshotKind::ApiPermissions,
+                payload,
+            );
+            print_account_snapshot(args.json, &snapshot)
         }
         AccountCommand::Balances(args) => {
             let profile = load_profile(&args.profile)?;
             let payload = binance_client(&profile, timeout_seconds)?
                 .spot_account()
                 .await?;
-            print_json_or_text(args.json, &payload, || {
-                serde_json::to_string_pretty(&payload).unwrap()
-            })
+            let snapshot = account_snapshot(
+                &profile,
+                agent_finance_core::AccountSnapshotKind::SpotBalances,
+                payload,
+            );
+            print_account_snapshot(args.json, &snapshot)
         }
         AccountCommand::Positions(args) => {
             let profile = load_profile(&args.profile)?;
             let payload = binance_client(&profile, timeout_seconds)?
                 .futures_account()
                 .await?;
-            print_json_or_text(args.json, &payload, || {
-                serde_json::to_string_pretty(&payload).unwrap()
-            })
+            let snapshot = account_snapshot(
+                &profile,
+                agent_finance_core::AccountSnapshotKind::UsdsFuturesPositions,
+                payload,
+            );
+            print_account_snapshot(args.json, &snapshot)
         }
     }
+}
+
+fn account_snapshot(
+    profile: &agent_finance_core::Profile,
+    kind: agent_finance_core::AccountSnapshotKind,
+    payload: serde_json::Value,
+) -> agent_finance_core::AccountSnapshot {
+    agent_finance_core::AccountSnapshot::new(
+        profile.name.clone(),
+        profile.provider.provider,
+        profile.provider.environment,
+        kind,
+        payload,
+    )
+}
+
+fn print_account_snapshot(
+    json_output: bool,
+    snapshot: &agent_finance_core::AccountSnapshot,
+) -> Result<()> {
+    print_json_or_text(json_output, snapshot, || {
+        format!(
+            "profile: {}\nprovider: {}\nenvironment: {}\nkind: {}\npayload:\n{}",
+            snapshot.profile,
+            snapshot.provider,
+            snapshot.environment,
+            snapshot.kind,
+            serde_json::to_string_pretty(&snapshot.payload).unwrap()
+        )
+    })
 }
 
 pub(crate) async fn run_order(args: OrderArgs, timeout_seconds: u64) -> Result<()> {

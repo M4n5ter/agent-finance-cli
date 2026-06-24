@@ -511,6 +511,51 @@ pub struct ProviderConfig {
     pub sapi_base_url: Option<String>,
 }
 
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum AccountSnapshotKind {
+    ApiPermissions,
+    SpotBalances,
+    UsdsFuturesPositions,
+}
+
+impl fmt::Display for AccountSnapshotKind {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::ApiPermissions => formatter.write_str("api-permissions"),
+            Self::SpotBalances => formatter.write_str("spot-balances"),
+            Self::UsdsFuturesPositions => formatter.write_str("usds-futures-positions"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AccountSnapshot {
+    pub profile: String,
+    pub provider: Provider,
+    pub environment: Environment,
+    pub kind: AccountSnapshotKind,
+    pub payload: serde_json::Value,
+}
+
+impl AccountSnapshot {
+    pub fn new(
+        profile: impl Into<String>,
+        provider: Provider,
+        environment: Environment,
+        kind: AccountSnapshotKind,
+        payload: serde_json::Value,
+    ) -> Self {
+        Self {
+            profile: profile.into(),
+            provider,
+            environment,
+            kind,
+            payload,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DiagnosticCheck {
     pub name: String,
@@ -817,4 +862,30 @@ fn reject_present<T>(name: &str, value: Option<&T>) -> Result<()> {
         return Err(anyhow!("{name} is not valid for this order kind"));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+
+    #[test]
+    fn account_snapshot_keeps_provider_payload_inside_typed_envelope() {
+        let snapshot = AccountSnapshot::new(
+            "default",
+            Provider::Binance,
+            Environment::Live,
+            AccountSnapshotKind::ApiPermissions,
+            json!({"enableReading": true}),
+        );
+
+        let value = serde_json::to_value(snapshot).expect("account snapshot json");
+
+        assert_eq!(value["profile"], "default");
+        assert_eq!(value["provider"], "binance");
+        assert_eq!(value["environment"], "live");
+        assert_eq!(value["kind"], "api-permissions");
+        assert_eq!(value["payload"]["enableReading"], true);
+    }
 }

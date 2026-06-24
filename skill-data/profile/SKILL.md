@@ -46,7 +46,21 @@ agent-finance profile template --profile default
 agent-finance profile doctor --profile default
 agent-finance profile explain --profile default
 agent-finance risk explain --profile default
+agent-finance account permissions --profile default --json
+agent-finance account balances --profile default --json
+agent-finance account positions --profile default --json
 ```
+
+Signed `account` JSON output is an `AccountSnapshot` envelope:
+
+- `profile`, `provider`, `environment`, `kind`
+- `payload`: raw provider response for the requested account read
+
+| Command | `kind` | Common payload path |
+| --- | --- | --- |
+| `account permissions` | `api-permissions` | `payload` |
+| `account balances` | `spot-balances` | `payload.balances` |
+| `account positions` | `usds-futures-positions` | `payload.assets`, `payload.positions` |
 
 ## Order Flow
 

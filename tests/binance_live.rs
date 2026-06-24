@@ -398,6 +398,7 @@ fn binance_live_signed_read_only_surface_is_usable() {
         "live-binance",
         "--json",
     ]);
+    assert_eq!(permissions["kind"], "api-permissions");
     for key in [
         "enableReading",
         "enableSpotAndMarginTrading",
@@ -405,15 +406,16 @@ fn binance_live_signed_read_only_surface_is_usable() {
         "permitsUniversalTransfer",
     ] {
         assert!(
-            permissions.get(key).is_some(),
+            permissions["payload"].get(key).is_some(),
             "permissions payload should include {key}"
         );
     }
 
     let balances =
         env.command_json(&["account", "balances", "--profile", "live-binance", "--json"]);
+    assert_eq!(balances["kind"], "spot-balances");
     assert!(
-        balances["balances"]
+        balances["payload"]["balances"]
             .as_array()
             .is_some_and(|items| !items.is_empty()),
         "spot account should include balances array"
@@ -426,12 +428,13 @@ fn binance_live_signed_read_only_surface_is_usable() {
         "live-binance",
         "--json",
     ]);
+    assert_eq!(positions["kind"], "usds-futures-positions");
     assert!(
-        positions["assets"].as_array().is_some(),
+        positions["payload"]["assets"].as_array().is_some(),
         "USD-M account should include assets array"
     );
     assert!(
-        positions["positions"].as_array().is_some(),
+        positions["payload"]["positions"].as_array().is_some(),
         "USD-M account should include positions array"
     );
 }
