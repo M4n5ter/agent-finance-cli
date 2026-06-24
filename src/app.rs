@@ -7,10 +7,10 @@ use futures_util::StreamExt;
 use serde::Serialize;
 
 use crate::cli::{
-    AssetClass, Cli, Command, HistoryArgs, HistorySession, IndicatorsArgs, NewsArgs, OptionsArgs,
-    OptionsProvider, PolymarketArgs, PolymarketCommand, Provider, ProviderResearchArgs,
-    ProvidersArgs, ReadUrlArgs, ResearchArgs, ScreenArgs, SearchArgs, SessionsArgs, StooqArgs,
-    StooqCommand, WatchArgs,
+    AssetClass, Cli, Command, HistoryArgs, HistorySession, IndicatorsArgs, MarketArgs,
+    MarketCommand, NewsArgs, OptionsArgs, OptionsProvider, PolymarketArgs, PolymarketCommand,
+    Provider, ProviderResearchArgs, ProvidersArgs, ReadUrlArgs, ResearchArgs, ScreenArgs,
+    SearchArgs, SessionsArgs, StooqArgs, StooqCommand, WatchArgs,
 };
 use crate::crypto_app;
 use crate::crypto_market_data;
@@ -34,15 +34,40 @@ pub async fn run() -> Result<()> {
     let timezone = timezone.as_str();
     let timeout_seconds = cli.timeout_seconds;
     match cli.command {
-        Command::Price(args) => run_price(args, proxy, no_proxy, timeout_seconds, timezone).await,
-        Command::Sessions(args) => {
+        Command::Market(args) => run_market(args, proxy, no_proxy, timeout_seconds, timezone).await,
+        Command::Capabilities(args) => crate::terminal_app::run_capabilities(args),
+        Command::Profile(args) => crate::terminal_app::run_profile(args, timeout_seconds).await,
+        Command::Account(args) => crate::terminal_app::run_account(args, timeout_seconds).await,
+        Command::Order(args) => crate::terminal_app::run_order(args, timeout_seconds).await,
+        Command::Transfer(args) => crate::terminal_app::run_transfer(args, timeout_seconds).await,
+        Command::State(args) => crate::terminal_state::run(args, timeout_seconds).await,
+        Command::Risk(args) => crate::terminal_app::run_risk(args),
+        Command::Audit(args) => crate::terminal_app::run_audit(args),
+        Command::Skills(args) => run_skills(args),
+    }
+}
+
+async fn run_market(
+    args: MarketArgs,
+    proxy: Option<&str>,
+    no_proxy: bool,
+    timeout_seconds: u64,
+    timezone: &str,
+) -> Result<()> {
+    match args.command {
+        MarketCommand::Price(args) => {
+            run_price(args, proxy, no_proxy, timeout_seconds, timezone).await
+        }
+        MarketCommand::Sessions(args) => {
             run_sessions(args, proxy, no_proxy, timeout_seconds, timezone).await
         }
-        Command::History(args) => {
+        MarketCommand::History(args) => {
             run_history(args, proxy, no_proxy, timeout_seconds, timezone).await
         }
-        Command::Indicators(args) => run_indicators(args, proxy, no_proxy, timeout_seconds).await,
-        Command::Fundamentals(args) => {
+        MarketCommand::Indicators(args) => {
+            run_indicators(args, proxy, no_proxy, timeout_seconds).await
+        }
+        MarketCommand::Fundamentals(args) => {
             run_provider_quote_summary(
                 args,
                 research::QuoteSummaryKind::Fundamentals,
@@ -53,7 +78,7 @@ pub async fn run() -> Result<()> {
             )
             .await
         }
-        Command::Analysis(args) => {
+        MarketCommand::Analysis(args) => {
             run_quote_summary(
                 args,
                 research::QuoteSummaryKind::Analysis,
@@ -65,10 +90,10 @@ pub async fn run() -> Result<()> {
             )
             .await
         }
-        Command::Options(args) => {
+        MarketCommand::Options(args) => {
             run_options(args, proxy, no_proxy, timeout_seconds, timezone).await
         }
-        Command::Ownership(args) => {
+        MarketCommand::Ownership(args) => {
             run_quote_summary(
                 args,
                 research::QuoteSummaryKind::Ownership,
@@ -80,7 +105,7 @@ pub async fn run() -> Result<()> {
             )
             .await
         }
-        Command::Events(args) => {
+        MarketCommand::Events(args) => {
             run_provider_quote_summary(
                 args,
                 research::QuoteSummaryKind::Events,
@@ -91,29 +116,30 @@ pub async fn run() -> Result<()> {
             )
             .await
         }
-        Command::News(args) => run_news(args, proxy, no_proxy, timeout_seconds, timezone).await,
-        Command::ReadUrl(args) => run_read_url(args, proxy, no_proxy, timeout_seconds).await,
-        Command::Search(args) => run_search(args, proxy, no_proxy, timeout_seconds, timezone).await,
-        Command::Crypto(args) => {
+        MarketCommand::News(args) => {
+            run_news(args, proxy, no_proxy, timeout_seconds, timezone).await
+        }
+        MarketCommand::ReadUrl(args) => run_read_url(args, proxy, no_proxy, timeout_seconds).await,
+        MarketCommand::Search(args) => {
+            run_search(args, proxy, no_proxy, timeout_seconds, timezone).await
+        }
+        MarketCommand::Crypto(args) => {
             crypto_app::run(args, proxy, no_proxy, timeout_seconds, timezone).await
         }
-        Command::Polymarket(args) => {
+        MarketCommand::Polymarket(args) => {
             run_polymarket(args, proxy, no_proxy, timeout_seconds, timezone).await
         }
-        Command::Screen(args) => run_screen(args, proxy, no_proxy, timeout_seconds, timezone).await,
-        Command::Stooq(args) => run_stooq(args, proxy, no_proxy, timeout_seconds).await,
-        Command::Providers(args) => run_providers(args),
-        Command::Capabilities(args) => crate::terminal_app::run_capabilities(args),
-        Command::Profile(args) => crate::terminal_app::run_profile(args, timeout_seconds).await,
-        Command::Account(args) => crate::terminal_app::run_account(args, timeout_seconds).await,
-        Command::Order(args) => crate::terminal_app::run_order(args, timeout_seconds).await,
-        Command::Transfer(args) => crate::terminal_app::run_transfer(args, timeout_seconds).await,
-        Command::State(args) => crate::terminal_state::run(args, timeout_seconds).await,
-        Command::Risk(args) => crate::terminal_app::run_risk(args),
-        Command::Audit(args) => crate::terminal_app::run_audit(args),
-        Command::Watch(args) => run_watch(args, proxy, no_proxy, timeout_seconds, timezone).await,
-        Command::Stream(args) => run_stream(args, proxy, no_proxy, timeout_seconds, timezone).await,
-        Command::Skills(args) => run_skills(args),
+        MarketCommand::Screen(args) => {
+            run_screen(args, proxy, no_proxy, timeout_seconds, timezone).await
+        }
+        MarketCommand::Stooq(args) => run_stooq(args, proxy, no_proxy, timeout_seconds).await,
+        MarketCommand::Providers(args) => run_providers(args),
+        MarketCommand::Watch(args) => {
+            run_watch(args, proxy, no_proxy, timeout_seconds, timezone).await
+        }
+        MarketCommand::Stream(args) => {
+            run_stream(args, proxy, no_proxy, timeout_seconds, timezone).await
+        }
     }
 }
 

@@ -8,19 +8,19 @@ description: Fetch no-key Yahoo, SEC EDGAR, Robinhood, and CNBC research data, i
 ## Commands
 
 ```bash
-agent-finance fundamentals CRDO
-agent-finance fundamentals CRDO --provider sec-edgar
-agent-finance fundamentals CRDO --provider robinhood
-agent-finance fundamentals CRDO --provider cnbc
-agent-finance analysis CRDO
-agent-finance options CRDO
-agent-finance options CRDO --provider robinhood --count 80
-agent-finance ownership CRDO
-agent-finance events CRDO --provider sec-edgar
-agent-finance news CRDO
-agent-finance read-url "https://www.sec.gov/Archives/edgar/data/0001807794/000162828026014017/crdo-20260131.htm"
-agent-finance search "optical interconnect"
-agent-finance screen most_actives
+agent-finance market fundamentals CRDO
+agent-finance market fundamentals CRDO --provider sec-edgar
+agent-finance market fundamentals CRDO --provider robinhood
+agent-finance market fundamentals CRDO --provider cnbc
+agent-finance market analysis CRDO
+agent-finance market options CRDO
+agent-finance market options CRDO --provider robinhood --count 80
+agent-finance market ownership CRDO
+agent-finance market events CRDO --provider sec-edgar
+agent-finance market news CRDO
+agent-finance market read-url "https://www.sec.gov/Archives/edgar/data/0001807794/000162828026014017/crdo-20260131.htm"
+agent-finance market search "optical interconnect"
+agent-finance market screen most_actives
 ```
 
 ## Output Rules
@@ -30,7 +30,7 @@ agent-finance screen most_actives
 - `--raw` prints raw payloads in human mode.
 - `--refresh` skips cache.
 - `--cache-ttl-seconds <N>` changes non-price cache TTL.
-- `read-url --provider auto` tries direct/Jina/Defuddle readers and reports fallback errors.
+- `market read-url --provider auto` tries direct/Jina/Defuddle readers and reports fallback errors.
 
 ## Research Rules
 

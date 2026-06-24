@@ -38,6 +38,36 @@ pub struct Cli {
 
 #[derive(Subcommand, Debug)]
 pub enum Command {
+    /// Fetch read-only market data, research context, prediction signals, and streams.
+    Market(MarketArgs),
+    /// Print capability-first terminal surface for AI agents.
+    Capabilities(CapabilitiesArgs),
+    /// Inspect and explain trading profiles.
+    Profile(ProfileArgs),
+    /// Inspect signed account state.
+    Account(AccountArgs),
+    /// Create, submit, cancel, and query order intents.
+    Order(OrderArgs),
+    /// Create and submit internal transfer intents.
+    Transfer(TransferArgs),
+    /// Create and submit USD-M futures state-change intents.
+    State(StateArgs),
+    /// Check and explain profile risk policy.
+    Risk(RiskArgs),
+    /// Read local append-only trading audit events.
+    Audit(AuditArgs),
+    /// Print built-in AI-agent skill documents.
+    Skills(SkillsArgs),
+}
+
+#[derive(Parser, Debug)]
+pub struct MarketArgs {
+    #[command(subcommand)]
+    pub command: MarketCommand,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum MarketCommand {
     /// Print the current investable price summary for one or more symbols.
     Price(PriceArgs),
     /// Print regular/pre/post/overnight/provider split for one symbol.
@@ -72,28 +102,10 @@ pub enum Command {
     Stooq(StooqArgs),
     /// Print provider capability matrix.
     Providers(ProvidersArgs),
-    /// Print capability-first terminal surface for AI agents.
-    Capabilities(CapabilitiesArgs),
-    /// Inspect and explain trading profiles.
-    Profile(ProfileArgs),
-    /// Inspect signed account state.
-    Account(AccountArgs),
-    /// Create, submit, cancel, and query order intents.
-    Order(OrderArgs),
-    /// Create and submit internal transfer intents.
-    Transfer(TransferArgs),
-    /// Create and submit USD-M futures state-change intents.
-    State(StateArgs),
-    /// Check and explain profile risk policy.
-    Risk(RiskArgs),
-    /// Read local append-only trading audit events.
-    Audit(AuditArgs),
     /// Poll live price summaries repeatedly.
     Watch(WatchArgs),
     /// Stream Yahoo real-time price updates over WebSocket.
     Stream(StreamArgs),
-    /// Print built-in AI-agent skill documents.
-    Skills(SkillsArgs),
 }
 
 #[derive(Parser, Debug)]

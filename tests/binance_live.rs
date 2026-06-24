@@ -15,6 +15,7 @@ fn crypto_watch_json_reports_errors_and_fails() {
         .env("BINANCE_SPOT_BASE_URL", base_url)
         .args([
             "--no-proxy",
+            "market",
             "watch",
             "BAD",
             "--asset",
@@ -56,13 +57,17 @@ fn binance_live_cli_surface_is_usable() {
     }
 
     assert_aggregate(
-        command(&["crypto", "snapshot", SYMBOL, "--json"]),
+        command(&["market", "crypto", "snapshot", SYMBOL, "--json"]),
         "spot.ticker",
     );
-    assert_aggregate(command(&["crypto", "sentiment", SYMBOL, "--json"]), "mark");
+    assert_aggregate(
+        command(&["market", "crypto", "sentiment", SYMBOL, "--json"]),
+        "mark",
+    );
 
     for args in [
         &[
+            "market",
             "crypto",
             "quote",
             SYMBOL,
@@ -73,6 +78,7 @@ fn binance_live_cli_surface_is_usable() {
             "--json",
         ][..],
         &[
+            "market",
             "crypto",
             "book",
             SYMBOL,
@@ -85,6 +91,7 @@ fn binance_live_cli_surface_is_usable() {
             "--json",
         ],
         &[
+            "market",
             "crypto",
             "trades",
             SYMBOL,
@@ -97,6 +104,7 @@ fn binance_live_cli_surface_is_usable() {
             "--json",
         ],
         &[
+            "market",
             "crypto",
             "candles",
             SYMBOL,
@@ -111,6 +119,7 @@ fn binance_live_cli_surface_is_usable() {
             "--json",
         ],
         &[
+            "market",
             "crypto",
             "quote",
             SYMBOL,
@@ -121,6 +130,7 @@ fn binance_live_cli_surface_is_usable() {
             "--json",
         ],
         &[
+            "market",
             "crypto",
             "book",
             SYMBOL,
@@ -133,6 +143,7 @@ fn binance_live_cli_surface_is_usable() {
             "--json",
         ],
         &[
+            "market",
             "crypto",
             "trades",
             SYMBOL,
@@ -145,6 +156,7 @@ fn binance_live_cli_surface_is_usable() {
             "--json",
         ],
         &[
+            "market",
             "crypto",
             "candles",
             SYMBOL,
@@ -159,6 +171,7 @@ fn binance_live_cli_surface_is_usable() {
             "--json",
         ],
         &[
+            "market",
             "crypto",
             "funding",
             SYMBOL,
@@ -171,6 +184,7 @@ fn binance_live_cli_surface_is_usable() {
             "--json",
         ],
         &[
+            "market",
             "crypto",
             "open-interest",
             SYMBOL,
@@ -185,6 +199,7 @@ fn binance_live_cli_surface_is_usable() {
     }
 
     assert_stream(command(&[
+        "market",
         "crypto",
         "stream",
         SYMBOL,
@@ -195,6 +210,7 @@ fn binance_live_cli_surface_is_usable() {
         "--json",
     ]));
     assert_stream(command(&[
+        "market",
         "crypto",
         "stream",
         SYMBOL,
@@ -206,8 +222,11 @@ fn binance_live_cli_surface_is_usable() {
         "1",
         "--json",
     ]));
-    assert_price(command(&["price", SYMBOL, "--asset", "crypto", "--json"]));
+    assert_price(command(&[
+        "market", "price", SYMBOL, "--asset", "crypto", "--json",
+    ]));
     assert_history(command(&[
+        "market",
         "history",
         SYMBOL,
         "--asset",
@@ -236,6 +255,7 @@ fn crypto_provider_live_cli_surface_is_usable() {
 
     assert_evidence(
         command(&[
+            "market",
             "crypto",
             "quote",
             "BTC-USD",
@@ -249,6 +269,7 @@ fn crypto_provider_live_cli_surface_is_usable() {
     );
     assert_evidence(
         command(&[
+            "market",
             "crypto",
             "quote",
             "BTC/USDT",
@@ -262,6 +283,7 @@ fn crypto_provider_live_cli_surface_is_usable() {
     );
     assert_evidence(
         command(&[
+            "market",
             "crypto",
             "quote",
             "bitcoin",
@@ -276,6 +298,7 @@ fn crypto_provider_live_cli_surface_is_usable() {
 
     assert_payload_len_at_most(
         command(&[
+            "market",
             "crypto",
             "candles",
             "BTC-USD",
@@ -294,6 +317,7 @@ fn crypto_provider_live_cli_surface_is_usable() {
     );
     assert_payload_len_at_most(
         command(&[
+            "market",
             "crypto",
             "candles",
             "bitcoin",
@@ -311,7 +335,14 @@ fn crypto_provider_live_cli_surface_is_usable() {
         2,
     );
 
-    let human = command_text(&["crypto", "quote", "BTC-USD", "--provider", "coinbase"]);
+    let human = command_text(&[
+        "market",
+        "crypto",
+        "quote",
+        "BTC-USD",
+        "--provider",
+        "coinbase",
+    ]);
     assert!(
         human.lines().count() < 40,
         "human output should summarize payloads instead of dumping JSON: {human}"
@@ -322,6 +353,7 @@ fn crypto_provider_live_cli_surface_is_usable() {
     );
 
     let raw = command_text(&[
+        "market",
         "crypto",
         "quote",
         "BTC-USD",

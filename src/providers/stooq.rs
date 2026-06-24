@@ -201,7 +201,7 @@ pub async fn sync_bulk(client: &Client, request: StooqSyncRequest) -> Result<Sto
         }
         (None, None) => {
             return Err(anyhow!(
-                "Stooq bulk downloads require a captcha-authorized URL or local ZIP; run `agent-finance stooq catalog` for package listings"
+                "Stooq bulk downloads require a captcha-authorized URL or local ZIP; run `agent-finance market stooq catalog` for package listings"
             ));
         }
     };
@@ -360,7 +360,7 @@ async fn fetch_live_html_daily_history(
 fn parse_html_history_page(symbol: &str, text: &str) -> Result<Vec<OhlcBar>> {
     if is_stooq_html_rate_limited(text) {
         return Err(anyhow!(
-            "Stooq no-key HTML history hit the daily site hits limit; set STOOQ_API_KEY for CSV history or import bulk history with `agent-finance stooq sync`"
+            "Stooq no-key HTML history hit the daily site hits limit; set STOOQ_API_KEY for CSV history or import bulk history with `agent-finance market stooq sync`"
         ));
     }
     let document = Html::parse_document(text);
@@ -630,7 +630,7 @@ fn fetch_bulk_history(
     let zip_path = cached_zip_path(&cache_key)?;
     if !zip_path.exists() {
         return Err(anyhow!(
-            "no Stooq {} bulk ZIP is cached at {}; import it with `agent-finance stooq sync --frequency {} --market {} --asset {} --zip-path <file>`",
+            "no Stooq {} bulk ZIP is cached at {}; import it with `agent-finance market stooq sync --frequency {} --market {} --asset {} --zip-path <file>`",
             package.label,
             zip_path.display(),
             frequency.label(),

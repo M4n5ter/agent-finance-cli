@@ -10,10 +10,10 @@ Use this skill when an AI Agent needs prediction-market sentiment, event probabi
 ## Commands
 
 ```bash
-agent-finance polymarket search "spacex ipo" --limit 5
-agent-finance polymarket search "spcex" --limit 5
-agent-finance polymarket market MARKET_ID_OR_SLUG
-agent-finance polymarket market MARKET_ID_OR_SLUG --json
+agent-finance market polymarket search "spacex ipo" --limit 5
+agent-finance market polymarket search "spcex" --limit 5
+agent-finance market polymarket market MARKET_ID_OR_SLUG
+agent-finance market polymarket market MARKET_ID_OR_SLUG --json
 ```
 
 ## Search Semantics
@@ -34,8 +34,8 @@ agent-finance polymarket market MARKET_ID_OR_SLUG --json
 ## Useful Flags
 
 ```bash
-agent-finance polymarket search "spacex ipo" --include-closed --min-volume 1000 --json
-agent-finance polymarket market MARKET_ID_OR_SLUG --limit 20 --refresh
+agent-finance market polymarket search "spacex ipo" --include-closed --min-volume 1000 --json
+agent-finance market polymarket market MARKET_ID_OR_SLUG --limit 20 --refresh
 ```
 
 - `--include-closed`: include resolved/closed markets for historical expectation checks.

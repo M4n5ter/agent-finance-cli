@@ -33,7 +33,7 @@ From a checkout:
 
 ```bash
 cargo run --bin agent-finance -- skills get core
-cargo run --bin agent-finance -- price CRDO
+cargo run --bin agent-finance -- market price CRDO
 ```
 
 Future distribution targets include crates.io and Homebrew.
@@ -42,51 +42,51 @@ Future distribution targets include crates.io and Homebrew.
 
 ```bash
 # Current observable price + regular-market basis.
-agent-finance price CRDO
-agent-finance price CRDO MRVL --json
+agent-finance market price CRDO
+agent-finance market price CRDO MRVL --json
 
 # Precise regular/pre/post/overnight/provider split.
-agent-finance sessions CRDO
-agent-finance sessions LITE --proxy-symbol LITEUSDT
+agent-finance market sessions CRDO
+agent-finance market sessions LITE --proxy-symbol LITEUSDT
 
 # History, indicators, crypto/proxy context, and streams.
-agent-finance history CRDO --range 1mo --interval 1d
-agent-finance history CRDO --range 5d --interval 1m --session extended --adjustment raw --no-actions
-agent-finance indicators CRDO MRVL --limit 120
-agent-finance stream CRDO --messages 5
-agent-finance watch CRDO --interval-seconds 15 --iterations 4
+agent-finance market history CRDO --range 1mo --interval 1d
+agent-finance market history CRDO --range 5d --interval 1m --session extended --adjustment raw --no-actions
+agent-finance market indicators CRDO MRVL --limit 120
+agent-finance market stream CRDO --messages 5
+agent-finance market watch CRDO --interval-seconds 15 --iterations 4
 
 # Cross-provider crypto market data.
-agent-finance crypto snapshot BTC/USDT
-agent-finance crypto sentiment BTCUSDT
-agent-finance crypto quote BTC/USDT
-agent-finance crypto book BTC/USDT --limit 20
-agent-finance crypto candles BTC/USDT --interval 1h --limit 48
-agent-finance crypto funding BTCUSDT --provider okx --limit 8
-agent-finance crypto discover --provider coingecko --kind trending
+agent-finance market crypto snapshot BTC/USDT
+agent-finance market crypto sentiment BTCUSDT
+agent-finance market crypto quote BTC/USDT
+agent-finance market crypto book BTC/USDT --limit 20
+agent-finance market crypto candles BTC/USDT --interval 1h --limit 48
+agent-finance market crypto funding BTCUSDT --provider okx --limit 8
+agent-finance market crypto discover --provider coingecko --kind trending
 
-agent-finance crypto funding BTCUSDT --instrument swap --provider auto --limit 8
-agent-finance crypto open-interest BTCUSDT --instrument swap --provider okx
-agent-finance crypto stream BTCUSDT --instrument swap --kind mark-price --messages 1
-agent-finance price BTC/USDT --asset crypto
-agent-finance history BTC/USDT --asset crypto --crypto-provider okx --instrument spot --interval 1h --limit 48
+agent-finance market crypto funding BTCUSDT --instrument swap --provider auto --limit 8
+agent-finance market crypto open-interest BTCUSDT --instrument swap --provider okx
+agent-finance market crypto stream BTCUSDT --instrument swap --kind mark-price --messages 1
+agent-finance market price BTC/USDT --asset crypto
+agent-finance market history BTC/USDT --asset crypto --crypto-provider okx --instrument spot --interval 1h --limit 48
 
 # No-key research and discovery.
-agent-finance fundamentals CRDO
-agent-finance fundamentals CRDO --provider sec-edgar
-agent-finance analysis CRDO
-agent-finance options CRDO --provider robinhood --count 80
-agent-finance ownership CRDO
-agent-finance events CRDO --provider sec-edgar
-agent-finance news CRDO
-agent-finance read-url "https://www.sec.gov/Archives/edgar/data/0001807794/000162828026014017/crdo-20260131.htm"
-agent-finance search "optical interconnect"
-agent-finance screen day_gainers
-agent-finance providers
+agent-finance market fundamentals CRDO
+agent-finance market fundamentals CRDO --provider sec-edgar
+agent-finance market analysis CRDO
+agent-finance market options CRDO --provider robinhood --count 80
+agent-finance market ownership CRDO
+agent-finance market events CRDO --provider sec-edgar
+agent-finance market news CRDO
+agent-finance market read-url "https://www.sec.gov/Archives/edgar/data/0001807794/000162828026014017/crdo-20260131.htm"
+agent-finance market search "optical interconnect"
+agent-finance market screen day_gainers
+agent-finance market providers
 
 # Prediction-market sentiment and event probabilities.
-agent-finance polymarket search "spacex ipo" --limit 5
-agent-finance polymarket market MARKET_ID_OR_SLUG --json
+agent-finance market polymarket search "spacex ipo" --limit 5
+agent-finance market polymarket market MARKET_ID_OR_SLUG --json
 ```
 
 ## Agent Skills
@@ -112,16 +112,16 @@ The npm wrapper sets `AGENT_FINANCE_PACKAGE_ROOT` automatically for prebuilt pla
 
 ## Data Source Rules
 
-- `price SYMBOL` is the default answer to "what is it trading at now?" It returns the current observable price, session, regular-market basis, and local/UTC timestamps.
-- `sessions SYMBOL` is for explicit regular/pre/post/overnight/provider comparisons.
-- `history` defaults to adjusted prices and includes corporate actions unless disabled.
-- `providers` is the source-of-truth capability matrix. Do not infer coverage from provider names.
-- Crypto commands are capability-first: use `crypto quote/book/trades/candles/funding/open-interest/discover`, then force `--provider binance|coinbase|okx|coingecko` only when cross-checking or auditing.
+- `market price SYMBOL` is the default answer to "what is it trading at now?" It returns the current observable price, session, regular-market basis, and local/UTC timestamps.
+- `market sessions SYMBOL` is for explicit regular/pre/post/overnight/provider comparisons.
+- `market history` defaults to adjusted prices and includes corporate actions unless disabled.
+- `market providers` is the source-of-truth capability matrix. Do not infer coverage from provider names.
+- Crypto commands are capability-first: use `market crypto quote/book/trades/candles/funding/open-interest/discover`, then force `--provider binance|coinbase|okx|coingecko` only when cross-checking or auditing.
 - Binance, Coinbase, OKX, and CoinGecko are tier-1 crypto no-key providers for different jobs. Binance/OKX are best for exchange and derivatives microstructure; Coinbase is a spot exchange cross-check; CoinGecko is an aggregate breadth/trending/metadata source.
 - Binance Spot and crypto spot prices are crypto spot. USD-M futures / TradFi perps are derivatives and proxy instruments, not legal equity, broker fill, or pre-IPO ownership price.
 - Binance Spot WebSocket uses the public market-data-only endpoint. USD-M Futures WebSocket streams are routed through Binance's current public/market paths.
 - Polymarket is a prediction-market sentiment source. Use it for implied probabilities, orderbook, spread, volume, liquidity, open interest, holder preview rows, and probability history. It is not an equity quote, primary-source fact, or confirmation of insider information.
-- `read-url` is an extraction fallback using direct/Jina/Defuddle readers. It is not a login-capable browser.
+- `market read-url` is an extraction fallback using direct/Jina/Defuddle readers. It is not a login-capable browser.
 - Dynamic, login-gated, screenshot-sensitive, or noisy pages should be verified with a real browser tool. `agent-browser` and `opencli` are examples, not dependencies.
 
 ## Network Defaults
@@ -129,8 +129,8 @@ The npm wrapper sets `AGENT_FINANCE_PACKAGE_ROOT` automatically for prebuilt pla
 `agent-finance` respects explicit and environment proxy configuration:
 
 ```bash
-agent-finance --proxy socks5h://127.0.0.1:7890 price CRDO
-agent-finance --no-proxy price CRDO
+agent-finance --proxy socks5h://127.0.0.1:7890 market price CRDO
+agent-finance --no-proxy market price CRDO
 ```
 
 Proxy precedence:

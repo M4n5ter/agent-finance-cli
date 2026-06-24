@@ -221,6 +221,7 @@ fn assert_audit_contains_intent(env: &SignedProfileEnv, expected_kind: &str, int
 
 fn assert_non_marketable_order(env: &SignedProfileEnv, spec: &LiveOrderSmokeSpec) {
     let book = env.command_json(&[
+        "market",
         "crypto",
         "book",
         &spec.symbol,

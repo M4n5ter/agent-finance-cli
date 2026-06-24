@@ -34,8 +34,8 @@ agent-finance skills get profile
 
 ## Boundaries
 
-- Use `price` for the default current observable price.
-- Use `sessions` when regular, premarket, postmarket, overnight, provider differences, or proxy prices matter.
+- Use `market price` for the default current observable price.
+- Use `market sessions` when regular, premarket, postmarket, overnight, provider differences, or proxy prices matter.
 - Inspect daily and minute history before trading, order-quality, stop-loss, or take-profit conclusions.
 - Treat crypto and prediction-market data as market evidence, not primary company facts.
 - Load `skills get profile` before signed account, order, transfer, futures state, risk, or audit workflows.

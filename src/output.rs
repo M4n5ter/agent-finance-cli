@@ -544,7 +544,7 @@ pub fn print_stooq_catalog(catalog: &crate::model::StooqCatalog) {
     print_table(&headers, &rows);
     println!();
     println!(
-        "Download note: Stooq bulk download links are captcha-authorized. Use `stooq sync --zip-path <file>` or `stooq sync --url <authorized-url>`."
+        "Download note: Stooq bulk download links are captcha-authorized. Use `market stooq sync --zip-path <file>` or `market stooq sync --url <authorized-url>`."
     );
 }
 

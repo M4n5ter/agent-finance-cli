@@ -18,21 +18,21 @@ agent-finance skills get history-indicators
 ## Price and Sessions
 
 ```bash
-agent-finance price CRDO
-agent-finance price CRDO MRVL --json
-agent-finance sessions CRDO
-agent-finance sessions LITE --proxy-symbol LITEUSDT
+agent-finance market price CRDO
+agent-finance market price CRDO MRVL --json
+agent-finance market sessions CRDO
+agent-finance market sessions LITE --proxy-symbol LITEUSDT
 ```
 
-`price` answers the default current-price question. `sessions` compares regular/pre/post/overnight/provider/proxy sources.
+`market price` answers the default current-price question. `market sessions` compares regular/pre/post/overnight/provider/proxy sources.
 
 ## History and Indicators
 
 ```bash
-agent-finance history CRDO --range 1mo --interval 1d
-agent-finance history CRDO --range 5d --interval 1m --session extended --adjustment raw --no-actions
-agent-finance history CRDO --range 1y --interval 1d --adjustment auto --repair
-agent-finance indicators CRDO MRVL --limit 120
+agent-finance market history CRDO --range 1mo --interval 1d
+agent-finance market history CRDO --range 5d --interval 1m --session extended --adjustment raw --no-actions
+agent-finance market history CRDO --range 1y --interval 1d --adjustment auto --repair
+agent-finance market indicators CRDO MRVL --limit 120
 ```
 
 Use history before making order, fill, stop-loss, take-profit, or intraday trend judgments. Indicators are summaries; they do not replace the bar path.
@@ -40,19 +40,19 @@ Use history before making order, fill, stop-loss, take-profit, or intraday trend
 ## Research Data
 
 ```bash
-agent-finance fundamentals CRDO
-agent-finance fundamentals CRDO --provider sec-edgar
-agent-finance fundamentals CRDO --provider robinhood
-agent-finance fundamentals CRDO --provider cnbc
-agent-finance analysis CRDO
-agent-finance options CRDO
-agent-finance options CRDO --provider robinhood --count 80
-agent-finance ownership CRDO
-agent-finance events CRDO --provider sec-edgar
-agent-finance news CRDO
-agent-finance read-url "https://www.sec.gov/Archives/edgar/data/0001807794/000162828026014017/crdo-20260131.htm"
-agent-finance search "optical interconnect"
-agent-finance screen day_gainers
+agent-finance market fundamentals CRDO
+agent-finance market fundamentals CRDO --provider sec-edgar
+agent-finance market fundamentals CRDO --provider robinhood
+agent-finance market fundamentals CRDO --provider cnbc
+agent-finance market analysis CRDO
+agent-finance market options CRDO
+agent-finance market options CRDO --provider robinhood --count 80
+agent-finance market ownership CRDO
+agent-finance market events CRDO --provider sec-edgar
+agent-finance market news CRDO
+agent-finance market read-url "https://www.sec.gov/Archives/edgar/data/0001807794/000162828026014017/crdo-20260131.htm"
+agent-finance market search "optical interconnect"
+agent-finance market screen day_gainers
 ```
 
 Research reports include sources, modules, coverage gaps, highlights, and raw payloads in JSON mode.
@@ -60,24 +60,24 @@ Research reports include sources, modules, coverage gaps, highlights, and raw pa
 ## Providers and Proxy Data
 
 ```bash
-agent-finance providers
-agent-finance providers --json
-agent-finance crypto snapshot BTC/USDT
-agent-finance crypto sentiment BTCUSDT
-agent-finance price BTC/USDT --asset crypto
-agent-finance crypto quote BTC/USDT
-agent-finance crypto candles BTC/USDT --provider coingecko --interval 1d --limit 30
-agent-finance crypto discover --provider okx --kind instruments --instrument swap
+agent-finance market providers
+agent-finance market providers --json
+agent-finance market crypto snapshot BTC/USDT
+agent-finance market crypto sentiment BTCUSDT
+agent-finance market price BTC/USDT --asset crypto
+agent-finance market crypto quote BTC/USDT
+agent-finance market crypto candles BTC/USDT --provider coingecko --interval 1d --limit 30
+agent-finance market crypto discover --provider okx --kind instruments --instrument swap
 ```
 
-Use `providers` as the source-of-truth coverage matrix. Crypto commands are capability-first across Binance/Coinbase/OKX/CoinGecko; USD-M futures / TradFi perps are derivative/proxy prices, not legal equity or broker-fill prices.
+Use `market providers` as the source-of-truth coverage matrix. Crypto commands are capability-first across Binance/Coinbase/OKX/CoinGecko; USD-M futures / TradFi perps are derivative/proxy prices, not legal equity or broker-fill prices.
 
 ## Prediction Markets
 
 ```bash
-agent-finance polymarket search "spacex ipo" --limit 5
-agent-finance polymarket search "spcex" --limit 5
-agent-finance polymarket market MARKET_ID_OR_SLUG --json
+agent-finance market polymarket search "spacex ipo" --limit 5
+agent-finance market polymarket search "spcex" --limit 5
+agent-finance market polymarket market MARKET_ID_OR_SLUG --json
 agent-finance skills get prediction-markets
 ```
 
@@ -111,4 +111,4 @@ The CLI respects `--proxy`, `AGENT_FINANCE_PROXY`, and standard proxy environmen
 
 Polymarket uses the official SDK by default. When `--proxy` or `--no-proxy` is explicit, it uses public REST fallback through the CLI HTTP stack so those network controls are honored.
 
-`read-url` is a text extraction fallback. For dynamic, login-gated, screenshot-sensitive, or noisy pages, open the original page with an available real browser tool such as agent-browser or opencli.
+`market read-url` is a text extraction fallback. For dynamic, login-gated, screenshot-sensitive, or noisy pages, open the original page with an available real browser tool such as agent-browser or opencli.
