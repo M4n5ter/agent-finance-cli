@@ -1,4 +1,9 @@
-use clap::{Parser, Subcommand, ValueEnum};
+pub use agent_finance_market::{
+    CryptoDiscoverKind, CryptoInstrument, CryptoMarket, CryptoProvider, CryptoStreamKind,
+};
+use clap::{Parser, Subcommand};
+
+use crate::cli::enum_value_parser;
 
 const CRYPTO_INTERVAL_HELP: &str = "Crypto candle interval. Binance: 1m/3m/5m/15m/30m/1h/2h/4h/6h/8h/12h/1d/3d/1w/1M; Coinbase: 1m/5m/15m/1h/6h/1d; OKX: 1m/3m/5m/15m/30m/1h/2h/4h/6h/12h/1d/2d/3d.";
 
@@ -47,10 +52,10 @@ pub struct CryptoSymbolArgs {
 pub struct CryptoStreamArgs {
     pub symbol: String,
 
-    #[arg(long, value_enum, default_value_t = CryptoInstrument::Auto)]
+    #[arg(long, default_value_t = CryptoInstrument::Auto, value_parser = enum_value_parser::<CryptoInstrument>(CryptoInstrument::labels()))]
     pub instrument: CryptoInstrument,
 
-    #[arg(long, value_enum, default_value_t = CryptoStreamKind::Trade)]
+    #[arg(long, default_value_t = CryptoStreamKind::Trade, value_parser = enum_value_parser::<CryptoStreamKind>(CryptoStreamKind::labels()))]
     pub kind: CryptoStreamKind,
 
     #[arg(long, default_value = "1m", help = CRYPTO_INTERVAL_HELP)]
@@ -67,10 +72,10 @@ pub struct CryptoStreamArgs {
 pub struct CryptoEvidenceSymbolArgs {
     pub symbol: String,
 
-    #[arg(long, value_enum, default_value_t = CryptoProvider::Auto)]
+    #[arg(long, default_value_t = CryptoProvider::Auto, value_parser = enum_value_parser::<CryptoProvider>(CryptoProvider::labels()))]
     pub provider: CryptoProvider,
 
-    #[arg(long, value_enum, default_value_t = CryptoInstrument::Auto)]
+    #[arg(long, default_value_t = CryptoInstrument::Auto, value_parser = enum_value_parser::<CryptoInstrument>(CryptoInstrument::labels()))]
     pub instrument: CryptoInstrument,
 
     #[arg(long)]
@@ -84,10 +89,10 @@ pub struct CryptoEvidenceSymbolArgs {
 pub struct CryptoEvidenceBookArgs {
     pub symbol: String,
 
-    #[arg(long, value_enum, default_value_t = CryptoProvider::Auto)]
+    #[arg(long, default_value_t = CryptoProvider::Auto, value_parser = enum_value_parser::<CryptoProvider>(CryptoProvider::labels()))]
     pub provider: CryptoProvider,
 
-    #[arg(long, value_enum, default_value_t = CryptoInstrument::Auto)]
+    #[arg(long, default_value_t = CryptoInstrument::Auto, value_parser = enum_value_parser::<CryptoInstrument>(CryptoInstrument::labels()))]
     pub instrument: CryptoInstrument,
 
     #[arg(long, default_value_t = 20)]
@@ -104,10 +109,10 @@ pub struct CryptoEvidenceBookArgs {
 pub struct CryptoEvidenceTradesArgs {
     pub symbol: String,
 
-    #[arg(long, value_enum, default_value_t = CryptoProvider::Auto)]
+    #[arg(long, default_value_t = CryptoProvider::Auto, value_parser = enum_value_parser::<CryptoProvider>(CryptoProvider::labels()))]
     pub provider: CryptoProvider,
 
-    #[arg(long, value_enum, default_value_t = CryptoInstrument::Auto)]
+    #[arg(long, default_value_t = CryptoInstrument::Auto, value_parser = enum_value_parser::<CryptoInstrument>(CryptoInstrument::labels()))]
     pub instrument: CryptoInstrument,
 
     #[arg(long, default_value_t = 20)]
@@ -127,10 +132,10 @@ pub struct CryptoEvidenceTradesArgs {
 pub struct CryptoEvidenceKlinesArgs {
     pub symbol: String,
 
-    #[arg(long, value_enum, default_value_t = CryptoProvider::Auto)]
+    #[arg(long, default_value_t = CryptoProvider::Auto, value_parser = enum_value_parser::<CryptoProvider>(CryptoProvider::labels()))]
     pub provider: CryptoProvider,
 
-    #[arg(long, value_enum, default_value_t = CryptoInstrument::Auto)]
+    #[arg(long, default_value_t = CryptoInstrument::Auto, value_parser = enum_value_parser::<CryptoInstrument>(CryptoInstrument::labels()))]
     pub instrument: CryptoInstrument,
 
     #[arg(long, default_value = "1m", help = CRYPTO_INTERVAL_HELP)]
@@ -150,10 +155,10 @@ pub struct CryptoEvidenceKlinesArgs {
 pub struct CryptoEvidenceFundingArgs {
     pub symbol: String,
 
-    #[arg(long, value_enum, default_value_t = CryptoProvider::Auto)]
+    #[arg(long, default_value_t = CryptoProvider::Auto, value_parser = enum_value_parser::<CryptoProvider>(CryptoProvider::labels()))]
     pub provider: CryptoProvider,
 
-    #[arg(long, value_enum, default_value_t = CryptoInstrument::Auto)]
+    #[arg(long, default_value_t = CryptoInstrument::Auto, value_parser = enum_value_parser::<CryptoInstrument>(CryptoInstrument::labels()))]
     pub instrument: CryptoInstrument,
 
     #[arg(long, default_value_t = 8)]
@@ -170,10 +175,10 @@ pub struct CryptoEvidenceFundingArgs {
 pub struct CryptoEvidenceOpenInterestArgs {
     pub symbol: String,
 
-    #[arg(long, value_enum, default_value_t = CryptoProvider::Auto)]
+    #[arg(long, default_value_t = CryptoProvider::Auto, value_parser = enum_value_parser::<CryptoProvider>(CryptoProvider::labels()))]
     pub provider: CryptoProvider,
 
-    #[arg(long, value_enum, default_value_t = CryptoInstrument::Auto)]
+    #[arg(long, default_value_t = CryptoInstrument::Auto, value_parser = enum_value_parser::<CryptoInstrument>(CryptoInstrument::labels()))]
     pub instrument: CryptoInstrument,
 
     #[arg(long)]
@@ -185,13 +190,13 @@ pub struct CryptoEvidenceOpenInterestArgs {
 
 #[derive(Parser, Debug)]
 pub struct CryptoDiscoverArgs {
-    #[arg(long, value_enum, default_value_t = CryptoProvider::Auto)]
+    #[arg(long, default_value_t = CryptoProvider::Auto, value_parser = enum_value_parser::<CryptoProvider>(CryptoProvider::labels()))]
     pub provider: CryptoProvider,
 
-    #[arg(long, value_enum, default_value_t = CryptoDiscoverKind::Markets)]
+    #[arg(long, default_value_t = CryptoDiscoverKind::Markets, value_parser = enum_value_parser::<CryptoDiscoverKind>(CryptoDiscoverKind::labels()))]
     pub kind: CryptoDiscoverKind,
 
-    #[arg(long, value_enum, default_value_t = CryptoInstrument::Auto)]
+    #[arg(long, default_value_t = CryptoInstrument::Auto, value_parser = enum_value_parser::<CryptoInstrument>(CryptoInstrument::labels()))]
     pub instrument: CryptoInstrument,
 
     #[arg(long, default_value = "usd")]
@@ -205,98 +210,4 @@ pub struct CryptoDiscoverArgs {
 
     #[arg(long)]
     pub json: bool,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
-pub enum CryptoDiscoverKind {
-    Markets,
-    Instruments,
-    Tickers,
-    Trending,
-    Global,
-    Exchanges,
-    Derivatives,
-    DerivativesExchanges,
-    VolumeSummary,
-    CoinsList,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
-pub enum CryptoProvider {
-    Auto,
-    Binance,
-    Coinbase,
-    Okx,
-    Coingecko,
-}
-
-impl CryptoProvider {
-    pub const fn label(self) -> &'static str {
-        match self {
-            CryptoProvider::Auto => "auto",
-            CryptoProvider::Binance => "binance",
-            CryptoProvider::Coinbase => "coinbase",
-            CryptoProvider::Okx => "okx",
-            CryptoProvider::Coingecko => "coingecko",
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
-pub enum CryptoMarket {
-    Auto,
-    Spot,
-    UsdsFutures,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
-pub enum CryptoInstrument {
-    Auto,
-    Spot,
-    Swap,
-    Futures,
-    Option,
-}
-
-impl CryptoInstrument {
-    pub const fn label(self) -> &'static str {
-        match self {
-            CryptoInstrument::Auto => "auto",
-            CryptoInstrument::Spot => "spot",
-            CryptoInstrument::Swap => "swap",
-            CryptoInstrument::Futures => "futures",
-            CryptoInstrument::Option => "option",
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
-pub enum CryptoStreamKind {
-    Trade,
-    Kline,
-    Depth,
-    BookTicker,
-    MarkPrice,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
-pub enum FuturesPeriod {
-    #[value(name = "5m")]
-    FiveMin,
-    #[value(name = "15m")]
-    FifteenMin,
-    #[value(name = "30m")]
-    ThirtyMin,
-    #[value(name = "1h")]
-    OneHour,
-    #[value(name = "2h")]
-    TwoHour,
-    #[value(name = "4h")]
-    FourHour,
-    #[value(name = "6h")]
-    SixHour,
-    #[value(name = "12h")]
-    TwelveHour,
-    #[value(name = "1d")]
-    OneDay,
 }

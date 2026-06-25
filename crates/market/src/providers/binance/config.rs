@@ -1,3 +1,5 @@
+use std::fmt;
+
 use anyhow::Result;
 use wreq::Client;
 
@@ -11,7 +13,7 @@ const FUTURES_BASE_URL: &str = "https://fapi.binance.com";
 const SPOT_WS_URL: &str = "wss://data-stream.binance.vision/ws";
 const FUTURES_WS_URL: &str = "wss://fstream.binance.com";
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct BinanceConfig {
     pub timeout_seconds: u64,
     pub proxy: Option<String>,
@@ -22,6 +24,23 @@ pub struct BinanceConfig {
     pub spot_ws_url: String,
     pub futures_ws_url: String,
     pub api_key: Option<String>,
+}
+
+impl fmt::Debug for BinanceConfig {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("BinanceConfig")
+            .field("timeout_seconds", &self.timeout_seconds)
+            .field("proxy", &self.proxy.as_ref().map(|_| "<redacted>"))
+            .field("no_proxy", &self.no_proxy)
+            .field("spot_base_url", &self.spot_base_url)
+            .field("spot_base_url_overridden", &self.spot_base_url_overridden)
+            .field("futures_base_url", &self.futures_base_url)
+            .field("spot_ws_url", &self.spot_ws_url)
+            .field("futures_ws_url", &self.futures_ws_url)
+            .field("api_key", &self.api_key.as_ref().map(|_| "<redacted>"))
+            .finish()
+    }
 }
 
 impl BinanceConfig {
@@ -71,5 +90,30 @@ impl BinanceConfig {
             base.trim_end_matches('/'),
             path.trim_start_matches('/')
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn debug_redacts_credentials_and_proxy() {
+        let config = BinanceConfig {
+            timeout_seconds: 10,
+            proxy: Some("http://user:secret@127.0.0.1:7890".to_string()),
+            no_proxy: false,
+            spot_base_url: "https://api.binance.com".to_string(),
+            spot_base_url_overridden: false,
+            futures_base_url: "https://fapi.binance.com".to_string(),
+            spot_ws_url: "wss://data-stream.binance.vision/ws".to_string(),
+            futures_ws_url: "wss://fstream.binance.com".to_string(),
+            api_key: Some("live-api-key".to_string()),
+        };
+
+        let debug = format!("{config:?}");
+        assert!(debug.contains("<redacted>"));
+        assert!(!debug.contains("live-api-key"));
+        assert!(!debug.contains("user:secret"));
     }
 }

@@ -1,6 +1,6 @@
 use serde_json::Value;
 
-use crate::cli::ResearchProvider;
+use crate::args::ResearchProvider;
 use crate::model::{ResearchHighlight, research_value_string};
 
 pub(super) fn quote_summary_root(payload: &Value) -> Option<&Value> {

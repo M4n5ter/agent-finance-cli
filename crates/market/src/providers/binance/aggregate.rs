@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use anyhow::Result;
 use serde_json::Value;
 
-use crate::cli::FuturesPeriod;
+use crate::args::FuturesPeriod;
 use crate::http::utc_now;
 
 use super::config::BinanceConfig;

@@ -1,4 +1,4 @@
-use crate::cli::{Provider, ResearchProvider};
+use crate::args::{Provider, ResearchProvider};
 use crate::crypto_capabilities;
 use crate::model::{ProviderCapability, ProviderProfile};
 use crate::providers::binance::BINANCE_ENDPOINTS;

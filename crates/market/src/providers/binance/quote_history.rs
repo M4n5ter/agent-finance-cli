@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use serde_json::Value;
 
-use crate::cli::CryptoMarket;
+use crate::args::CryptoMarket;
 use crate::http::{parse_optional_f64, timestamp_ms_to_utc};
 use crate::model::{HistoryBatch, OhlcBar, Quote, SESSION_24H_PROXY};
 

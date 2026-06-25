@@ -7,7 +7,7 @@ use tokio::time::timeout;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 
-use crate::cli::{CryptoMarket, CryptoStreamKind};
+use crate::args::{CryptoMarket, CryptoStreamKind};
 use crate::http::utc_now;
 use crate::websocket;
 

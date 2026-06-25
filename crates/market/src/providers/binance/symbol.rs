@@ -1,6 +1,6 @@
 use anyhow::{Result, anyhow};
 
-use crate::cli::{CryptoMarket, FuturesPeriod};
+use crate::args::{CryptoMarket, FuturesPeriod};
 
 use super::RestMarket;
 

@@ -1,7 +1,7 @@
 use anyhow::{Result, anyhow};
 use wreq::Client;
 
-use crate::cli::{HistoryAdjustment, Provider, StooqAsset, StooqMarket};
+use crate::args::{HistoryAdjustment, Provider, StooqAsset, StooqMarket};
 use crate::model::{HistoryBatch, Quote};
 
 pub mod binance;

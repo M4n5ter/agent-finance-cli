@@ -1,9 +1,6 @@
 use anyhow::{Result, anyhow};
 
-use crate::crypto_capability::{CryptoCapability, resolve_instrument};
-use crate::crypto_runtime::{
-    CryptoEvidenceReport, CryptoEvidenceSources, EvidenceEngine, EvidenceRequest, evidence_report,
-};
+use agent_finance_market::service::{self, CryptoEvidenceReport, MarketRuntime};
 
 pub async fn run_quote(
     args: crate::cli::CryptoEvidenceSymbolArgs,
@@ -11,22 +8,17 @@ pub async fn run_quote(
     no_proxy: bool,
     timeout_seconds: u64,
 ) -> Result<()> {
-    let sources = CryptoEvidenceSources::new(proxy, no_proxy, timeout_seconds)?;
-    let capability = CryptoCapability::Quote;
-    let instrument = resolve_instrument(args.instrument, capability);
-    let request = EvidenceRequest::new(args.provider, instrument, capability);
-    let symbol = args.symbol;
-    let results = EvidenceEngine::collect(request, |provider| {
-        let sources = sources.clone();
-        let symbol = symbol.clone();
-        async move { sources.quote(provider, instrument, symbol).await }
-    })
-    .await;
-    print_evidence_report(
-        evidence_report(capability, instrument, Some(&symbol), results),
-        args.json,
-        args.raw,
+    let runtime = MarketRuntime::new(proxy, no_proxy, timeout_seconds, "UTC");
+    let report = service::crypto_evidence_quote(
+        &runtime,
+        service::CryptoEvidenceSymbolRequest {
+            symbol: args.symbol,
+            provider: args.provider,
+            instrument: args.instrument,
+        },
     )
+    .await?;
+    print_evidence_report(report, args.json, args.raw)
 }
 
 pub async fn run_book(
@@ -35,23 +27,18 @@ pub async fn run_book(
     no_proxy: bool,
     timeout_seconds: u64,
 ) -> Result<()> {
-    let sources = CryptoEvidenceSources::new(proxy, no_proxy, timeout_seconds)?;
-    let capability = CryptoCapability::Book;
-    let instrument = resolve_instrument(args.instrument, capability);
-    let request = EvidenceRequest::new(args.provider, instrument, capability);
-    let symbol = args.symbol;
-    let limit = args.limit;
-    let results = EvidenceEngine::collect(request, |provider| {
-        let sources = sources.clone();
-        let symbol = symbol.clone();
-        async move { sources.book(provider, instrument, symbol, limit).await }
-    })
-    .await;
-    print_evidence_report(
-        evidence_report(capability, instrument, Some(&symbol), results),
-        args.json,
-        args.raw,
+    let runtime = MarketRuntime::new(proxy, no_proxy, timeout_seconds, "UTC");
+    let report = service::crypto_evidence_book(
+        &runtime,
+        service::CryptoEvidenceLimitRequest {
+            symbol: args.symbol,
+            provider: args.provider,
+            instrument: args.instrument,
+            limit: args.limit,
+        },
     )
+    .await?;
+    print_evidence_report(report, args.json, args.raw)
 }
 
 pub async fn run_trades(
@@ -60,28 +47,19 @@ pub async fn run_trades(
     no_proxy: bool,
     timeout_seconds: u64,
 ) -> Result<()> {
-    let sources = CryptoEvidenceSources::new(proxy, no_proxy, timeout_seconds)?;
-    let capability = CryptoCapability::Trades;
-    let instrument = resolve_instrument(args.instrument, capability);
-    let request = EvidenceRequest::new(args.provider, instrument, capability);
-    let symbol = args.symbol;
-    let limit = args.limit;
-    let aggregate = args.aggregate;
-    let results = EvidenceEngine::collect(request, |provider| {
-        let sources = sources.clone();
-        let symbol = symbol.clone();
-        async move {
-            sources
-                .trades(provider, instrument, symbol, limit, aggregate)
-                .await
-        }
-    })
-    .await;
-    print_evidence_report(
-        evidence_report(capability, instrument, Some(&symbol), results),
-        args.json,
-        args.raw,
+    let runtime = MarketRuntime::new(proxy, no_proxy, timeout_seconds, "UTC");
+    let report = service::crypto_evidence_trades(
+        &runtime,
+        service::CryptoEvidenceTradesRequest {
+            symbol: args.symbol,
+            provider: args.provider,
+            instrument: args.instrument,
+            limit: args.limit,
+            aggregate: args.aggregate,
+        },
     )
+    .await?;
+    print_evidence_report(report, args.json, args.raw)
 }
 
 pub async fn run_candles(
@@ -90,29 +68,19 @@ pub async fn run_candles(
     no_proxy: bool,
     timeout_seconds: u64,
 ) -> Result<()> {
-    let sources = CryptoEvidenceSources::new(proxy, no_proxy, timeout_seconds)?;
-    let capability = CryptoCapability::Candles;
-    let instrument = resolve_instrument(args.instrument, capability);
-    let request = EvidenceRequest::new(args.provider, instrument, capability);
-    let symbol = args.symbol;
-    let interval = args.interval;
-    let limit = args.limit;
-    let results = EvidenceEngine::collect(request, |provider| {
-        let sources = sources.clone();
-        let symbol = symbol.clone();
-        let interval = interval.clone();
-        async move {
-            sources
-                .candles(provider, instrument, symbol, interval, limit)
-                .await
-        }
-    })
-    .await;
-    print_evidence_report(
-        evidence_report(capability, instrument, Some(&symbol), results),
-        args.json,
-        args.raw,
+    let runtime = MarketRuntime::new(proxy, no_proxy, timeout_seconds, "UTC");
+    let report = service::crypto_evidence_candles(
+        &runtime,
+        service::CryptoEvidenceCandlesRequest {
+            symbol: args.symbol,
+            provider: args.provider,
+            instrument: args.instrument,
+            interval: args.interval,
+            limit: args.limit,
+        },
     )
+    .await?;
+    print_evidence_report(report, args.json, args.raw)
 }
 
 pub async fn run_funding(
@@ -121,23 +89,18 @@ pub async fn run_funding(
     no_proxy: bool,
     timeout_seconds: u64,
 ) -> Result<()> {
-    let sources = CryptoEvidenceSources::new(proxy, no_proxy, timeout_seconds)?;
-    let capability = CryptoCapability::Funding;
-    let instrument = resolve_instrument(args.instrument, capability);
-    let request = EvidenceRequest::new(args.provider, instrument, capability);
-    let symbol = args.symbol;
-    let limit = args.limit;
-    let results = EvidenceEngine::collect(request, |provider| {
-        let sources = sources.clone();
-        let symbol = symbol.clone();
-        async move { sources.funding(provider, instrument, symbol, limit).await }
-    })
-    .await;
-    print_evidence_report(
-        evidence_report(capability, instrument, Some(&symbol), results),
-        args.json,
-        args.raw,
+    let runtime = MarketRuntime::new(proxy, no_proxy, timeout_seconds, "UTC");
+    let report = service::crypto_evidence_funding(
+        &runtime,
+        service::CryptoEvidenceLimitRequest {
+            symbol: args.symbol,
+            provider: args.provider,
+            instrument: args.instrument,
+            limit: args.limit,
+        },
     )
+    .await?;
+    print_evidence_report(report, args.json, args.raw)
 }
 
 pub async fn run_open_interest(
@@ -146,22 +109,17 @@ pub async fn run_open_interest(
     no_proxy: bool,
     timeout_seconds: u64,
 ) -> Result<()> {
-    let sources = CryptoEvidenceSources::new(proxy, no_proxy, timeout_seconds)?;
-    let capability = CryptoCapability::OpenInterest;
-    let instrument = resolve_instrument(args.instrument, capability);
-    let request = EvidenceRequest::new(args.provider, instrument, capability);
-    let symbol = args.symbol;
-    let results = EvidenceEngine::collect(request, |provider| {
-        let sources = sources.clone();
-        let symbol = symbol.clone();
-        async move { sources.open_interest(provider, instrument, symbol).await }
-    })
-    .await;
-    print_evidence_report(
-        evidence_report(capability, instrument, Some(&symbol), results),
-        args.json,
-        args.raw,
+    let runtime = MarketRuntime::new(proxy, no_proxy, timeout_seconds, "UTC");
+    let report = service::crypto_evidence_open_interest(
+        &runtime,
+        service::CryptoEvidenceSymbolRequest {
+            symbol: args.symbol,
+            provider: args.provider,
+            instrument: args.instrument,
+        },
     )
+    .await?;
+    print_evidence_report(report, args.json, args.raw)
 }
 
 pub async fn run_discover(
@@ -170,28 +128,19 @@ pub async fn run_discover(
     no_proxy: bool,
     timeout_seconds: u64,
 ) -> Result<()> {
-    let sources = CryptoEvidenceSources::new(proxy, no_proxy, timeout_seconds)?;
-    let capability = CryptoCapability::Discover(args.kind);
-    let instrument = resolve_instrument(args.instrument, capability);
-    let request = EvidenceRequest::new(args.provider, instrument, capability);
-    let kind = args.kind;
-    let limit = args.limit;
-    let vs_currency = args.vs_currency;
-    let results = EvidenceEngine::collect(request, |provider| {
-        let sources = sources.clone();
-        let vs_currency = vs_currency.clone();
-        async move {
-            sources
-                .discover(provider, instrument, kind, limit, vs_currency)
-                .await
-        }
-    })
-    .await;
-    print_evidence_report(
-        evidence_report(capability, instrument, None, results),
-        args.json,
-        args.raw,
+    let runtime = MarketRuntime::new(proxy, no_proxy, timeout_seconds, "UTC");
+    let report = service::crypto_evidence_discover(
+        &runtime,
+        service::CryptoEvidenceDiscoverRequest {
+            provider: args.provider,
+            kind: args.kind,
+            instrument: args.instrument,
+            limit: args.limit,
+            vs_currency: args.vs_currency,
+        },
     )
+    .await?;
+    print_evidence_report(report, args.json, args.raw)
 }
 
 fn print_evidence_report(report: CryptoEvidenceReport, json: bool, raw: bool) -> Result<()> {

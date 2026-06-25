@@ -2,7 +2,7 @@ use anyhow::{Context, Result, anyhow};
 use serde_json::Value;
 use wreq::Client;
 
-use crate::cli::CryptoInstrument;
+use crate::args::CryptoInstrument;
 use crate::http::{
     build_url, parse_optional_f64, parse_optional_u64, send_get_text, timestamp_ms_to_utc,
 };

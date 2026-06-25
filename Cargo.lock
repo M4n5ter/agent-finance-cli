@@ -31,26 +31,13 @@ version = "0.3.2"
 dependencies = [
  "agent-finance-binance",
  "agent-finance-core",
+ "agent-finance-market",
  "anyhow",
- "base64",
  "chrono",
- "chrono-tz",
  "clap",
- "csv",
- "futures-util",
- "iana-time-zone",
- "polymarket_client_sdk_v2",
- "prost",
- "rustls",
- "scraper",
  "serde",
  "serde_json",
  "tokio",
- "tokio-tungstenite",
- "url",
- "wreq",
- "wreq-util",
- "zip",
 ]
 
 [[package]]
@@ -66,6 +53,32 @@ dependencies = [
  "serde_json",
  "sha2 0.11.0",
  "toml",
+]
+
+[[package]]
+name = "agent-finance-market"
+version = "0.3.2"
+dependencies = [
+ "agent-finance-binance",
+ "anyhow",
+ "base64",
+ "chrono",
+ "chrono-tz",
+ "csv",
+ "futures-util",
+ "iana-time-zone",
+ "polymarket_client_sdk_v2",
+ "prost",
+ "rustls",
+ "scraper",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tokio-tungstenite",
+ "url",
+ "wreq",
+ "wreq-util",
+ "zip",
 ]
 
 [[package]]

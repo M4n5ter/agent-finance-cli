@@ -13,23 +13,10 @@ path = "src/main.rs"
 [dependencies]
 agent-finance-binance.workspace = true
 agent-finance-core.workspace = true
+agent-finance-market.workspace = true
 anyhow.workspace = true
-base64.workspace = true
 chrono.workspace = true
-chrono-tz.workspace = true
 clap = { workspace = true, features = ["derive"] }
-csv.workspace = true
-futures-util.workspace = true
-iana-time-zone.workspace = true
-polymarket_client_sdk_v2 = { workspace = true, features = ["clob", "gamma", "data"] }
-prost.workspace = true
-rustls = { workspace = true, features = ["ring", "std", "tls12"] }
-scraper.workspace = true
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }
-tokio-tungstenite = { workspace = true, features = ["rustls-tls-webpki-roots"] }
-url.workspace = true
-wreq.workspace = true
-wreq-util.workspace = true
-zip = { workspace = true, features = ["deflate"] }

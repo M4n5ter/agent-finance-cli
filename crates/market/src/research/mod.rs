@@ -8,8 +8,8 @@ mod highlights;
 use fetchers::*;
 use highlights::*;
 
+use crate::args::{OptionsProvider, ResearchProvider};
 use crate::cache;
-use crate::cli::{OptionsProvider, ResearchProvider};
 use crate::model::{
     ResearchCoverageGap, ResearchHighlight, ResearchModule, ResearchReport, ResearchSource,
     SearchReport,

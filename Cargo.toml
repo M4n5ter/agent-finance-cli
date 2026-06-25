@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/cli", "crates/core", "crates/binance"]
+members = ["crates/cli", "crates/core", "crates/binance", "crates/market"]
 default-members = ["crates/cli"]
 resolver = "3"
 
@@ -12,6 +12,7 @@ repository = "https://github.com/M4n5ter/agent-finance"
 [workspace.dependencies]
 agent-finance-binance = { path = "crates/binance" }
 agent-finance-core = { path = "crates/core" }
+agent-finance-market = { path = "crates/market" }
 anyhow = "1.0.102"
 base64 = "0.22.1"
 chrono = "0.4.45"

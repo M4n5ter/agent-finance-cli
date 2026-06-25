@@ -2,8 +2,8 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 
+use crate::args::{StooqAsset, StooqFrequency, StooqMarket};
 use crate::cache;
-use crate::cli::{StooqAsset, StooqFrequency, StooqMarket};
 use crate::http::utc_now;
 use crate::model::{StooqCatalog, StooqCatalogEntry};
 

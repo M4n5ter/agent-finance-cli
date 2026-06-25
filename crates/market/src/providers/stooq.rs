@@ -10,7 +10,7 @@ use serde::Deserialize;
 use wreq::Client;
 use zip::ZipArchive;
 
-use crate::cli::{StooqAsset, StooqFrequency, StooqMarket};
+use crate::args::{StooqAsset, StooqFrequency, StooqMarket};
 use crate::http::{clean_text, parse_optional_f64, parse_optional_u64, utc_now};
 use crate::model::{HistoryBatch, OhlcBar, Quote, StooqSyncReport};
 

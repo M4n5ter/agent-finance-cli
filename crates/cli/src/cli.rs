@@ -1,11 +1,31 @@
 use std::path::PathBuf;
+use std::str::FromStr;
 
-use clap::{Parser, Subcommand, ValueEnum};
+pub use agent_finance_market::{
+    AssetClass, HistoryAdjustment, HistorySession, OptionsProvider, Provider, ReadUrlProvider,
+    ResearchProvider, SessionMode, StooqAsset, StooqFrequency, StooqMarket,
+};
+use clap::builder::{PossibleValuesParser, TypedValueParser};
+use clap::{Parser, Subcommand};
 
 pub use crate::crypto_cli::*;
 pub use crate::terminal_cli::*;
 
 pub const HISTORY_INTERVAL_HELP: &str = "Bar interval. Provider-specific values: Yahoo 1m/2m/5m/15m/30m/60m/90m/1h/1d/5d/1wk/1mo/3mo; Robinhood 5m/10m/1h/1d/1w; Stooq live 1d/1w/1mo; Stooq bulk 5m/1h after sync; Binance 1m/3m/5m/15m/30m/1h/2h/4h/6h/8h/12h/1d/3d/1w/1M; Coinbase 1m/5m/15m/1h/6h/1d; OKX 1m/3m/5m/15m/30m/1h/2h/4h/6h/12h/1d/2d/3d; CoinGecko maps common intraday/daily requests to supported day windows.";
+
+pub(crate) fn enum_value_parser<T>(
+    labels: &'static [&'static str],
+) -> impl TypedValueParser<Value = T>
+where
+    T: FromStr + Clone + Send + Sync + 'static,
+    T::Err: std::fmt::Display + Send + Sync + 'static,
+{
+    PossibleValuesParser::new(labels).map(|value| {
+        value
+            .parse::<T>()
+            .unwrap_or_else(|_| unreachable!("possible values must parse"))
+    })
+}
 
 #[derive(Parser, Debug)]
 #[command(name = "agent-finance", version)]
@@ -113,16 +133,16 @@ pub struct PriceArgs {
     #[arg(required = true)]
     pub symbols: Vec<String>,
 
-    #[arg(long, value_enum, default_value_t = AssetClass::Auto)]
+    #[arg(long, default_value_t = AssetClass::Auto, value_parser = enum_value_parser::<AssetClass>(AssetClass::labels()))]
     pub asset: AssetClass,
 
-    #[arg(long, value_enum, default_value_t = CryptoInstrument::Auto)]
+    #[arg(long, default_value_t = CryptoInstrument::Auto, value_parser = enum_value_parser::<CryptoInstrument>(CryptoInstrument::labels()))]
     pub instrument: CryptoInstrument,
 
-    #[arg(long, value_enum, default_value_t = CryptoProvider::Auto)]
+    #[arg(long, default_value_t = CryptoProvider::Auto, value_parser = enum_value_parser::<CryptoProvider>(CryptoProvider::labels()))]
     pub crypto_provider: CryptoProvider,
 
-    #[arg(long, value_enum, default_value_t = SessionMode::Smart)]
+    #[arg(long, default_value_t = SessionMode::Smart, value_parser = enum_value_parser::<SessionMode>(SessionMode::labels()))]
     pub session: SessionMode,
 
     /// Optional Binance USD-M futures or proxy symbol to display beside the quote.
@@ -149,22 +169,22 @@ pub struct SessionsArgs {
 pub struct HistoryArgs {
     pub symbol: String,
 
-    #[arg(long, value_enum, default_value_t = AssetClass::Auto)]
+    #[arg(long, default_value_t = AssetClass::Auto, value_parser = enum_value_parser::<AssetClass>(AssetClass::labels()))]
     pub asset: AssetClass,
 
-    #[arg(long, value_enum, default_value_t = CryptoInstrument::Auto)]
+    #[arg(long, default_value_t = CryptoInstrument::Auto, value_parser = enum_value_parser::<CryptoInstrument>(CryptoInstrument::labels()))]
     pub instrument: CryptoInstrument,
 
-    #[arg(long, value_enum, default_value_t = CryptoProvider::Auto)]
+    #[arg(long, default_value_t = CryptoProvider::Auto, value_parser = enum_value_parser::<CryptoProvider>(CryptoProvider::labels()))]
     pub crypto_provider: CryptoProvider,
 
-    #[arg(long, value_enum, default_value_t = Provider::Auto)]
+    #[arg(long, default_value_t = Provider::Auto, value_parser = enum_value_parser::<Provider>(Provider::labels()))]
     pub provider: Provider,
 
-    #[arg(long, value_enum, default_value_t = HistorySession::Regular)]
+    #[arg(long, default_value_t = HistorySession::Regular, value_parser = enum_value_parser::<HistorySession>(HistorySession::labels()))]
     pub session: HistorySession,
 
-    #[arg(long, value_enum, default_value_t = HistoryAdjustment::Auto)]
+    #[arg(long, default_value_t = HistoryAdjustment::Auto, value_parser = enum_value_parser::<HistoryAdjustment>(HistoryAdjustment::labels()))]
     pub adjustment: HistoryAdjustment,
 
     #[arg(long)]
@@ -183,11 +203,11 @@ pub struct HistoryArgs {
     pub limit: usize,
 
     /// Stooq bulk market scope for 5m/1h cache reads.
-    #[arg(long, value_enum, default_value_t = StooqMarket::Us)]
+    #[arg(long, default_value_t = StooqMarket::Us, value_parser = enum_value_parser::<StooqMarket>(StooqMarket::labels()))]
     pub stooq_market: StooqMarket,
 
     /// Stooq bulk asset scope for 5m/1h cache reads.
-    #[arg(long, value_enum, default_value_t = StooqAsset::Stocks)]
+    #[arg(long, default_value_t = StooqAsset::Stocks, value_parser = enum_value_parser::<StooqAsset>(StooqAsset::labels()))]
     pub stooq_asset: StooqAsset,
 
     #[arg(long)]
@@ -199,22 +219,22 @@ pub struct IndicatorsArgs {
     #[arg(required = true)]
     pub symbols: Vec<String>,
 
-    #[arg(long, value_enum, default_value_t = AssetClass::Auto)]
+    #[arg(long, default_value_t = AssetClass::Auto, value_parser = enum_value_parser::<AssetClass>(AssetClass::labels()))]
     pub asset: AssetClass,
 
-    #[arg(long, value_enum, default_value_t = CryptoInstrument::Auto)]
+    #[arg(long, default_value_t = CryptoInstrument::Auto, value_parser = enum_value_parser::<CryptoInstrument>(CryptoInstrument::labels()))]
     pub instrument: CryptoInstrument,
 
-    #[arg(long, value_enum, default_value_t = CryptoProvider::Auto)]
+    #[arg(long, default_value_t = CryptoProvider::Auto, value_parser = enum_value_parser::<CryptoProvider>(CryptoProvider::labels()))]
     pub crypto_provider: CryptoProvider,
 
-    #[arg(long, value_enum, default_value_t = Provider::Auto)]
+    #[arg(long, default_value_t = Provider::Auto, value_parser = enum_value_parser::<Provider>(Provider::labels()))]
     pub provider: Provider,
 
-    #[arg(long, value_enum, default_value_t = HistorySession::Regular)]
+    #[arg(long, default_value_t = HistorySession::Regular, value_parser = enum_value_parser::<HistorySession>(HistorySession::labels()))]
     pub session: HistorySession,
 
-    #[arg(long, value_enum, default_value_t = HistoryAdjustment::Auto)]
+    #[arg(long, default_value_t = HistoryAdjustment::Auto, value_parser = enum_value_parser::<HistoryAdjustment>(HistoryAdjustment::labels()))]
     pub adjustment: HistoryAdjustment,
 
     #[arg(long)]
@@ -230,11 +250,11 @@ pub struct IndicatorsArgs {
     pub limit: usize,
 
     /// Stooq bulk market scope for 5m/1h cache reads.
-    #[arg(long, value_enum, default_value_t = StooqMarket::Us)]
+    #[arg(long, default_value_t = StooqMarket::Us, value_parser = enum_value_parser::<StooqMarket>(StooqMarket::labels()))]
     pub stooq_market: StooqMarket,
 
     /// Stooq bulk asset scope for 5m/1h cache reads.
-    #[arg(long, value_enum, default_value_t = StooqAsset::Stocks)]
+    #[arg(long, default_value_t = StooqAsset::Stocks, value_parser = enum_value_parser::<StooqAsset>(StooqAsset::labels()))]
     pub stooq_asset: StooqAsset,
 
     #[arg(long)]
@@ -266,7 +286,7 @@ pub struct ProviderResearchArgs {
     pub symbol: String,
 
     /// Research-data provider. auto merges no-key sources when they add useful coverage.
-    #[arg(long, value_enum, default_value_t = ResearchProvider::Auto)]
+    #[arg(long, default_value_t = ResearchProvider::Auto, value_parser = enum_value_parser::<ResearchProvider>(ResearchProvider::labels()))]
     pub provider: ResearchProvider,
 
     /// Print raw provider payload in human mode. JSON mode always includes payload.
@@ -302,7 +322,7 @@ pub struct OptionsArgs {
     pub symbol: String,
 
     /// Options-data provider.
-    #[arg(long, value_enum, default_value_t = OptionsProvider::Auto)]
+    #[arg(long, default_value_t = OptionsProvider::Auto, value_parser = enum_value_parser::<OptionsProvider>(OptionsProvider::labels()))]
     pub provider: OptionsProvider,
 
     /// Expiration unix timestamp. If omitted, Yahoo returns the nearest chain and all expiries.
@@ -355,7 +375,7 @@ pub struct ReadUrlArgs {
     pub url: String,
 
     /// URL reader provider. auto tries direct/Jina/Defuddle; SEC Archives prefer reader fallbacks.
-    #[arg(long, value_enum, default_value_t = ReadUrlProvider::Auto)]
+    #[arg(long, default_value_t = ReadUrlProvider::Auto, value_parser = enum_value_parser::<ReadUrlProvider>(ReadUrlProvider::labels()))]
     pub provider: ReadUrlProvider,
 
     /// Maximum content characters to print in human mode. 0 means no truncation.
@@ -494,13 +514,13 @@ pub struct StooqCatalogArgs {
 
 #[derive(Parser, Debug)]
 pub struct StooqSyncArgs {
-    #[arg(long, value_enum)]
+    #[arg(long, value_parser = enum_value_parser::<StooqFrequency>(StooqFrequency::labels()))]
     pub frequency: StooqFrequency,
 
-    #[arg(long, value_enum)]
+    #[arg(long, value_parser = enum_value_parser::<StooqMarket>(StooqMarket::labels()))]
     pub market: StooqMarket,
 
-    #[arg(long, value_enum)]
+    #[arg(long, value_parser = enum_value_parser::<StooqAsset>(StooqAsset::labels()))]
     pub asset: StooqAsset,
 
     /// Captcha-authorized Stooq ZIP download URL.
@@ -530,13 +550,13 @@ pub struct WatchArgs {
     #[arg(required = true)]
     pub symbols: Vec<String>,
 
-    #[arg(long, value_enum, default_value_t = AssetClass::Auto)]
+    #[arg(long, default_value_t = AssetClass::Auto, value_parser = enum_value_parser::<AssetClass>(AssetClass::labels()))]
     pub asset: AssetClass,
 
-    #[arg(long, value_enum, default_value_t = CryptoInstrument::Auto)]
+    #[arg(long, default_value_t = CryptoInstrument::Auto, value_parser = enum_value_parser::<CryptoInstrument>(CryptoInstrument::labels()))]
     pub instrument: CryptoInstrument,
 
-    #[arg(long, value_enum, default_value_t = CryptoProvider::Auto)]
+    #[arg(long, default_value_t = CryptoProvider::Auto, value_parser = enum_value_parser::<CryptoProvider>(CryptoProvider::labels()))]
     pub crypto_provider: CryptoProvider,
 
     #[arg(long, default_value_t = 15)]
@@ -589,190 +609,4 @@ pub struct SkillGetArgs {
     /// Include fuller command reference and templates when available.
     #[arg(long)]
     pub full: bool,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
-pub enum SessionMode {
-    Smart,
-    Regular,
-    Extended,
-    Overnight,
-    All,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
-pub enum AssetClass {
-    Auto,
-    Equity,
-    Crypto,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
-pub enum HistorySession {
-    Regular,
-    Extended,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
-pub enum StooqFrequency {
-    #[value(name = "daily")]
-    Daily,
-    #[value(name = "hourly")]
-    Hourly,
-    #[value(name = "5m", alias = "five-min")]
-    FiveMin,
-}
-
-impl StooqFrequency {
-    pub const fn label(self) -> &'static str {
-        match self {
-            StooqFrequency::Daily => "daily",
-            StooqFrequency::Hourly => "hourly",
-            StooqFrequency::FiveMin => "5m",
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
-pub enum StooqMarket {
-    Us,
-    World,
-    Macro,
-}
-
-impl StooqMarket {
-    pub const fn label(self) -> &'static str {
-        match self {
-            StooqMarket::Us => "us",
-            StooqMarket::World => "world",
-            StooqMarket::Macro => "macro",
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
-pub enum StooqAsset {
-    Stocks,
-    Etfs,
-    Currencies,
-    Crypto,
-    Macro,
-}
-
-impl StooqAsset {
-    pub const fn label(self) -> &'static str {
-        match self {
-            StooqAsset::Stocks => "stocks",
-            StooqAsset::Etfs => "etfs",
-            StooqAsset::Currencies => "currencies",
-            StooqAsset::Crypto => "crypto",
-            StooqAsset::Macro => "macro",
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
-pub enum HistoryAdjustment {
-    /// Raw Yahoo close/OHLC with Adj Close preserved separately when available.
-    Raw,
-    /// Adjust OHLC and Close by Adj Close / Close, matching yfinance auto_adjust.
-    Auto,
-    /// Adjust OHLC by Adj Close / Close while keeping raw Close, matching yfinance back_adjust.
-    Back,
-}
-
-impl HistoryAdjustment {
-    pub fn label(self) -> &'static str {
-        match self {
-            HistoryAdjustment::Raw => "raw",
-            HistoryAdjustment::Auto => "auto",
-            HistoryAdjustment::Back => "back",
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
-pub enum Provider {
-    Auto,
-    Yahoo,
-    YahooExtended,
-    YahooBoats,
-    Stooq,
-    CnbcExtended,
-    Robinhood,
-    BinanceSpot,
-    BinanceUsdsFutures,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
-pub enum OptionsProvider {
-    Auto,
-    Yahoo,
-    Robinhood,
-}
-
-impl OptionsProvider {
-    pub const fn label(self) -> &'static str {
-        match self {
-            OptionsProvider::Auto => "auto",
-            OptionsProvider::Yahoo => "yahoo",
-            OptionsProvider::Robinhood => "robinhood",
-        }
-    }
-}
-
-impl Provider {
-    pub const fn label(self) -> &'static str {
-        match self {
-            Provider::Auto => "auto",
-            Provider::Yahoo => "yahoo",
-            Provider::YahooExtended => "yahoo-extended",
-            Provider::YahooBoats => "yahoo-boats",
-            Provider::Stooq => "stooq",
-            Provider::CnbcExtended => "cnbc-extended",
-            Provider::Robinhood => "robinhood",
-            Provider::BinanceSpot => "binance-spot",
-            Provider::BinanceUsdsFutures => "binance-usds-futures",
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
-pub enum ResearchProvider {
-    Auto,
-    Yahoo,
-    SecEdgar,
-    Robinhood,
-    Cnbc,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
-pub enum ReadUrlProvider {
-    Auto,
-    Direct,
-    Defuddle,
-    Jina,
-}
-
-impl ReadUrlProvider {
-    pub const fn label(self) -> &'static str {
-        match self {
-            ReadUrlProvider::Auto => "auto",
-            ReadUrlProvider::Direct => "direct",
-            ReadUrlProvider::Defuddle => "defuddle",
-            ReadUrlProvider::Jina => "jina",
-        }
-    }
-}
-
-impl ResearchProvider {
-    pub const fn label(self) -> &'static str {
-        match self {
-            ResearchProvider::Auto => "auto",
-            ResearchProvider::Yahoo => "yahoo",
-            ResearchProvider::SecEdgar => "sec-edgar",
-            ResearchProvider::Robinhood => "robinhood",
-            ResearchProvider::Cnbc => "cnbc",
-        }
-    }
 }

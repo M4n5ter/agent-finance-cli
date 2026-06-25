@@ -1,6 +1,6 @@
 use anyhow::Result;
 
-use crate::cli::{CryptoDiscoverKind, CryptoInstrument, CryptoProvider};
+use crate::args::{CryptoDiscoverKind, CryptoInstrument, CryptoProvider};
 use crate::crypto_capability::binance_market;
 use crate::http::http_client;
 use crate::providers::{binance, coinbase, coingecko, okx};

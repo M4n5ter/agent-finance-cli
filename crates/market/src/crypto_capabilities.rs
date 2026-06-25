@@ -115,7 +115,7 @@ fn crypto_cap(module: &str, status: &str, note: &str) -> ProviderCapability {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::cli::{CryptoDiscoverKind, CryptoInstrument, CryptoProvider};
+    use crate::args::{CryptoDiscoverKind, CryptoInstrument, CryptoProvider};
     use crate::crypto_capability::{CryptoCapability, provider_supports};
 
     #[test]

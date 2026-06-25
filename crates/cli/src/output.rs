@@ -2,14 +2,15 @@ use std::collections::BTreeMap;
 
 use anyhow::Result;
 
-use crate::model::{
+use agent_finance_market::model::{
     DerivedIndicator, HistoryBatch, PredictionMarketReport, PredictionMarketSummary,
     PredictionOutcome, PredictionSearchReport, PricePoint, PriceSummary, ProviderProfile,
     ResearchReport, SearchReport, StreamQuote,
 };
-use crate::page_read::PageReadReport;
-use crate::providers::binance::{CryptoSentimentReport, CryptoSnapshotReport, CryptoStreamReport};
-use crate::time::utc_to_local;
+use agent_finance_market::service::{
+    CryptoSentimentReport, CryptoSnapshotReport, CryptoStreamReport, PageReadReport,
+};
+use agent_finance_market::time::utc_to_local;
 
 pub fn print_price_summary(summary: &PriceSummary, show_all: bool) {
     println!(
@@ -509,7 +510,7 @@ pub fn print_provider_profiles(profiles: &[ProviderProfile]) {
     print_table(&headers, &rows);
 }
 
-pub fn print_stooq_catalog(catalog: &crate::model::StooqCatalog) {
+pub fn print_stooq_catalog(catalog: &agent_finance_market::model::StooqCatalog) {
     println!(
         "Stooq bulk catalog fetched={} source={}",
         catalog.fetched_at_utc, catalog.source_url
@@ -548,7 +549,7 @@ pub fn print_stooq_catalog(catalog: &crate::model::StooqCatalog) {
     );
 }
 
-pub fn print_stooq_sync_report(report: &crate::model::StooqSyncReport) {
+pub fn print_stooq_sync_report(report: &agent_finance_market::model::StooqSyncReport) {
     println!(
         "Stooq synced {} {} {} bytes={} path={}",
         report.frequency, report.market, report.asset, report.bytes, report.zip_path

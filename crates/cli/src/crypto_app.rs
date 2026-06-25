@@ -1,8 +1,8 @@
+use agent_finance_market::service;
 use anyhow::{Result, anyhow};
 
 use crate::cli::{CryptoArgs, CryptoCommand, CryptoInstrument, CryptoMarket};
 use crate::output;
-use crate::providers::binance;
 
 pub async fn run(
     args: CryptoArgs,
@@ -11,10 +11,16 @@ pub async fn run(
     timeout_seconds: u64,
     timezone: &str,
 ) -> Result<()> {
-    let config = binance::BinanceConfig::from_env(timeout_seconds, proxy, no_proxy);
+    let runtime = service::MarketRuntime::new(proxy, no_proxy, timeout_seconds, timezone);
     match args.command {
         CryptoCommand::Snapshot(args) => {
-            let report = binance::snapshot(&config, &args.symbol).await;
+            let report = service::crypto_snapshot(
+                &runtime,
+                service::CryptoSymbolRequest {
+                    symbol: args.symbol,
+                },
+            )
+            .await;
             if args.json {
                 println!("{}", serde_json::to_string_pretty(&report)?);
             } else {
@@ -23,7 +29,13 @@ pub async fn run(
             report.ensure_complete()
         }
         CryptoCommand::Sentiment(args) => {
-            let report = binance::sentiment(&config, &args.symbol).await;
+            let report = service::crypto_sentiment(
+                &runtime,
+                service::CryptoSymbolRequest {
+                    symbol: args.symbol,
+                },
+            )
+            .await;
             if args.json {
                 println!("{}", serde_json::to_string_pretty(&report)?);
             } else {
@@ -32,13 +44,15 @@ pub async fn run(
             report.ensure_complete()
         }
         CryptoCommand::Stream(args) => {
-            let report = binance::stream_messages(
-                &config,
-                stream_market(args.instrument, args.kind)?,
-                args.kind,
-                &args.symbol,
-                &args.interval,
-                args.messages,
+            let report = service::crypto_stream(
+                &runtime,
+                service::CryptoStreamRequest {
+                    symbol: args.symbol,
+                    market: stream_market(args.instrument, args.kind)?,
+                    kind: args.kind,
+                    interval: args.interval,
+                    messages: args.messages,
+                },
             )
             .await?;
             if args.json {

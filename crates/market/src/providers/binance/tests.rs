@@ -1,4 +1,4 @@
-use crate::cli::{CryptoMarket, CryptoStreamKind, FuturesPeriod};
+use crate::args::{CryptoMarket, CryptoStreamKind, FuturesPeriod};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 

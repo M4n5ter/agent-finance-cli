@@ -1,4 +1,4 @@
-use crate::cli::{CryptoDiscoverKind, CryptoInstrument, CryptoMarket, CryptoProvider};
+use crate::args::{CryptoDiscoverKind, CryptoInstrument, CryptoMarket, CryptoProvider};
 
 #[derive(Clone, Copy, Debug)]
 pub enum CryptoCapability {

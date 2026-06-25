@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use chrono::{DateTime, Utc};
 use wreq::Client;
 
-use crate::cli::SessionMode;
+use crate::args::SessionMode;
 use crate::http::{change_pct, utc_now};
 use crate::model::{
     PricePoint, PriceSummary, Quote, RegularBasis, SESSION_EXTENDED, SESSION_OVERNIGHT,

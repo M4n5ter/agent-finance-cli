@@ -7,7 +7,7 @@ use wreq::{
     header::{ACCEPT, CONTENT_TYPE},
 };
 
-use crate::cli::ReadUrlProvider;
+use crate::args::ReadUrlProvider;
 use crate::http::utc_now;
 
 #[derive(Debug, Clone, Serialize)]

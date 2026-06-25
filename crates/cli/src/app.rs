@@ -1,30 +1,18 @@
-use std::collections::BTreeMap;
-use std::time::Duration;
-
 use anyhow::{Result, anyhow};
 use clap::Parser;
-use futures_util::StreamExt;
-use serde::Serialize;
+
+use agent_finance_market::service::{self, MarketRuntime, PriceResponse, WatchResponse};
+use agent_finance_market::time::resolve_timezone;
 
 use crate::cli::{
-    AssetClass, Cli, Command, HistoryArgs, HistorySession, IndicatorsArgs, MarketArgs,
-    MarketCommand, NewsArgs, OptionsArgs, OptionsProvider, PolymarketArgs, PolymarketCommand,
-    Provider, ProviderResearchArgs, ProvidersArgs, ReadUrlArgs, ResearchArgs, ScreenArgs,
-    SearchArgs, SessionsArgs, StooqArgs, StooqCommand, WatchArgs,
+    Cli, Command, HistoryArgs, IndicatorsArgs, MarketArgs, MarketCommand, NewsArgs, OptionsArgs,
+    OptionsProvider, PolymarketArgs, PolymarketCommand, ProviderResearchArgs, ProvidersArgs,
+    ReadUrlArgs, ResearchArgs, ScreenArgs, SearchArgs, SessionsArgs, StooqArgs, StooqCommand,
+    WatchArgs,
 };
 use crate::crypto_app;
-use crate::crypto_market_data;
-use crate::http::http_client;
-use crate::indicators::compute_indicator;
-use crate::model::DerivedIndicator;
 use crate::output;
-use crate::page_read;
-use crate::price;
-use crate::providers::{self, binance, stooq};
-use crate::research;
 use crate::skills;
-use crate::stream;
-use crate::time::resolve_timezone;
 
 pub async fn run() -> Result<()> {
     let cli = Cli::parse();
@@ -54,118 +42,75 @@ async fn run_market(
     timeout_seconds: u64,
     timezone: &str,
 ) -> Result<()> {
+    let runtime = MarketRuntime::new(proxy, no_proxy, timeout_seconds, timezone);
     match args.command {
-        MarketCommand::Price(args) => {
-            run_price(args, proxy, no_proxy, timeout_seconds, timezone).await
-        }
-        MarketCommand::Sessions(args) => {
-            run_sessions(args, proxy, no_proxy, timeout_seconds, timezone).await
-        }
-        MarketCommand::History(args) => {
-            run_history(args, proxy, no_proxy, timeout_seconds, timezone).await
-        }
-        MarketCommand::Indicators(args) => {
-            run_indicators(args, proxy, no_proxy, timeout_seconds).await
-        }
+        MarketCommand::Price(args) => run_price(&runtime, args).await,
+        MarketCommand::Sessions(args) => run_sessions(&runtime, args).await,
+        MarketCommand::History(args) => run_history(&runtime, args).await,
+        MarketCommand::Indicators(args) => run_indicators(&runtime, args).await,
         MarketCommand::Fundamentals(args) => {
             run_provider_quote_summary(
+                &runtime,
                 args,
-                research::QuoteSummaryKind::Fundamentals,
-                proxy,
-                no_proxy,
-                timeout_seconds,
-                timezone,
+                service::MarketQuoteSummaryKind::Fundamentals,
             )
             .await
         }
         MarketCommand::Analysis(args) => {
             run_quote_summary(
+                &runtime,
                 args,
-                research::QuoteSummaryKind::Analysis,
+                service::MarketQuoteSummaryKind::Analysis,
                 crate::cli::ResearchProvider::Yahoo,
-                proxy,
-                no_proxy,
-                timeout_seconds,
-                timezone,
             )
             .await
         }
-        MarketCommand::Options(args) => {
-            run_options(args, proxy, no_proxy, timeout_seconds, timezone).await
-        }
+        MarketCommand::Options(args) => run_options(&runtime, args).await,
         MarketCommand::Ownership(args) => {
             run_quote_summary(
+                &runtime,
                 args,
-                research::QuoteSummaryKind::Ownership,
+                service::MarketQuoteSummaryKind::Ownership,
                 crate::cli::ResearchProvider::Yahoo,
-                proxy,
-                no_proxy,
-                timeout_seconds,
-                timezone,
             )
             .await
         }
         MarketCommand::Events(args) => {
-            run_provider_quote_summary(
-                args,
-                research::QuoteSummaryKind::Events,
-                proxy,
-                no_proxy,
-                timeout_seconds,
-                timezone,
-            )
-            .await
+            run_provider_quote_summary(&runtime, args, service::MarketQuoteSummaryKind::Events)
+                .await
         }
-        MarketCommand::News(args) => {
-            run_news(args, proxy, no_proxy, timeout_seconds, timezone).await
-        }
-        MarketCommand::ReadUrl(args) => run_read_url(args, proxy, no_proxy, timeout_seconds).await,
-        MarketCommand::Search(args) => {
-            run_search(args, proxy, no_proxy, timeout_seconds, timezone).await
-        }
+        MarketCommand::News(args) => run_news(&runtime, args).await,
+        MarketCommand::ReadUrl(args) => run_read_url(&runtime, args).await,
+        MarketCommand::Search(args) => run_search(&runtime, args).await,
         MarketCommand::Crypto(args) => {
             crypto_app::run(args, proxy, no_proxy, timeout_seconds, timezone).await
         }
-        MarketCommand::Polymarket(args) => {
-            run_polymarket(args, proxy, no_proxy, timeout_seconds, timezone).await
-        }
-        MarketCommand::Screen(args) => {
-            run_screen(args, proxy, no_proxy, timeout_seconds, timezone).await
-        }
-        MarketCommand::Stooq(args) => run_stooq(args, proxy, no_proxy, timeout_seconds).await,
+        MarketCommand::Polymarket(args) => run_polymarket(&runtime, args).await,
+        MarketCommand::Screen(args) => run_screen(&runtime, args).await,
+        MarketCommand::Stooq(args) => run_stooq(&runtime, args).await,
         MarketCommand::Providers(args) => run_providers(args),
-        MarketCommand::Watch(args) => {
-            run_watch(args, proxy, no_proxy, timeout_seconds, timezone).await
-        }
-        MarketCommand::Stream(args) => {
-            run_stream(args, proxy, no_proxy, timeout_seconds, timezone).await
-        }
+        MarketCommand::Watch(args) => run_watch(&runtime, args).await,
+        MarketCommand::Stream(args) => run_stream(&runtime, args).await,
     }
 }
 
-async fn run_polymarket(
-    args: PolymarketArgs,
-    proxy: Option<&str>,
-    no_proxy: bool,
-    timeout_seconds: u64,
-    timezone: &str,
-) -> Result<()> {
-    let client = http_client(timeout_seconds, proxy, no_proxy)?;
-    let use_http_transport = proxy.is_some() || no_proxy;
+async fn run_polymarket(runtime: &MarketRuntime, args: PolymarketArgs) -> Result<()> {
     match args.command {
         PolymarketCommand::Search(args) => {
-            let options = providers::polymarket::SearchRequestOptions {
-                query: args.query,
-                limit: args.limit,
-                include_closed: args.include_closed,
-                min_volume: args.min_volume,
-                refresh: args.refresh,
-                cache_ttl_seconds: args.cache_ttl_seconds,
-                timeout_seconds,
-                use_http_transport,
-            };
-            let report = providers::polymarket::search_report(&client, &options, timezone).await?;
-            if args.json {
+            let json = args.json;
+            let report = service::polymarket_search(
+                runtime,
+                service::PolymarketSearchRequest {
+                    query: args.query,
+                    limit: args.limit,
+                    include_closed: args.include_closed,
+                    min_volume: args.min_volume,
+                    refresh: args.refresh,
+                    cache_ttl_seconds: args.cache_ttl_seconds,
+                },
+            )
+            .await?;
+            if json {
                 println!("{}", serde_json::to_string_pretty(&report)?);
             } else {
                 output::print_prediction_search_report(&report);
@@ -173,18 +118,20 @@ async fn run_polymarket(
             Ok(())
         }
         PolymarketCommand::Market(args) => {
-            let options = providers::polymarket::MarketRequestOptions {
-                identifier: args.identifier,
-                limit: args.limit,
-                include_closed: args.include_closed,
-                min_volume: args.min_volume,
-                refresh: args.refresh,
-                cache_ttl_seconds: args.cache_ttl_seconds,
-                timeout_seconds,
-                use_http_transport,
-            };
-            let report = providers::polymarket::market_report(&client, &options, timezone).await?;
-            if args.json {
+            let json = args.json;
+            let report = service::polymarket_market(
+                runtime,
+                service::PolymarketMarketRequest {
+                    identifier: args.identifier,
+                    limit: args.limit,
+                    include_closed: args.include_closed,
+                    min_volume: args.min_volume,
+                    refresh: args.refresh,
+                    cache_ttl_seconds: args.cache_ttl_seconds,
+                },
+            )
+            .await?;
+            if json {
                 println!("{}", serde_json::to_string_pretty(&report)?);
             } else {
                 output::print_prediction_market_report(&report);
@@ -213,79 +160,58 @@ fn run_skills(args: crate::cli::SkillsArgs) -> Result<()> {
     }
 }
 
-async fn run_price(
-    args: crate::cli::PriceArgs,
-    proxy: Option<&str>,
-    no_proxy: bool,
-    timeout_seconds: u64,
-    timezone: &str,
-) -> Result<()> {
-    if args.asset == AssetClass::Crypto {
-        return crypto_market_data::run_price(args, proxy, no_proxy, timeout_seconds, timezone)
-            .await;
-    }
-    let client = http_client(timeout_seconds, proxy, no_proxy)?;
-    let binance_config = binance::BinanceConfig::from_env(timeout_seconds, proxy, no_proxy);
-    let summaries = futures_util::stream::iter(args.symbols)
-        .map(|symbol| {
-            let client = &client;
-            let binance_config = &binance_config;
-            let proxy_symbol = args.proxy_symbol.as_deref();
-            async move {
-                price::fetch_price_summary(
-                    client,
-                    &symbol,
-                    timezone,
-                    args.session,
-                    Some(binance_config),
-                    proxy_symbol,
-                )
-                .await
+async fn run_price(runtime: &MarketRuntime, args: crate::cli::PriceArgs) -> Result<()> {
+    let json = args.json;
+    let show_all = matches!(args.session, crate::cli::SessionMode::All);
+    let response = service::price(
+        runtime,
+        service::PriceRequest {
+            symbols: args.symbols,
+            asset: args.asset,
+            instrument: args.instrument,
+            crypto_provider: args.crypto_provider,
+            session: args.session,
+            proxy_symbol: args.proxy_symbol,
+        },
+    )
+    .await?;
+    match &response {
+        PriceResponse::Crypto(batch) => {
+            if json {
+                println!("{}", serde_json::to_string_pretty(&batch)?);
+            } else {
+                output::print_crypto_price_points(&batch.points, &batch.errors);
             }
-        })
-        .buffered(4)
-        .collect::<Vec<_>>()
-        .await;
-
-    if args.json {
-        println!("{}", serde_json::to_string_pretty(&summaries)?);
-    } else {
-        for (index, summary) in summaries.iter().enumerate() {
-            if index > 0 {
-                println!();
+        }
+        PriceResponse::Equity(summaries) if json => {
+            println!("{}", serde_json::to_string_pretty(&summaries)?);
+        }
+        PriceResponse::Equity(summaries) => {
+            for (index, summary) in summaries.iter().enumerate() {
+                if index > 0 {
+                    println!();
+                }
+                output::print_price_summary(summary, show_all);
             }
-            output::print_price_summary(
-                summary,
-                matches!(args.session, crate::cli::SessionMode::All),
-            );
         }
     }
 
-    if summaries.iter().all(|summary| summary.current.is_some()) {
+    if response.is_complete() {
         Ok(())
     } else {
-        Err(anyhow!("one or more price summaries had no current quote"))
+        Err(response.completion_error())
     }
 }
 
-async fn run_sessions(
-    args: SessionsArgs,
-    proxy: Option<&str>,
-    no_proxy: bool,
-    timeout_seconds: u64,
-    timezone: &str,
-) -> Result<()> {
-    let client = http_client(timeout_seconds, proxy, no_proxy)?;
-    let binance_config = binance::BinanceConfig::from_env(timeout_seconds, proxy, no_proxy);
-    let summary = price::fetch_price_summary(
-        &client,
-        &args.symbol,
-        timezone,
-        crate::cli::SessionMode::All,
-        Some(&binance_config),
-        args.proxy_symbol.as_deref(),
+async fn run_sessions(runtime: &MarketRuntime, args: SessionsArgs) -> Result<()> {
+    let summary = service::sessions(
+        runtime,
+        service::SessionsRequest {
+            symbol: args.symbol,
+            proxy_symbol: args.proxy_symbol,
+        },
     )
-    .await;
+    .await?;
 
     if args.json {
         println!("{}", serde_json::to_string_pretty(&summary)?);
@@ -300,110 +226,59 @@ async fn run_sessions(
     }
 }
 
-async fn run_history(
-    args: HistoryArgs,
-    proxy: Option<&str>,
-    no_proxy: bool,
-    timeout_seconds: u64,
-    timezone: &str,
-) -> Result<()> {
-    if args.asset == AssetClass::Crypto
-        || matches!(
-            args.provider,
-            Provider::BinanceSpot | Provider::BinanceUsdsFutures
-        )
-    {
-        return crypto_market_data::run_history(args, proxy, no_proxy, timeout_seconds, timezone)
-            .await;
-    }
-    let client = http_client(timeout_seconds, proxy, no_proxy)?;
-    let provider = effective_history_provider(args.provider, args.session);
-    let request = providers::HistoryRequest {
-        symbol: args.symbol,
-        interval: args.interval,
-        range: args.range,
-        limit: args.limit,
-        extended_session: matches!(args.session, HistorySession::Extended),
-        adjustment: args.adjustment,
-        actions: !args.no_actions,
-        repair: args.repair,
-        stooq_market: args.stooq_market,
-        stooq_asset: args.stooq_asset,
-    };
-    let history = providers::fetch_history(&client, provider, &request).await?;
+async fn run_history(runtime: &MarketRuntime, args: HistoryArgs) -> Result<()> {
+    let json = args.json;
+    let history = service::history(
+        runtime,
+        service::HistoryRequest {
+            symbol: args.symbol,
+            asset: args.asset,
+            instrument: args.instrument,
+            crypto_provider: args.crypto_provider,
+            provider: args.provider,
+            session: args.session,
+            adjustment: args.adjustment,
+            no_actions: args.no_actions,
+            repair: args.repair,
+            interval: args.interval,
+            range: args.range,
+            limit: args.limit,
+            stooq_market: args.stooq_market,
+            stooq_asset: args.stooq_asset,
+        },
+    )
+    .await?;
 
-    if args.json {
+    if json {
         println!("{}", serde_json::to_string_pretty(&history)?);
     } else {
-        output::print_history_table(&history, timezone);
+        output::print_history_table(&history, runtime.timezone());
     }
     Ok(())
 }
 
-async fn run_indicators(
-    args: IndicatorsArgs,
-    proxy: Option<&str>,
-    no_proxy: bool,
-    timeout_seconds: u64,
-) -> Result<()> {
-    if args.asset == AssetClass::Crypto
-        || matches!(
-            args.provider,
-            Provider::BinanceSpot | Provider::BinanceUsdsFutures
-        )
-    {
-        return crypto_market_data::run_indicators(args, proxy, no_proxy, timeout_seconds).await;
-    }
-    let client = http_client(timeout_seconds, proxy, no_proxy)?;
-    let mut indicators = Vec::new();
-    let mut errors = BTreeMap::new();
-    let provider = effective_history_provider(args.provider, args.session);
-
-    let symbols = args
-        .symbols
-        .into_iter()
-        .map(|symbol| symbol.trim().to_uppercase())
-        .filter(|symbol| !symbol.is_empty())
-        .collect::<Vec<_>>();
-    let results = futures_util::stream::iter(symbols)
-        .map(|normalized| {
-            let client = &client;
-            let interval = args.interval.clone();
-            let range = args.range.clone();
-            let stooq_market = args.stooq_market;
-            let stooq_asset = args.stooq_asset;
-            async move {
-                let request = providers::HistoryRequest {
-                    symbol: normalized.clone(),
-                    interval,
-                    range,
-                    limit: args.limit,
-                    extended_session: matches!(args.session, HistorySession::Extended),
-                    adjustment: args.adjustment,
-                    actions: false,
-                    repair: args.repair,
-                    stooq_market,
-                    stooq_asset,
-                };
-                let result = providers::fetch_history(client, provider, &request).await;
-                (normalized, result)
-            }
-        })
-        .buffered(4)
-        .collect::<Vec<_>>()
-        .await;
-
-    for (normalized, result) in results {
-        match result {
-            Ok(history) => indicators.push(compute_indicator(&history)),
-            Err(error) => {
-                errors.insert(normalized, format!("{error:#}"));
-            }
-        }
-    }
-
-    let batch = IndicatorBatch { indicators, errors };
-    if args.json {
+async fn run_indicators(runtime: &MarketRuntime, args: IndicatorsArgs) -> Result<()> {
+    let json = args.json;
+    let batch = service::indicators(
+        runtime,
+        service::IndicatorsRequest {
+            symbols: args.symbols,
+            asset: args.asset,
+            instrument: args.instrument,
+            crypto_provider: args.crypto_provider,
+            provider: args.provider,
+            session: args.session,
+            adjustment: args.adjustment,
+            repair: args.repair,
+            interval: args.interval,
+            range: args.range,
+            limit: args.limit,
+            stooq_market: args.stooq_market,
+            stooq_asset: args.stooq_asset,
+        },
+    )
+    .await?;
+    if json {
         println!("{}", serde_json::to_string_pretty(&batch)?);
     } else {
         output::print_indicator_table(&batch.indicators, &batch.errors);
@@ -417,23 +292,20 @@ async fn run_indicators(
 }
 
 async fn run_quote_summary(
+    runtime: &MarketRuntime,
     args: ResearchArgs,
-    kind: research::QuoteSummaryKind,
+    kind: service::MarketQuoteSummaryKind,
     provider: crate::cli::ResearchProvider,
-    proxy: Option<&str>,
-    no_proxy: bool,
-    timeout_seconds: u64,
-    timezone: &str,
 ) -> Result<()> {
-    let client = http_client(timeout_seconds, proxy, no_proxy)?;
-    let report = research::quote_summary_report(
-        &client,
-        &args.symbol,
-        kind,
-        provider,
-        timezone,
-        args.refresh,
-        args.cache_ttl_seconds,
+    let report = service::quote_summary(
+        runtime,
+        service::QuoteSummaryRequest {
+            symbol: args.symbol,
+            kind,
+            provider,
+            refresh: args.refresh,
+            cache_ttl_seconds: args.cache_ttl_seconds,
+        },
     )
     .await?;
     if args.json {
@@ -445,28 +317,16 @@ async fn run_quote_summary(
 }
 
 async fn run_provider_quote_summary(
+    runtime: &MarketRuntime,
     args: ProviderResearchArgs,
-    kind: research::QuoteSummaryKind,
-    proxy: Option<&str>,
-    no_proxy: bool,
-    timeout_seconds: u64,
-    timezone: &str,
+    kind: service::MarketQuoteSummaryKind,
 ) -> Result<()> {
     let provider = args.provider;
-    run_quote_summary(
-        args.without_provider(),
-        kind,
-        provider,
-        proxy,
-        no_proxy,
-        timeout_seconds,
-        timezone,
-    )
-    .await
+    run_quote_summary(runtime, args.without_provider(), kind, provider).await
 }
 
 fn run_providers(args: ProvidersArgs) -> Result<()> {
-    let profiles = providers::capabilities::profiles();
+    let profiles = service::provider_profiles();
     if args.json {
         println!("{}", serde_json::to_string_pretty(&profiles)?);
     } else {
@@ -475,30 +335,24 @@ fn run_providers(args: ProvidersArgs) -> Result<()> {
     Ok(())
 }
 
-async fn run_options(
-    args: OptionsArgs,
-    proxy: Option<&str>,
-    no_proxy: bool,
-    timeout_seconds: u64,
-    timezone: &str,
-) -> Result<()> {
+async fn run_options(runtime: &MarketRuntime, args: OptionsArgs) -> Result<()> {
     if args.expiration_date.is_some() && !matches!(args.provider, OptionsProvider::Robinhood) {
         return Err(anyhow!(
             "--expiration-date is Robinhood-only; use --expiry for yahoo/auto or pass --provider robinhood"
         ));
     }
-    let client = http_client(timeout_seconds, proxy, no_proxy)?;
-    let report = research::options_report(research::OptionsReportRequest {
-        client: &client,
-        symbol: &args.symbol,
-        provider: args.provider,
-        expiry: args.expiry,
-        expiration_date: args.expiration_date.as_deref(),
-        count: args.count,
-        timezone,
-        refresh: args.refresh,
-        ttl_seconds: args.cache_ttl_seconds,
-    })
+    let report = service::options(
+        runtime,
+        service::OptionsRequest {
+            symbol: args.symbol,
+            provider: args.provider,
+            expiry: args.expiry,
+            expiration_date: args.expiration_date,
+            count: args.count,
+            refresh: args.refresh,
+            cache_ttl_seconds: args.cache_ttl_seconds,
+        },
+    )
     .await?;
     if args.json {
         println!("{}", serde_json::to_string_pretty(&report)?);
@@ -508,15 +362,10 @@ async fn run_options(
     Ok(())
 }
 
-async fn run_stooq(
-    args: StooqArgs,
-    proxy: Option<&str>,
-    no_proxy: bool,
-    timeout_seconds: u64,
-) -> Result<()> {
+async fn run_stooq(runtime: &MarketRuntime, args: StooqArgs) -> Result<()> {
     match args.command {
         StooqCommand::Catalog(args) => {
-            let catalog = stooq::catalog();
+            let catalog = service::stooq_catalog();
             if args.json {
                 println!("{}", serde_json::to_string_pretty(&catalog)?);
             } else {
@@ -525,10 +374,9 @@ async fn run_stooq(
             Ok(())
         }
         StooqCommand::Sync(args) => {
-            let client = http_client(timeout_seconds, proxy, no_proxy)?;
-            let report = stooq::sync_bulk(
-                &client,
-                stooq::StooqSyncRequest {
+            let report = service::stooq_sync(
+                runtime,
+                service::StooqSyncRequest {
                     frequency: args.frequency,
                     market: args.market,
                     asset: args.asset,
@@ -548,21 +396,15 @@ async fn run_stooq(
     }
 }
 
-async fn run_news(
-    args: NewsArgs,
-    proxy: Option<&str>,
-    no_proxy: bool,
-    timeout_seconds: u64,
-    timezone: &str,
-) -> Result<()> {
-    let client = http_client(timeout_seconds, proxy, no_proxy)?;
-    let report = research::news_report(
-        &client,
-        &args.symbol,
-        args.count,
-        timezone,
-        args.refresh,
-        args.cache_ttl_seconds,
+async fn run_news(runtime: &MarketRuntime, args: NewsArgs) -> Result<()> {
+    let report = service::news(
+        runtime,
+        service::NewsRequest {
+            symbol: args.symbol,
+            count: args.count,
+            refresh: args.refresh,
+            cache_ttl_seconds: args.cache_ttl_seconds,
+        },
     )
     .await?;
     if args.json {
@@ -573,15 +415,17 @@ async fn run_news(
     Ok(())
 }
 
-async fn run_read_url(
-    args: ReadUrlArgs,
-    proxy: Option<&str>,
-    no_proxy: bool,
-    timeout_seconds: u64,
-) -> Result<()> {
-    let client = http_client(timeout_seconds, proxy, no_proxy)?;
+async fn run_read_url(runtime: &MarketRuntime, args: ReadUrlArgs) -> Result<()> {
     let max_chars = if args.json { 0 } else { args.max_chars };
-    let report = page_read::read_url(&client, &args.url, args.provider, max_chars).await?;
+    let report = service::read_url(
+        runtime,
+        service::ReadUrlRequest {
+            url: args.url,
+            provider: args.provider,
+            max_chars,
+        },
+    )
+    .await?;
     if args.json {
         println!("{}", serde_json::to_string_pretty(&report)?);
     } else {
@@ -590,22 +434,16 @@ async fn run_read_url(
     Ok(())
 }
 
-async fn run_search(
-    args: SearchArgs,
-    proxy: Option<&str>,
-    no_proxy: bool,
-    timeout_seconds: u64,
-    timezone: &str,
-) -> Result<()> {
-    let client = http_client(timeout_seconds, proxy, no_proxy)?;
-    let report = research::search_report(
-        &client,
-        &args.query,
-        args.quotes_count,
-        args.news_count,
-        timezone,
-        args.refresh,
-        args.cache_ttl_seconds,
+async fn run_search(runtime: &MarketRuntime, args: SearchArgs) -> Result<()> {
+    let report = service::search(
+        runtime,
+        service::SearchRequest {
+            query: args.query,
+            quotes_count: args.quotes_count,
+            news_count: args.news_count,
+            refresh: args.refresh,
+            cache_ttl_seconds: args.cache_ttl_seconds,
+        },
     )
     .await?;
     if args.json {
@@ -616,21 +454,15 @@ async fn run_search(
     Ok(())
 }
 
-async fn run_screen(
-    args: ScreenArgs,
-    proxy: Option<&str>,
-    no_proxy: bool,
-    timeout_seconds: u64,
-    timezone: &str,
-) -> Result<()> {
-    let client = http_client(timeout_seconds, proxy, no_proxy)?;
-    let report = research::screen_report(
-        &client,
-        &args.screener,
-        args.count,
-        timezone,
-        args.refresh,
-        args.cache_ttl_seconds,
+async fn run_screen(runtime: &MarketRuntime, args: ScreenArgs) -> Result<()> {
+    let report = service::screen(
+        runtime,
+        service::ScreenRequest {
+            screener: args.screener,
+            count: args.count,
+            refresh: args.refresh,
+            cache_ttl_seconds: args.cache_ttl_seconds,
+        },
     )
     .await?;
     if args.json {
@@ -641,75 +473,62 @@ async fn run_screen(
     Ok(())
 }
 
-async fn run_watch(
-    args: WatchArgs,
-    proxy: Option<&str>,
-    no_proxy: bool,
-    timeout_seconds: u64,
-    timezone: &str,
-) -> Result<()> {
-    if args.asset == AssetClass::Crypto {
-        return crypto_market_data::run_watch(args, proxy, no_proxy, timeout_seconds, timezone)
-            .await;
-    }
-    let client = http_client(timeout_seconds, proxy, no_proxy)?;
-    let mut iteration = 0usize;
-    loop {
-        iteration += 1;
-        let last_summaries = futures_util::stream::iter(args.symbols.iter())
-            .map(|symbol| {
-                let client = &client;
-                async move {
-                    price::fetch_price_summary(
-                        client,
-                        symbol,
-                        timezone,
-                        crate::cli::SessionMode::Smart,
-                        None,
-                        None,
-                    )
-                    .await
+async fn run_watch(runtime: &MarketRuntime, args: WatchArgs) -> Result<()> {
+    let json = args.json;
+    let mut had_errors = false;
+    service::watch_each(
+        runtime,
+        service::WatchRequest {
+            symbols: args.symbols,
+            asset: args.asset,
+            instrument: args.instrument,
+            crypto_provider: args.crypto_provider,
+            interval_seconds: args.interval_seconds,
+            iterations: args.iterations,
+        },
+        |batch| {
+            had_errors |= batch.has_errors();
+            match batch {
+                WatchResponse::Crypto(batch) if json => {
+                    println!("{}", serde_json::to_string_pretty(&batch)?);
                 }
-            })
-            .buffered(4)
-            .collect::<Vec<_>>()
-            .await;
-        if args.json {
-            println!("{}", serde_json::to_string_pretty(&last_summaries)?);
-        } else {
-            for summary in &last_summaries {
-                output::print_price_summary(summary, false);
-                println!();
+                WatchResponse::Crypto(batch) => {
+                    output::print_crypto_price_points(&batch.points, &batch.errors);
+                    println!();
+                }
+                WatchResponse::Equity(summaries) if json => {
+                    println!("{}", serde_json::to_string_pretty(&summaries)?);
+                }
+                WatchResponse::Equity(summaries) => {
+                    for summary in &summaries {
+                        output::print_price_summary(summary, false);
+                        println!();
+                    }
+                }
             }
-        }
-        if args.iterations != 0 && iteration >= args.iterations {
-            break;
-        }
-        tokio::time::sleep(Duration::from_secs(args.interval_seconds.max(1))).await;
+            Ok(())
+        },
+    )
+    .await?;
+    if had_errors {
+        Err(anyhow!("one or more crypto watch quotes failed"))
+    } else {
+        Ok(())
     }
-    Ok(())
 }
 
-async fn run_stream(
-    args: crate::cli::StreamArgs,
-    proxy: Option<&str>,
-    no_proxy: bool,
-    timeout_seconds: u64,
-    timezone: &str,
-) -> Result<()> {
+async fn run_stream(runtime: &MarketRuntime, args: crate::cli::StreamArgs) -> Result<()> {
     if args.messages == 0 {
-        stream::stream_quotes_each(
-            stream::StreamOptions {
-                url: &args.url,
+        let json = args.json;
+        service::stream_quotes_each(
+            runtime,
+            service::StreamRequest {
+                url: args.url,
                 symbols: args.symbols,
-                message_limit: args.messages,
-                read_timeout: Duration::from_secs(timeout_seconds.max(1)),
-                timezone,
-                proxy,
-                no_proxy,
+                messages: args.messages,
             },
             |quote| {
-                if args.json {
+                if json {
                     println!("{}", serde_json::to_string(&quote)?);
                 } else {
                     output::print_stream_quotes(std::slice::from_ref(&quote));
@@ -721,34 +540,20 @@ async fn run_stream(
         return Ok(());
     }
 
-    let updates = stream::stream_quotes(stream::StreamOptions {
-        url: &args.url,
-        symbols: args.symbols,
-        message_limit: args.messages,
-        read_timeout: Duration::from_secs(timeout_seconds.max(1)),
-        timezone,
-        proxy,
-        no_proxy,
-    })
+    let json = args.json;
+    let updates = service::stream_quotes(
+        runtime,
+        service::StreamRequest {
+            url: args.url,
+            symbols: args.symbols,
+            messages: args.messages,
+        },
+    )
     .await?;
-    if args.json {
+    if json {
         println!("{}", serde_json::to_string_pretty(&updates)?);
     } else {
         output::print_stream_quotes(&updates);
     }
     Ok(())
-}
-
-fn effective_history_provider(provider: Provider, session: HistorySession) -> Provider {
-    match (provider, session) {
-        (Provider::Auto, HistorySession::Extended) => Provider::YahooExtended,
-        (Provider::Yahoo, HistorySession::Extended) => Provider::YahooExtended,
-        (provider, _) => provider,
-    }
-}
-
-#[derive(Debug, Serialize)]
-struct IndicatorBatch {
-    indicators: Vec<DerivedIndicator>,
-    errors: BTreeMap<String, String>,
 }

@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use serde_json::json;
 
-use crate::cli::FuturesPeriod;
+use crate::args::FuturesPeriod;
 
 mod aggregate;
 mod config;

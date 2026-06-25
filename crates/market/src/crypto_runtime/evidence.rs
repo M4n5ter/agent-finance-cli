@@ -4,7 +4,7 @@ use anyhow::Result;
 use futures_util::future::{BoxFuture, FutureExt, join_all};
 use serde::Serialize;
 
-use crate::cli::{CryptoInstrument, CryptoProvider};
+use crate::args::{CryptoInstrument, CryptoProvider};
 use crate::crypto_capability::{CryptoCapability, provider_supports, selected_providers};
 
 #[derive(Clone, Copy, Debug)]

@@ -1,100 +1,35 @@
 use std::collections::BTreeMap;
-use std::time::Duration;
 
 use anyhow::{Result, anyhow};
 use serde::Serialize;
 
-use crate::cli::{
-    CryptoInstrument, CryptoProvider, HistoryArgs, IndicatorsArgs, PriceArgs, Provider, WatchArgs,
-};
+use crate::args::{CryptoInstrument, CryptoProvider, Provider};
 use crate::crypto_capability::{
     CryptoCapability, binance_market, provider_supports, resolve_instrument, selected_providers,
 };
-use crate::http::http_client;
 use crate::indicators::compute_indicator;
 use crate::model::{DerivedIndicator, HistoryBatch, PricePoint, Quote};
-use crate::output;
 use crate::price;
 use crate::providers::{binance, coinbase, coingecko, okx};
 
-pub async fn run_price(
-    args: PriceArgs,
-    proxy: Option<&str>,
-    no_proxy: bool,
-    timeout_seconds: u64,
-    timezone: &str,
-) -> Result<()> {
-    let client = http_client(timeout_seconds, proxy, no_proxy)?;
-    let config = binance::BinanceConfig::from_env(timeout_seconds, proxy, no_proxy);
-    let batch = fetch_price_batch(
-        &client,
-        &config,
-        args.crypto_provider,
-        resolve_instrument(args.instrument, CryptoCapability::Quote),
-        args.symbols,
-        timezone,
-    )
-    .await;
-    if args.json {
-        println!("{}", serde_json::to_string_pretty(&batch)?);
-    } else {
-        output::print_crypto_price_points(&batch.points, &batch.errors);
-    }
-    if batch.errors.is_empty() {
-        Ok(())
-    } else {
-        Err(anyhow!("one or more crypto price quotes failed"))
-    }
-}
-
-pub async fn run_history(
-    args: HistoryArgs,
-    proxy: Option<&str>,
-    no_proxy: bool,
-    timeout_seconds: u64,
-    timezone: &str,
-) -> Result<()> {
-    let client = http_client(timeout_seconds, proxy, no_proxy)?;
-    let config = binance::BinanceConfig::from_env(timeout_seconds, proxy, no_proxy);
-    let history = fetch_history(
-        &client,
-        &config,
-        provider_crypto_provider(args.provider, args.crypto_provider),
-        provider_instrument(args.provider, args.instrument),
-        &args.symbol,
-        &args.interval,
-        args.limit,
-    )
-    .await?;
-    if args.json {
-        println!("{}", serde_json::to_string_pretty(&history)?);
-    } else {
-        output::print_history_table(&history, timezone);
-    }
-    Ok(())
-}
-
-pub async fn run_indicators(
-    args: IndicatorsArgs,
-    proxy: Option<&str>,
-    no_proxy: bool,
-    timeout_seconds: u64,
-) -> Result<()> {
-    let client = http_client(timeout_seconds, proxy, no_proxy)?;
-    let config = binance::BinanceConfig::from_env(timeout_seconds, proxy, no_proxy);
-    let provider = provider_crypto_provider(args.provider, args.crypto_provider);
-    let instrument = provider_instrument(args.provider, args.instrument);
+pub async fn fetch_indicator_batch(
+    client: &wreq::Client,
+    config: &binance::BinanceConfig,
+    options: CryptoIndicatorOptions<'_>,
+) -> Result<IndicatorBatch> {
+    let resolved_provider = provider_crypto_provider(options.provider, options.crypto_provider);
+    let resolved_instrument = provider_instrument(options.provider, options.instrument);
     let mut indicators = Vec::new();
     let mut errors = BTreeMap::new();
-    for symbol in args.symbols {
+    for symbol in options.symbols {
         match fetch_history(
-            &client,
-            &config,
-            provider,
-            instrument,
+            client,
+            config,
+            resolved_provider,
+            resolved_instrument,
             &symbol,
-            &args.interval,
-            args.limit,
+            options.interval,
+            options.limit,
         )
         .await
         {
@@ -104,61 +39,10 @@ pub async fn run_indicators(
             }
         }
     }
-    let batch = IndicatorBatch { indicators, errors };
-    if args.json {
-        println!("{}", serde_json::to_string_pretty(&batch)?);
-    } else {
-        output::print_indicator_table(&batch.indicators, &batch.errors);
-    }
-    if batch.errors.is_empty() {
-        Ok(())
-    } else {
-        Err(anyhow!("one or more crypto indicators failed"))
-    }
+    Ok(IndicatorBatch { indicators, errors })
 }
 
-pub async fn run_watch(
-    args: WatchArgs,
-    proxy: Option<&str>,
-    no_proxy: bool,
-    timeout_seconds: u64,
-    timezone: &str,
-) -> Result<()> {
-    let client = http_client(timeout_seconds, proxy, no_proxy)?;
-    let config = binance::BinanceConfig::from_env(timeout_seconds, proxy, no_proxy);
-    let mut iteration = 0usize;
-    let mut had_errors = false;
-    loop {
-        iteration += 1;
-        let batch = fetch_price_batch(
-            &client,
-            &config,
-            args.crypto_provider,
-            resolve_instrument(args.instrument, CryptoCapability::Quote),
-            args.symbols.clone(),
-            timezone,
-        )
-        .await;
-        had_errors |= !batch.errors.is_empty();
-        if args.json {
-            println!("{}", serde_json::to_string_pretty(&batch)?);
-        } else {
-            output::print_crypto_price_points(&batch.points, &batch.errors);
-            println!();
-        }
-        if args.iterations != 0 && iteration >= args.iterations {
-            break;
-        }
-        tokio::time::sleep(Duration::from_secs(args.interval_seconds.max(1))).await;
-    }
-    if had_errors {
-        Err(anyhow!("one or more crypto watch quotes failed"))
-    } else {
-        Ok(())
-    }
-}
-
-async fn fetch_price_batch(
+pub async fn fetch_price_batch(
     client: &wreq::Client,
     config: &binance::BinanceConfig,
     provider: CryptoProvider,
@@ -184,7 +68,7 @@ async fn fetch_price_batch(
     CryptoPriceBatch { points, errors }
 }
 
-async fn fetch_quote(
+pub async fn fetch_quote(
     client: &wreq::Client,
     config: &binance::BinanceConfig,
     provider: CryptoProvider,
@@ -233,7 +117,7 @@ async fn fetch_quote_one(
     }
 }
 
-async fn fetch_history(
+pub async fn fetch_history(
     client: &wreq::Client,
     config: &binance::BinanceConfig,
     provider: CryptoProvider,
@@ -316,13 +200,23 @@ fn provider_crypto_provider(provider: Provider, crypto_provider: CryptoProvider)
 }
 
 #[derive(Debug, Serialize)]
-struct CryptoPriceBatch {
-    points: Vec<PricePoint>,
-    errors: BTreeMap<String, String>,
+pub struct CryptoPriceBatch {
+    pub points: Vec<PricePoint>,
+    pub errors: BTreeMap<String, String>,
 }
 
 #[derive(Debug, Serialize)]
-struct IndicatorBatch {
-    indicators: Vec<DerivedIndicator>,
-    errors: BTreeMap<String, String>,
+pub struct IndicatorBatch {
+    pub indicators: Vec<DerivedIndicator>,
+    pub errors: BTreeMap<String, String>,
+}
+
+#[derive(Debug)]
+pub struct CryptoIndicatorOptions<'a> {
+    pub symbols: Vec<String>,
+    pub provider: Provider,
+    pub crypto_provider: CryptoProvider,
+    pub instrument: CryptoInstrument,
+    pub interval: &'a str,
+    pub limit: usize,
 }

@@ -1,4 +1,4 @@
-use crate::cli::HistoryAdjustment;
+use crate::args::HistoryAdjustment;
 use crate::model::OhlcBar;
 
 pub fn apply_history_adjustment_and_repair(
