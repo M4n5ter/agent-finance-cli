@@ -15,6 +15,7 @@ mod page_read;
 mod price;
 mod providers;
 mod research;
+pub mod research_snapshot;
 pub mod service;
 pub mod snapshot;
 mod stream;

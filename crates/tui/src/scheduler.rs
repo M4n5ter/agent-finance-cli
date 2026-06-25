@@ -8,6 +8,7 @@ use agent_finance_market::{
         self, CryptoQuoteEvidenceSnapshot, CryptoQuoteEvidenceSnapshotRequest,
     },
     history_snapshot::{self, HistorySnapshot, HistorySnapshotRequest},
+    research_snapshot::{self, ResearchContextSnapshot, ResearchContextSnapshotRequest},
     service::MarketRuntime,
     snapshot::{self, MarketSnapshot, PublicQuoteSnapshotRequest},
 };
@@ -20,6 +21,7 @@ pub struct Scheduler {
     refresh_commands: Sender<RefreshCommand>,
     history_commands: Sender<HistoryCommand>,
     evidence_commands: Sender<EvidenceCommand>,
+    research_commands: Sender<ResearchCommand>,
     events: Receiver<SchedulerEvent>,
     disconnected_reported: Cell<bool>,
 }
@@ -29,6 +31,7 @@ impl Scheduler {
         let (refresh_commands, refresh_command_rx) = mpsc::channel();
         let (history_commands, history_command_rx) = mpsc::channel();
         let (evidence_commands, evidence_command_rx) = mpsc::channel();
+        let (research_commands, research_command_rx) = mpsc::channel();
         let (event_tx, events) = mpsc::channel();
         let runtime = MarketRuntime::new(
             launch.proxy.as_deref(),
@@ -53,16 +56,24 @@ impl Scheduler {
         );
         spawn_scheduler_worker(
             "evidence",
-            runtime,
+            runtime.clone(),
             evidence_command_rx,
-            event_tx,
+            event_tx.clone(),
             handle_evidence_command,
+        );
+        spawn_scheduler_worker(
+            "research",
+            runtime,
+            research_command_rx,
+            event_tx,
+            handle_research_command,
         );
 
         Self {
             refresh_commands,
             history_commands,
             evidence_commands,
+            research_commands,
             events,
             disconnected_reported: Cell::new(false),
         }
@@ -77,16 +88,28 @@ impl Scheduler {
             .map_err(|error| anyhow!("failed to request TUI refresh: {error}"))
     }
 
-    pub fn request_history(&self, generation: u64, symbol: String) -> Result<()> {
-        self.history_commands
-            .send(HistoryCommand { generation, symbol })
-            .map_err(|error| anyhow!("failed to request TUI history: {error}"))
-    }
+    pub fn request_symbol_task(
+        &self,
+        kind: SymbolTaskKind,
+        generation: u64,
+        symbol: String,
+    ) -> Result<()> {
+        let result = match kind {
+            SymbolTaskKind::History => self
+                .history_commands
+                .send(HistoryCommand { generation, symbol })
+                .map_err(|error| error.to_string()),
+            SymbolTaskKind::Evidence => self
+                .evidence_commands
+                .send(EvidenceCommand { generation, symbol })
+                .map_err(|error| error.to_string()),
+            SymbolTaskKind::Research => self
+                .research_commands
+                .send(ResearchCommand { generation, symbol })
+                .map_err(|error| error.to_string()),
+        };
 
-    pub fn request_evidence(&self, generation: u64, symbol: String) -> Result<()> {
-        self.evidence_commands
-            .send(EvidenceCommand { generation, symbol })
-            .map_err(|error| anyhow!("failed to request TUI evidence: {error}"))
+        result.map_err(|error| anyhow!("failed to request TUI {}: {error}", kind.label()))
     }
 
     pub fn try_recv(&self) -> Option<SchedulerEvent> {
@@ -119,6 +142,31 @@ struct EvidenceCommand {
     symbol: String,
 }
 
+#[derive(Debug)]
+struct ResearchCommand {
+    generation: u64,
+    symbol: String,
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub enum SymbolTaskKind {
+    History,
+    Evidence,
+    Research,
+}
+
+impl SymbolTaskKind {
+    pub const ALL: [Self; 3] = [Self::History, Self::Evidence, Self::Research];
+
+    const fn label(self) -> &'static str {
+        match self {
+            Self::History => "history",
+            Self::Evidence => "evidence",
+            Self::Research => "research",
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum SchedulerEvent {
     Snapshot {
@@ -146,6 +194,10 @@ pub enum SchedulerEvent {
         generation: u64,
         symbol: String,
         error: String,
+    },
+    Research {
+        generation: u64,
+        snapshot: ResearchContextSnapshot,
     },
     Fatal(String),
 }
@@ -235,6 +287,18 @@ fn handle_evidence_command(
     }
 }
 
+fn handle_research_command(
+    tokio: &tokio::runtime::Runtime,
+    runtime: &MarketRuntime,
+    command: ResearchCommand,
+) -> SchedulerEvent {
+    let ResearchCommand { generation, symbol } = command;
+    SchedulerEvent::Research {
+        generation,
+        snapshot: tokio.block_on(fetch_research(runtime, symbol)),
+    }
+}
+
 fn scheduler_runtime(
     worker_name: &str,
     events: &Sender<SchedulerEvent>,
@@ -280,6 +344,20 @@ async fn fetch_evidence(
             symbol,
             provider: CryptoProvider::Auto,
             instrument: CryptoInstrument::Auto,
+        },
+    )
+    .await
+}
+
+async fn fetch_research(runtime: &MarketRuntime, symbol: String) -> ResearchContextSnapshot {
+    research_snapshot::fetch_research_context_snapshot(
+        runtime,
+        ResearchContextSnapshotRequest {
+            symbol,
+            news_count: 5,
+            prediction_count: 5,
+            refresh: false,
+            cache_ttl_seconds: 900,
         },
     )
     .await

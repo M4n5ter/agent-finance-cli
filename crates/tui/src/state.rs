@@ -3,6 +3,7 @@ use std::collections::VecDeque;
 use agent_finance_market::crypto_evidence_snapshot::CryptoQuoteEvidenceSnapshot;
 use agent_finance_market::history_snapshot::HistorySnapshot;
 use agent_finance_market::model::ProviderProfile;
+use agent_finance_market::research_snapshot::ResearchContextSnapshot;
 use agent_finance_market::service;
 use agent_finance_market::snapshot::MarketSnapshot;
 
@@ -21,6 +22,7 @@ pub struct AppState {
     pub refresh: LoadSlot<()>,
     pub history: SelectedSymbolLoad<HistorySnapshot>,
     pub evidence: SelectedSymbolLoad<CryptoQuoteEvidenceSnapshot>,
+    pub research: SelectedSymbolLoad<ResearchContextSnapshot>,
     pub scheduler_error: Option<String>,
 }
 
@@ -47,6 +49,7 @@ impl AppState {
             refresh: LoadSlot::new(),
             history: SelectedSymbolLoad::new(),
             evidence: SelectedSymbolLoad::new(),
+            research: SelectedSymbolLoad::new(),
             scheduler_error: None,
         }
     }
@@ -176,10 +179,37 @@ impl AppState {
                     )));
                 }
             }
+            Action::ResearchStarted { generation, symbol } => {
+                self.research.start(generation, symbol);
+            }
+            Action::ResearchLoaded {
+                generation,
+                snapshot,
+            } => {
+                if self.research.finish(generation) {
+                    if !snapshot.errors.is_empty() {
+                        self.push_log(TaskLogEntry::warning(format!(
+                            "research loaded with {} warnings",
+                            snapshot.errors.len()
+                        )));
+                    } else {
+                        self.push_log(TaskLogEntry::info(format!(
+                            "{} research context loaded",
+                            snapshot.symbol
+                        )));
+                    }
+                    self.research.set_snapshot(snapshot);
+                } else {
+                    self.push_log(TaskLogEntry::warning(format!(
+                        "ignored stale research generation {generation}",
+                    )));
+                }
+            }
             Action::SchedulerFailed(error) => {
                 self.refresh.stop();
                 self.history.stop();
                 self.evidence.stop();
+                self.research.stop();
                 self.scheduler_error = Some(error.clone());
                 self.push_log(TaskLogEntry::warning(format!("scheduler failed: {error}")));
             }
@@ -324,6 +354,16 @@ impl SymbolSnapshot for CryptoQuoteEvidenceSnapshot {
     }
 }
 
+impl SymbolSnapshot for ResearchContextSnapshot {
+    fn requested_symbol(&self) -> &str {
+        &self.requested_symbol
+    }
+
+    fn symbol(&self) -> &str {
+        &self.symbol
+    }
+}
+
 impl<T: SymbolSnapshot> SelectedSymbolLoad<T> {
     pub fn has_selected_snapshot(&self, selected: &str) -> bool {
         self.selected_snapshot(selected).is_some()
@@ -427,6 +467,14 @@ pub enum Action {
         symbol: String,
         error: String,
     },
+    ResearchStarted {
+        generation: u64,
+        symbol: String,
+    },
+    ResearchLoaded {
+        generation: u64,
+        snapshot: ResearchContextSnapshot,
+    },
     SchedulerFailed(String),
     Log(String),
 }
@@ -464,6 +512,7 @@ mod tests {
     use super::*;
     use agent_finance_market::crypto_evidence_snapshot::CryptoQuoteEvidenceSnapshot;
     use agent_finance_market::history_snapshot::HistorySnapshot;
+    use agent_finance_market::research_snapshot::ResearchContextSnapshot;
     use agent_finance_market::snapshot::{QuoteSnapshot, RegularBasisSnapshot};
 
     #[test]
@@ -540,6 +589,10 @@ mod tests {
             generation: 1,
             symbol: "BTCUSDT".to_string(),
         });
+        state.reduce(Action::ResearchStarted {
+            generation: 1,
+            symbol: "CRDO".to_string(),
+        });
         state.reduce(Action::SchedulerFailed(
             "scheduler runtime failed".to_string(),
         ));
@@ -547,6 +600,7 @@ mod tests {
         assert!(!state.refresh.loading);
         assert!(!state.history.loading());
         assert!(!state.evidence.loading());
+        assert!(!state.research.loading());
         assert_eq!(
             state.scheduler_error.as_deref(),
             Some("scheduler runtime failed")
@@ -611,6 +665,35 @@ mod tests {
         assert!(!state.evidence.loading());
     }
 
+    #[test]
+    fn reducer_accepts_current_research_and_ignores_stale_research() {
+        let mut state = AppState::from_config(TuiConfig::default());
+
+        state.reduce(Action::ResearchStarted {
+            generation: 2,
+            symbol: "CRDO".to_string(),
+        });
+        state.reduce(Action::ResearchLoaded {
+            generation: 1,
+            snapshot: research_snapshot("AAPL", 1, 1),
+        });
+        assert!(state.research.selected_snapshot("AAPL").is_none());
+        assert!(state.research.loading());
+
+        state.reduce(Action::ResearchLoaded {
+            generation: 2,
+            snapshot: research_snapshot("CRDO", 2, 3),
+        });
+        assert_eq!(
+            state
+                .research
+                .selected_snapshot("CRDO")
+                .map(|snapshot| (snapshot.news.len(), snapshot.prediction_markets.len())),
+            Some((2, 3))
+        );
+        assert!(!state.research.loading());
+    }
+
     fn snapshot(_generation: u64, symbol: &str) -> MarketSnapshot {
         MarketSnapshot {
             fetched_at_local: Some("2026-06-25 09:30:00".to_string()),
@@ -664,6 +747,39 @@ mod tests {
             ok_providers,
             total_providers,
             providers: Vec::new(),
+            errors: Vec::new(),
+        }
+    }
+
+    fn research_snapshot(
+        symbol: &str,
+        news_count: usize,
+        prediction_count: usize,
+    ) -> ResearchContextSnapshot {
+        ResearchContextSnapshot {
+            requested_symbol: symbol.to_string(),
+            symbol: symbol.to_string(),
+            fetched_at_local: Some("2026-06-25 09:30:00".to_string()),
+            news: (0..news_count)
+                .map(
+                    |index| agent_finance_market::research_snapshot::ResearchNewsSnapshot {
+                        title: format!("headline {index}"),
+                        provider: "test".to_string(),
+                        module: "news".to_string(),
+                    },
+                )
+                .collect(),
+            prediction_markets: (0..prediction_count)
+                .map(
+                    |index| agent_finance_market::research_snapshot::PredictionMarketSnapshot {
+                        title: format!("market {index}"),
+                        probability: Some(0.5),
+                        volume: Some(1000.0),
+                        liquidity: None,
+                        market_url: None,
+                    },
+                )
+                .collect(),
             errors: Vec::new(),
         }
     }

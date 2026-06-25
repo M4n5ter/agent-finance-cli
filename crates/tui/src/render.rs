@@ -1,4 +1,5 @@
 use agent_finance_market::crypto_evidence_snapshot::CryptoQuoteEvidenceSnapshot;
+use agent_finance_market::research_snapshot::ResearchContextSnapshot;
 use agent_finance_market::snapshot::QuoteSnapshot;
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
@@ -25,7 +26,7 @@ fn render_docked(frame: &mut Frame<'_>, state: &AppState, layout: &CockpitLayout
     render_quote(frame, state, layout.panel_rect(Panel::Quote));
     render_history(frame, state, layout.panel_rect(Panel::History));
     render_evidence(frame, state, layout.panel_rect(Panel::Evidence));
-    render_research(frame, layout.panel_rect(Panel::Research));
+    render_research(frame, state, layout.panel_rect(Panel::Research));
     render_provider_health(frame, state, layout.panel_rect(Panel::ProviderHealth));
     render_task_log(frame, state, layout.panel_rect(Panel::TaskLog));
 }
@@ -235,10 +236,33 @@ fn render_evidence(frame: &mut Frame<'_>, state: &AppState, area: Rect) {
     );
 }
 
-fn render_research(frame: &mut Frame<'_>, area: Rect) {
+fn render_research(frame: &mut Frame<'_>, state: &AppState, area: Rect) {
+    let symbol = state.selected_symbol().unwrap_or("N/A");
+    let snapshot = state.research.selected_snapshot(symbol);
+    let mut lines = vec![Line::from(vec![
+        Span::styled(
+            symbol,
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::raw(if state.research.loading() {
+            " research loading..."
+        } else {
+            " research"
+        }),
+    ])];
+
+    match snapshot {
+        Some(snapshot) => lines.extend(research_lines(snapshot)),
+        None => lines.push(Line::from(
+            "No research context loaded yet. Waiting for the selected symbol.",
+        )),
+    }
+
     frame.render_widget(
-        Paragraph::new("News, research highlights, SEC and provider facts will appear here.")
-            .block(simple_block(Panel::Research.title()))
+        Paragraph::new(lines)
+            .block(panel_block(Panel::Research, state))
             .wrap(Wrap { trim: true }),
         area,
     );
@@ -377,6 +401,51 @@ fn evidence_lines(snapshot: &CryptoQuoteEvidenceSnapshot) -> Vec<Line<'static>> 
         }
     }
     lines
+}
+
+fn research_lines(snapshot: &ResearchContextSnapshot) -> Vec<Line<'static>> {
+    let mut lines = vec![Line::from(format!(
+        "freshness: {}  news={} prediction_markets={}",
+        snapshot.fetched_at_local.as_deref().unwrap_or("-"),
+        snapshot.news.len(),
+        snapshot.prediction_markets.len()
+    ))];
+
+    for item in snapshot.news.iter().take(3) {
+        lines.push(Line::from(vec![
+            Span::styled("news ", Style::default().fg(Color::Green)),
+            Span::raw(compact_text(&item.title, 96)),
+        ]));
+    }
+
+    for market in snapshot.prediction_markets.iter().take(3) {
+        let probability = market
+            .probability
+            .map(|value| format!("{:.0}%", value * 100.0))
+            .unwrap_or_else(|| "-".to_string());
+        lines.push(Line::from(vec![
+            Span::styled("poly ", Style::default().fg(Color::Magenta)),
+            Span::raw(format!("{probability} {}", compact_text(&market.title, 84))),
+        ]));
+    }
+
+    for error in snapshot.errors.iter().take(2) {
+        lines.push(Line::from(Span::styled(
+            format!("research warning: {error}"),
+            Style::default().fg(Color::Yellow),
+        )));
+    }
+
+    lines
+}
+
+fn compact_text(value: &str, max_chars: usize) -> String {
+    let mut chars = value.chars();
+    let mut output = chars.by_ref().take(max_chars).collect::<String>();
+    if chars.next().is_some() {
+        output.push_str("...");
+    }
+    output
 }
 
 fn format_price(value: f64) -> String {

@@ -14,7 +14,7 @@ use agent_finance_market::is_likely_crypto_pair;
 
 use crate::config::TuiLaunch;
 use crate::render;
-use crate::scheduler::{Scheduler, SchedulerEvent};
+use crate::scheduler::{Scheduler, SchedulerEvent, SymbolTaskKind};
 use crate::state::{Action, AppState, FloatingKind, Panel, SelectedSymbolLoad, SymbolSnapshot};
 
 type TuiTerminal = Terminal<CrosstermBackend<Stdout>>;
@@ -28,11 +28,9 @@ pub fn run(launch: TuiLaunch) -> Result<()> {
     let mut terminal = TerminalGuard::enter().context("failed to initialize terminal UI")?;
     let scheduler = Scheduler::start(&launch);
     let mut next_refresh_generation = 1;
-    let mut history_load = SymbolLoadRuntime::new();
-    let mut evidence_load = SymbolLoadRuntime::new();
+    let mut symbol_loads = SymbolLoadRuntimes::new();
     request_refresh(&scheduler, &mut state, &mut next_refresh_generation);
-    request_history(&scheduler, &mut state, &mut history_load, false);
-    request_evidence(&scheduler, &mut state, &mut evidence_load, false);
+    request_symbol_loads(&scheduler, &mut state, &mut symbol_loads, false);
 
     let result = run_loop(
         terminal.terminal_mut()?,
@@ -43,8 +41,7 @@ pub fn run(launch: TuiLaunch) -> Result<()> {
             history_refresh_seconds: runtime_config.refresh.research_seconds,
             scheduler: &scheduler,
             next_refresh_generation: &mut next_refresh_generation,
-            history_load: &mut history_load,
-            evidence_load: &mut evidence_load,
+            symbol_loads: &mut symbol_loads,
             launch: &launch,
         },
     );
@@ -109,11 +106,17 @@ fn run_loop(
                     symbol,
                     error,
                 }),
+                SchedulerEvent::Research {
+                    generation,
+                    snapshot,
+                } => state.reduce(Action::ResearchLoaded {
+                    generation,
+                    snapshot,
+                }),
                 SchedulerEvent::Fatal(error) => state.reduce(Action::SchedulerFailed(error)),
             }
         }
-        request_history(context.scheduler, state, context.history_load, false);
-        request_evidence(context.scheduler, state, context.evidence_load, false);
+        request_symbol_loads(context.scheduler, state, context.symbol_loads, false);
 
         let timeout = context
             .launch
@@ -126,8 +129,7 @@ fn run_loop(
                 Event::Key(key) => {
                     if let Some(action) = key_action(key) {
                         state.reduce(action);
-                        request_history(context.scheduler, state, context.history_load, false);
-                        request_evidence(context.scheduler, state, context.evidence_load, false);
+                        request_symbol_loads(context.scheduler, state, context.symbol_loads, false);
                     }
                 }
                 _ => {}
@@ -143,15 +145,12 @@ fn run_loop(
             last_refresh = Instant::now();
         }
 
-        if context.history_load.last_refresh.elapsed().as_secs() >= history_refresh_interval {
-            request_history(context.scheduler, state, context.history_load, true);
-            context.history_load.last_refresh = Instant::now();
-        }
-
-        if context.evidence_load.last_refresh.elapsed().as_secs() >= history_refresh_interval {
-            request_evidence(context.scheduler, state, context.evidence_load, true);
-            context.evidence_load.last_refresh = Instant::now();
-        }
+        request_due_symbol_loads(
+            context.scheduler,
+            state,
+            context.symbol_loads,
+            history_refresh_interval,
+        );
     }
     Ok(())
 }
@@ -162,8 +161,7 @@ struct LoopContext<'a> {
     history_refresh_seconds: u64,
     scheduler: &'a Scheduler,
     next_refresh_generation: &'a mut u64,
-    history_load: &'a mut SymbolLoadRuntime,
-    evidence_load: &'a mut SymbolLoadRuntime,
+    symbol_loads: &'a mut SymbolLoadRuntimes,
     launch: &'a TuiLaunch,
 }
 
@@ -177,32 +175,44 @@ fn request_refresh(scheduler: &Scheduler, state: &mut AppState, next_generation:
     }
 }
 
-fn request_history(
+fn request_symbol_loads(
     scheduler: &Scheduler,
     state: &mut AppState,
-    runtime: &mut SymbolLoadRuntime,
+    runtimes: &mut SymbolLoadRuntimes,
     force: bool,
 ) {
-    let Some(request) = prepare_history_request(state, runtime, force) else {
-        return;
-    };
-
-    if let Err(error) = scheduler.request_history(request.generation, request.symbol) {
-        state.reduce(Action::SchedulerFailed(error.to_string()));
+    for kind in SymbolTaskKind::ALL {
+        request_symbol_load(scheduler, state, runtimes.runtime_mut(kind), kind, force);
     }
 }
 
-fn request_evidence(
+fn request_due_symbol_loads(
+    scheduler: &Scheduler,
+    state: &mut AppState,
+    runtimes: &mut SymbolLoadRuntimes,
+    refresh_interval: u64,
+) {
+    for kind in SymbolTaskKind::ALL {
+        let runtime = runtimes.runtime_mut(kind);
+        if runtime.last_refresh.elapsed().as_secs() >= refresh_interval {
+            request_symbol_load(scheduler, state, runtime, kind, true);
+            runtime.last_refresh = Instant::now();
+        }
+    }
+}
+
+fn request_symbol_load(
     scheduler: &Scheduler,
     state: &mut AppState,
     runtime: &mut SymbolLoadRuntime,
+    kind: SymbolTaskKind,
     force: bool,
 ) {
-    let Some(request) = prepare_evidence_request(state, runtime, force) else {
+    let Some(request) = prepare_symbol_task_request(state, runtime, kind, force) else {
         return;
     };
 
-    if let Err(error) = scheduler.request_evidence(request.generation, request.symbol) {
+    if let Err(error) = scheduler.request_symbol_task(kind, request.generation, request.symbol) {
         state.reduce(Action::SchedulerFailed(error.to_string()));
     }
 }
@@ -240,6 +250,31 @@ impl SymbolLoadRuntime {
     }
 }
 
+#[derive(Debug, Clone)]
+struct SymbolLoadRuntimes {
+    history: SymbolLoadRuntime,
+    evidence: SymbolLoadRuntime,
+    research: SymbolLoadRuntime,
+}
+
+impl SymbolLoadRuntimes {
+    fn new() -> Self {
+        Self {
+            history: SymbolLoadRuntime::new(),
+            evidence: SymbolLoadRuntime::new(),
+            research: SymbolLoadRuntime::new(),
+        }
+    }
+
+    fn runtime_mut(&mut self, kind: SymbolTaskKind) -> &mut SymbolLoadRuntime {
+        match kind {
+            SymbolTaskKind::History => &mut self.history,
+            SymbolTaskKind::Evidence => &mut self.evidence,
+            SymbolTaskKind::Research => &mut self.research,
+        }
+    }
+}
+
 fn prepare_refresh_request(
     state: &mut AppState,
     next_generation: &mut u64,
@@ -257,36 +292,46 @@ fn prepare_refresh_request(
     })
 }
 
-fn prepare_evidence_request(
+fn prepare_symbol_task_request(
     state: &mut AppState,
     runtime: &mut SymbolLoadRuntime,
+    kind: SymbolTaskKind,
     force: bool,
 ) -> Option<SymbolLoadRequest> {
-    let request = prepare_symbol_load_request(
-        state,
-        &state.evidence,
-        runtime,
-        force,
-        is_likely_crypto_pair,
-    )?;
-    state.reduce(Action::EvidenceStarted {
-        generation: request.generation,
-        symbol: request.symbol.clone(),
-    });
+    let request = match kind {
+        SymbolTaskKind::History => {
+            prepare_symbol_load_request(state, &state.history, runtime, force, |_| true)
+        }
+        SymbolTaskKind::Evidence => prepare_symbol_load_request(
+            state,
+            &state.evidence,
+            runtime,
+            force,
+            is_likely_crypto_pair,
+        ),
+        SymbolTaskKind::Research => {
+            prepare_symbol_load_request(state, &state.research, runtime, force, |_| true)
+        }
+    }?;
+    state.reduce(start_symbol_task_action(kind, &request));
     Some(request)
 }
 
-fn prepare_history_request(
-    state: &mut AppState,
-    runtime: &mut SymbolLoadRuntime,
-    force: bool,
-) -> Option<SymbolLoadRequest> {
-    let request = prepare_symbol_load_request(state, &state.history, runtime, force, |_| true)?;
-    state.reduce(Action::HistoryStarted {
-        generation: request.generation,
-        symbol: request.symbol.clone(),
-    });
-    Some(request)
+fn start_symbol_task_action(kind: SymbolTaskKind, request: &SymbolLoadRequest) -> Action {
+    match kind {
+        SymbolTaskKind::History => Action::HistoryStarted {
+            generation: request.generation,
+            symbol: request.symbol.clone(),
+        },
+        SymbolTaskKind::Evidence => Action::EvidenceStarted {
+            generation: request.generation,
+            symbol: request.symbol.clone(),
+        },
+        SymbolTaskKind::Research => Action::ResearchStarted {
+            generation: request.generation,
+            symbol: request.symbol.clone(),
+        },
+    }
 }
 
 fn prepare_symbol_load_request<T>(
@@ -430,6 +475,7 @@ mod tests {
     use super::*;
     use agent_finance_market::crypto_evidence_snapshot::CryptoQuoteEvidenceSnapshot;
     use agent_finance_market::history_snapshot::HistorySnapshot;
+    use agent_finance_market::research_snapshot::ResearchContextSnapshot;
 
     #[test]
     fn key_router_maps_navigation_and_overlays_to_actions() {
@@ -502,14 +548,14 @@ mod tests {
         let mut runtime = SymbolLoadRuntime::new();
 
         assert_eq!(
-            prepare_history_request(&mut state, &mut runtime, false),
+            prepare_symbol_task_request(&mut state, &mut runtime, SymbolTaskKind::History, false),
             Some(SymbolLoadRequest {
                 generation: 1,
                 symbol: "AAPL".to_string(),
             })
         );
         assert_eq!(
-            prepare_history_request(&mut state, &mut runtime, false),
+            prepare_symbol_task_request(&mut state, &mut runtime, SymbolTaskKind::History, false),
             None
         );
 
@@ -519,7 +565,7 @@ mod tests {
         });
         state.reduce(Action::SelectNextSymbol);
         assert_eq!(
-            prepare_history_request(&mut state, &mut runtime, false),
+            prepare_symbol_task_request(&mut state, &mut runtime, SymbolTaskKind::History, false),
             Some(SymbolLoadRequest {
                 generation: 2,
                 symbol: "CRDO".to_string(),
@@ -532,16 +578,19 @@ mod tests {
         let mut state = AppState::from_config(crate::config::TuiConfig::default());
         let mut runtime = SymbolLoadRuntime::new();
 
-        assert!(prepare_history_request(&mut state, &mut runtime, false).is_some());
+        assert!(
+            prepare_symbol_task_request(&mut state, &mut runtime, SymbolTaskKind::History, false)
+                .is_some()
+        );
         assert_eq!(
-            prepare_history_request(&mut state, &mut runtime, true),
+            prepare_symbol_task_request(&mut state, &mut runtime, SymbolTaskKind::History, true),
             None
         );
         assert_eq!(runtime.next_generation, 2);
 
         state.reduce(Action::SchedulerFailed("scheduler failed".to_string()));
         assert_eq!(
-            prepare_history_request(&mut state, &mut runtime, true),
+            prepare_symbol_task_request(&mut state, &mut runtime, SymbolTaskKind::History, true),
             None
         );
     }
@@ -552,7 +601,7 @@ mod tests {
         let mut runtime = SymbolLoadRuntime::new();
 
         assert_eq!(
-            prepare_history_request(&mut state, &mut runtime, false),
+            prepare_symbol_task_request(&mut state, &mut runtime, SymbolTaskKind::History, false),
             Some(SymbolLoadRequest {
                 generation: 1,
                 symbol: "AAPL".to_string(),
@@ -565,7 +614,7 @@ mod tests {
         });
 
         assert_eq!(
-            prepare_history_request(&mut state, &mut runtime, false),
+            prepare_symbol_task_request(&mut state, &mut runtime, SymbolTaskKind::History, false),
             Some(SymbolLoadRequest {
                 generation: 2,
                 symbol: "AAPL".to_string(),
@@ -582,7 +631,7 @@ mod tests {
         let mut runtime = SymbolLoadRuntime::new();
 
         assert_eq!(
-            prepare_history_request(&mut state, &mut runtime, false),
+            prepare_symbol_task_request(&mut state, &mut runtime, SymbolTaskKind::History, false),
             Some(SymbolLoadRequest {
                 generation: 1,
                 symbol: "AAPL".to_string(),
@@ -590,7 +639,7 @@ mod tests {
         );
         state.reduce(Action::SelectNextSymbol);
         assert_eq!(
-            prepare_history_request(&mut state, &mut runtime, false),
+            prepare_symbol_task_request(&mut state, &mut runtime, SymbolTaskKind::History, false),
             None
         );
 
@@ -599,7 +648,7 @@ mod tests {
             snapshot: history_snapshot("AAPL"),
         });
         assert_eq!(
-            prepare_history_request(&mut state, &mut runtime, false),
+            prepare_symbol_task_request(&mut state, &mut runtime, SymbolTaskKind::History, false),
             Some(SymbolLoadRequest {
                 generation: 2,
                 symbol: "CRDO".to_string(),
@@ -616,7 +665,7 @@ mod tests {
         let mut runtime = SymbolLoadRuntime::new();
 
         assert_eq!(
-            prepare_evidence_request(&mut state, &mut runtime, false),
+            prepare_symbol_task_request(&mut state, &mut runtime, SymbolTaskKind::Evidence, false),
             Some(SymbolLoadRequest {
                 generation: 1,
                 symbol: "BTCUSDT".to_string(),
@@ -624,7 +673,7 @@ mod tests {
         );
         state.reduce(Action::SelectNextSymbol);
         assert_eq!(
-            prepare_evidence_request(&mut state, &mut runtime, false),
+            prepare_symbol_task_request(&mut state, &mut runtime, SymbolTaskKind::Evidence, false),
             None
         );
 
@@ -633,7 +682,7 @@ mod tests {
             snapshot: evidence_snapshot("BTCUSDT"),
         });
         assert_eq!(
-            prepare_evidence_request(&mut state, &mut runtime, false),
+            prepare_symbol_task_request(&mut state, &mut runtime, SymbolTaskKind::Evidence, false),
             Some(SymbolLoadRequest {
                 generation: 2,
                 symbol: "ETHUSDT".to_string(),
@@ -650,7 +699,7 @@ mod tests {
         let mut runtime = SymbolLoadRuntime::new();
 
         assert_eq!(
-            prepare_evidence_request(&mut state, &mut runtime, false),
+            prepare_symbol_task_request(&mut state, &mut runtime, SymbolTaskKind::Evidence, false),
             Some(SymbolLoadRequest {
                 generation: 1,
                 symbol: "BTCUSDT".to_string(),
@@ -663,10 +712,44 @@ mod tests {
         });
 
         assert_eq!(
-            prepare_evidence_request(&mut state, &mut runtime, false),
+            prepare_symbol_task_request(&mut state, &mut runtime, SymbolTaskKind::Evidence, false),
             Some(SymbolLoadRequest {
                 generation: 2,
                 symbol: "BTCUSDT".to_string(),
+            })
+        );
+    }
+
+    #[test]
+    fn research_request_follows_selected_symbol_after_previous_in_flight_request_finishes() {
+        let mut state = AppState::from_config(crate::config::TuiConfig {
+            watchlist: vec!["AAPL".to_string(), "CRDO".to_string()],
+            ..crate::config::TuiConfig::default()
+        });
+        let mut runtime = SymbolLoadRuntime::new();
+
+        assert_eq!(
+            prepare_symbol_task_request(&mut state, &mut runtime, SymbolTaskKind::Research, false),
+            Some(SymbolLoadRequest {
+                generation: 1,
+                symbol: "AAPL".to_string(),
+            })
+        );
+        state.reduce(Action::SelectNextSymbol);
+        assert_eq!(
+            prepare_symbol_task_request(&mut state, &mut runtime, SymbolTaskKind::Research, false),
+            None
+        );
+
+        state.reduce(Action::ResearchLoaded {
+            generation: 1,
+            snapshot: research_snapshot("AAPL"),
+        });
+        assert_eq!(
+            prepare_symbol_task_request(&mut state, &mut runtime, SymbolTaskKind::Research, false),
+            Some(SymbolLoadRequest {
+                generation: 2,
+                symbol: "CRDO".to_string(),
             })
         );
     }
@@ -680,14 +763,14 @@ mod tests {
         let mut runtime = SymbolLoadRuntime::new();
 
         assert_eq!(
-            prepare_evidence_request(&mut state, &mut runtime, false),
+            prepare_symbol_task_request(&mut state, &mut runtime, SymbolTaskKind::Evidence, false),
             None
         );
         assert_eq!(runtime.next_generation, 1);
 
         state.reduce(Action::SelectNextSymbol);
         assert_eq!(
-            prepare_evidence_request(&mut state, &mut runtime, false),
+            prepare_symbol_task_request(&mut state, &mut runtime, SymbolTaskKind::Evidence, false),
             Some(SymbolLoadRequest {
                 generation: 1,
                 symbol: "BTCUSDT".to_string(),
@@ -720,6 +803,17 @@ mod tests {
             ok_providers: 1,
             total_providers: 1,
             providers: Vec::new(),
+            errors: Vec::new(),
+        }
+    }
+
+    fn research_snapshot(symbol: &str) -> ResearchContextSnapshot {
+        ResearchContextSnapshot {
+            requested_symbol: symbol.to_string(),
+            symbol: symbol.to_string(),
+            fetched_at_local: Some("2026-06-25 09:30:00".to_string()),
+            news: Vec::new(),
+            prediction_markets: Vec::new(),
             errors: Vec::new(),
         }
     }
