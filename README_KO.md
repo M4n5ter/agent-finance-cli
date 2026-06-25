@@ -177,7 +177,7 @@ agent-finance capabilities
 agent-finance tui --symbols AAPL,CRDO,BTCUSDT
 ```
 
-TUI는 watchlist, quote/sessions, history, crypto evidence, research/Polymarket context, provider health, task log, 마우스 포커스, docked column 드래그 리사이즈, 실행 가능한 command palette를 갖춘 인터랙티브 cockpit입니다. Agent가 구조화된 데이터를 필요로 할 때는 계속 `market ... --json` 명령을 사용하세요.
+TUI는 watchlist, quote/sessions, history, crypto evidence, research/Polymarket context, provider health, task log, 마우스 포커스, docked column 드래그 리사이즈, panel close/restore, 실행 가능한 command palette를 갖춘 인터랙티브 cockpit입니다. Agent가 구조화된 데이터를 필요로 할 때는 계속 `market ... --json` 명령을 사용하세요.
 
 ## 서명 거래 흐름
 

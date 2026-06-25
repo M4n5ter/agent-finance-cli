@@ -9,14 +9,14 @@ use agent_finance_market::snapshot::MarketSnapshot;
 
 use crate::command::{CommandEffect, CommandPaletteState};
 use crate::config::{LayoutConfig, TuiConfig};
+use crate::model::{DockedPanels, FloatingKind, FloatingPane, Panel, TaskLogEntry};
 
 #[derive(Debug, Clone)]
 pub struct AppState {
     pub watchlist: Vec<String>,
     pub selected_symbol: usize,
     pub layout: LayoutConfig,
-    pub focused_panel: Panel,
-    pub open_panels: Vec<Panel>,
+    pub panels: DockedPanels,
     pub floating: Vec<FloatingPane>,
     pub command_palette: CommandPaletteState,
     pub task_log: VecDeque<TaskLogEntry>,
@@ -31,21 +31,11 @@ pub struct AppState {
 
 impl AppState {
     pub fn from_config(config: TuiConfig) -> Self {
-        let open_panels = vec![
-            Panel::Watchlist,
-            Panel::Quote,
-            Panel::History,
-            Panel::Evidence,
-            Panel::Research,
-            Panel::ProviderHealth,
-            Panel::TaskLog,
-        ];
         Self {
             watchlist: config.watchlist,
             selected_symbol: 0,
             layout: config.layout,
-            focused_panel: Panel::Watchlist,
-            open_panels,
+            panels: DockedPanels::default(),
             floating: Vec::new(),
             command_palette: CommandPaletteState::default(),
             task_log: VecDeque::new(),
@@ -66,9 +56,7 @@ impl AppState {
     pub fn reduce(&mut self, action: Action) {
         match action {
             Action::Focus(panel) => {
-                if self.has_panel(panel) {
-                    self.focused_panel = panel;
-                }
+                self.panels.focus(panel);
             }
             Action::SelectNextSymbol => self.shift_symbol(1),
             Action::SelectPreviousSymbol => self.shift_symbol(-1),
@@ -77,13 +65,15 @@ impl AppState {
                 self.command_palette.shift(direction);
             }
             Action::ApplyCommand(effect) => self.apply_command(effect),
+            Action::CloseFocusedPanel => self.panels.close_focused(),
+            Action::RestorePanels => self.panels.restore(),
             Action::CloseFocusedFloating => {
                 self.floating.pop();
             }
             Action::ResetLayout => {
                 self.floating.clear();
                 self.layout = LayoutConfig::default();
-                self.focused_panel = Panel::Watchlist;
+                self.panels = DockedPanels::default();
             }
             Action::ResizeDockedColumns {
                 left_ratio,
@@ -235,10 +225,6 @@ impl AppState {
         }
     }
 
-    fn has_panel(&self, panel: Panel) -> bool {
-        self.open_panels.contains(&panel)
-    }
-
     fn shift_symbol(&mut self, direction: isize) {
         if self.watchlist.is_empty() {
             self.selected_symbol = 0;
@@ -293,6 +279,18 @@ impl AppState {
             CommandEffect::FocusPanel(panel) => {
                 self.close_floating(FloatingKind::CommandPalette);
                 self.reduce(Action::Focus(panel));
+            }
+            CommandEffect::TogglePanel(panel) => {
+                self.close_floating(FloatingKind::CommandPalette);
+                self.panels.toggle(panel);
+            }
+            CommandEffect::CloseFocusedPanel => {
+                self.close_floating(FloatingKind::CommandPalette);
+                self.reduce(Action::CloseFocusedPanel);
+            }
+            CommandEffect::RestorePanels => {
+                self.close_floating(FloatingKind::CommandPalette);
+                self.reduce(Action::RestorePanels);
             }
             CommandEffect::CloseCommandPalette => {
                 self.close_floating(FloatingKind::CommandPalette);
@@ -425,54 +423,6 @@ impl<T: SymbolSnapshot> SelectedSymbolLoad<T> {
     }
 }
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
-pub enum Panel {
-    Watchlist,
-    Quote,
-    History,
-    Evidence,
-    Research,
-    ProviderHealth,
-    TaskLog,
-}
-
-impl Panel {
-    pub const fn title(self) -> &'static str {
-        match self {
-            Self::Watchlist => "Watchlist",
-            Self::Quote => "Quote / Sessions",
-            Self::History => "History Chart",
-            Self::Evidence => "Crypto Evidence",
-            Self::Research => "News / Research",
-            Self::ProviderHealth => "Provider Health",
-            Self::TaskLog => "Task Log",
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
-pub enum FloatingKind {
-    CommandPalette,
-    Help,
-    ProviderDetails,
-}
-
-impl FloatingKind {
-    pub const fn title(self) -> &'static str {
-        match self {
-            Self::CommandPalette => "Command Palette",
-            Self::Help => "Help",
-            Self::ProviderDetails => "Provider Details",
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
-pub struct FloatingPane {
-    pub kind: FloatingKind,
-    pub z_index: u16,
-}
-
 #[derive(Debug, Clone, PartialEq)]
 pub enum Action {
     Focus(Panel),
@@ -481,6 +431,8 @@ pub enum Action {
     ToggleFloating(FloatingKind),
     MoveCommandSelection(isize),
     ApplyCommand(CommandEffect),
+    CloseFocusedPanel,
+    RestorePanels,
     CloseFocusedFloating,
     ResetLayout,
     ResizeDockedColumns {
@@ -532,34 +484,6 @@ pub enum Action {
     },
     SchedulerFailed(String),
     Log(String),
-}
-
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
-pub enum TaskLevel {
-    Info,
-    Warning,
-}
-
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub struct TaskLogEntry {
-    pub level: TaskLevel,
-    pub message: String,
-}
-
-impl TaskLogEntry {
-    fn info(message: String) -> Self {
-        Self {
-            level: TaskLevel::Info,
-            message,
-        }
-    }
-
-    fn warning(message: String) -> Self {
-        Self {
-            level: TaskLevel::Warning,
-            message,
-        }
-    }
 }
 
 #[cfg(test)]
@@ -638,7 +562,7 @@ mod tests {
             Panel::Research,
         )));
 
-        assert_eq!(state.focused_panel, Panel::Research);
+        assert_eq!(state.panels.focused(), Panel::Research);
         assert!(state.floating.is_empty());
     }
 
@@ -652,6 +576,62 @@ mod tests {
 
         assert_eq!(state.floating.len(), 1);
         assert_eq!(state.floating[0].kind, FloatingKind::Help);
+    }
+
+    #[test]
+    fn panel_lifecycle_closes_focused_panel_and_restores_all_panels() {
+        let mut state = AppState::from_config(TuiConfig::default());
+        state.reduce(Action::Focus(Panel::Research));
+
+        state.reduce(Action::CloseFocusedPanel);
+
+        assert!(!state.panels.contains(Panel::Research));
+        assert_ne!(state.panels.focused(), Panel::Research);
+        assert!(state.panels.contains(state.panels.focused()));
+
+        state.reduce(Action::RestorePanels);
+
+        assert!(
+            Panel::ALL
+                .into_iter()
+                .all(|panel| state.panels.contains(panel))
+        );
+        assert_eq!(state.panels.open_count(), Panel::ALL.len());
+    }
+
+    #[test]
+    fn panel_lifecycle_toggles_panels_without_closing_the_last_one() {
+        let mut state = AppState::from_config(TuiConfig::default());
+
+        state.reduce(Action::ApplyCommand(CommandEffect::TogglePanel(
+            Panel::History,
+        )));
+        assert!(!state.panels.contains(Panel::History));
+
+        state.reduce(Action::ApplyCommand(CommandEffect::TogglePanel(
+            Panel::History,
+        )));
+        assert!(state.panels.contains(Panel::History));
+        assert_eq!(state.panels.focused(), Panel::History);
+
+        for panel in [
+            Panel::Watchlist,
+            Panel::Quote,
+            Panel::Evidence,
+            Panel::Research,
+            Panel::ProviderHealth,
+            Panel::TaskLog,
+        ] {
+            state.reduce(Action::ApplyCommand(CommandEffect::TogglePanel(panel)));
+        }
+        assert_eq!(state.panels.open_count(), 1);
+        assert!(state.panels.contains(Panel::History));
+
+        state.reduce(Action::ApplyCommand(CommandEffect::TogglePanel(
+            Panel::History,
+        )));
+        assert_eq!(state.panels.open_count(), 1);
+        assert!(state.panels.contains(Panel::History));
     }
 
     #[test]

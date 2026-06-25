@@ -4,7 +4,7 @@ use crate::config::{
     LayoutConfig, MAX_LEFT_MAIN_RATIO, MAX_LEFT_RATIO, MAX_MAIN_RATIO, MIN_LEFT_RATIO,
     MIN_MAIN_RATIO, MIN_RIGHT_RATIO,
 };
-use crate::state::{FloatingKind, FloatingPane, Panel};
+use crate::model::{FloatingKind, FloatingPane, Panel};
 
 const MIN_PANEL_WIDTH: u16 = 18;
 const MIN_PANEL_HEIGHT: u16 = 4;
@@ -12,43 +12,27 @@ const STATUS_HEIGHT: u16 = 1;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct CockpitLayout {
-    pub watchlist: Rect,
-    pub quote: Rect,
-    pub history: Rect,
-    pub evidence: Rect,
-    pub research: Rect,
-    pub provider_health: Rect,
-    pub task_log: Rect,
+    panels: PanelRects,
     pub status: Rect,
     pub floating: Vec<FloatingRect>,
+    open_panels: Vec<Panel>,
     columns: Option<DockedColumns>,
 }
 
 impl CockpitLayout {
-    pub fn panel_rect(&self, panel: Panel) -> Rect {
-        match panel {
-            Panel::Watchlist => self.watchlist,
-            Panel::Quote => self.quote,
-            Panel::History => self.history,
-            Panel::Evidence => self.evidence,
-            Panel::Research => self.research,
-            Panel::ProviderHealth => self.provider_health,
-            Panel::TaskLog => self.task_log,
+    pub fn panel_rect(&self, panel: Panel) -> Option<Rect> {
+        if !self.open_panels.contains(&panel) {
+            return None;
         }
+
+        Some(self.panels.get(panel))
     }
 
     pub fn panel_at(&self, x: u16, y: u16) -> Option<Panel> {
-        [
-            Panel::Watchlist,
-            Panel::Quote,
-            Panel::History,
-            Panel::Evidence,
-            Panel::Research,
-            Panel::ProviderHealth,
-            Panel::TaskLog,
-        ]
-        .into_iter()
-        .find(|panel| contains(self.panel_rect(*panel), x, y))
+        self.open_panels.iter().copied().find(|panel| {
+            self.panel_rect(*panel)
+                .is_some_and(|rect| contains(rect, x, y))
+        })
     }
 
     pub fn hit_test(&self, x: u16, y: u16) -> Option<LayoutHit> {
@@ -71,22 +55,12 @@ impl CockpitLayout {
 
     fn docked_split_at(&self, x: u16, y: u16) -> Option<DockedColumnSplit> {
         let columns = self.columns.as_ref()?;
-        if !contains(columns.left, x, y)
-            && !contains(columns.middle, x, y)
-            && !contains(columns.right, x, y)
-        {
-            return None;
-        }
-
-        let left_boundary = columns.left.x.saturating_add(columns.left.width);
-        let right_boundary = columns.middle.x.saturating_add(columns.middle.width);
-        if near_column_boundary(x, left_boundary) {
-            Some(DockedColumnSplit::LeftMain)
-        } else if near_column_boundary(x, right_boundary) {
-            Some(DockedColumnSplit::MainRight)
-        } else {
-            None
-        }
+        columns.visible_splits().into_iter().find_map(|split| {
+            let boundary = split.left_rect.x.saturating_add(split.left_rect.width);
+            (contains(split.left_rect, x, y) || contains(split.right_rect, x, y))
+                .then_some(split.kind)
+                .filter(|_kind| near_column_boundary(x, boundary))
+        })
     }
 }
 
@@ -97,7 +71,7 @@ pub struct FloatingRect {
     pub z_index: u16,
 }
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+#[derive(Debug, Clone, Copy, Default, Eq, PartialEq)]
 struct DockedColumns {
     left: Rect,
     middle: Rect,
@@ -108,6 +82,7 @@ struct DockedColumns {
 pub enum DockedColumnSplit {
     LeftMain,
     MainRight,
+    LeftRight,
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
@@ -118,42 +93,25 @@ pub enum LayoutHit {
     Status,
 }
 
-pub fn build(area: Rect, config: &LayoutConfig, floating: &[FloatingPane]) -> CockpitLayout {
+pub fn build(
+    area: Rect,
+    config: &LayoutConfig,
+    floating: &[FloatingPane],
+    open_panels: &[Panel],
+) -> CockpitLayout {
     let [body, status] = split_vertical(
         area,
         [Constraint::Min(0), Constraint::Length(STATUS_HEIGHT)],
     );
     let compact = body.width < MIN_PANEL_WIDTH * 3 || body.height < MIN_PANEL_HEIGHT * 3;
+    let open_panels = normalized_open_panels(open_panels);
 
-    let (watchlist, quote, history, evidence, research, provider_health, task_log, columns) =
-        if compact {
-            let (watchlist, quote, history, evidence, research, provider_health, task_log) =
-                compact_layout(body);
-            (
-                watchlist,
-                quote,
-                history,
-                evidence,
-                research,
-                provider_health,
-                task_log,
-                None,
-            )
-        } else {
-            let columns = docked_columns(body, config);
-            let (watchlist, quote, history, evidence, research, provider_health, task_log) =
-                wide_layout(columns);
-            (
-                watchlist,
-                quote,
-                history,
-                evidence,
-                research,
-                provider_health,
-                task_log,
-                Some(columns),
-            )
-        };
+    let (panels, columns) = if compact {
+        (compact_layout(body, &open_panels), None)
+    } else {
+        let columns = docked_columns(body, config, &open_panels);
+        (wide_layout(columns, &open_panels), Some(columns))
+    };
 
     let mut floating = floating
         .iter()
@@ -166,15 +124,10 @@ pub fn build(area: Rect, config: &LayoutConfig, floating: &[FloatingPane]) -> Co
     floating.sort_by_key(|pane| pane.z_index);
 
     CockpitLayout {
-        watchlist,
-        quote,
-        history,
-        evidence,
-        research,
-        provider_health,
-        task_log,
+        panels,
         status,
         floating,
+        open_panels,
         columns,
     }
 }
@@ -184,6 +137,7 @@ pub fn resize_docked_columns(
     split: DockedColumnSplit,
     x: u16,
     config: &LayoutConfig,
+    open_panels: &[Panel],
 ) -> LayoutConfig {
     let [body, _status] = split_vertical(
         area,
@@ -196,108 +150,282 @@ pub fn resize_docked_columns(
     let pointer_ratio =
         (((u32::from(x.saturating_sub(body.x)) * 100) / u32::from(body.width)).min(100)) as u16;
     let mut next = config.clone();
+    let active = active_docked_groups(config, &normalized_open_panels(open_panels));
     match split {
         DockedColumnSplit::LeftMain => {
             let left_and_main = config.left_ratio.saturating_add(config.main_ratio);
             let max_left = MAX_LEFT_RATIO.min(left_and_main.saturating_sub(MIN_MAIN_RATIO));
+            let pointer_ratio = if active_has_right(&active) {
+                pointer_ratio
+            } else {
+                scale_visible_ratio(pointer_ratio, left_and_main)
+            };
             next.left_ratio = pointer_ratio.clamp(MIN_LEFT_RATIO, max_left);
             next.main_ratio = left_and_main.saturating_sub(next.left_ratio);
         }
         DockedColumnSplit::MainRight => {
             let max_main = MAX_MAIN_RATIO.min(MAX_LEFT_MAIN_RATIO.saturating_sub(next.left_ratio));
-            next.main_ratio = pointer_ratio
-                .saturating_sub(next.left_ratio)
-                .clamp(MIN_MAIN_RATIO, max_main);
+            let main_and_right = 100u16.saturating_sub(config.left_ratio);
+            let main_ratio = if active_has_left(&active) {
+                pointer_ratio.saturating_sub(next.left_ratio)
+            } else {
+                scale_visible_ratio(pointer_ratio, main_and_right)
+            };
+            next.main_ratio = main_ratio.clamp(MIN_MAIN_RATIO, max_main);
+        }
+        DockedColumnSplit::LeftRight => {
+            let left_and_right = 100u16.saturating_sub(config.main_ratio);
+            let pointer_ratio = scale_visible_ratio(pointer_ratio, left_and_right);
+            let max_left = MAX_LEFT_RATIO.min(left_and_right.saturating_sub(MIN_RIGHT_RATIO));
+            next.left_ratio = pointer_ratio.clamp(MIN_LEFT_RATIO, max_left);
         }
     }
     next.normalize();
     next
 }
 
-fn docked_columns(area: Rect, config: &LayoutConfig) -> DockedColumns {
+fn docked_columns(area: Rect, config: &LayoutConfig, open_panels: &[Panel]) -> DockedColumns {
+    let active = active_docked_groups(config, open_panels);
+
+    if active.len() == 1 {
+        return DockedColumns::single(active[0].0, area);
+    }
+
+    let total_weight = active
+        .iter()
+        .map(|(_group, weight)| u32::from(*weight))
+        .sum::<u32>()
+        .max(1);
+    let constraints = active
+        .iter()
+        .map(|(_group, weight)| Constraint::Ratio(u32::from(*weight), total_weight))
+        .collect::<Vec<_>>();
+    let areas = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints(constraints)
+        .split(area);
+
+    let mut columns = DockedColumns::default();
+    for ((group, _weight), rect) in active.into_iter().zip(areas.iter().copied()) {
+        columns.set(group, rect);
+    }
+    columns
+}
+
+fn active_docked_groups(config: &LayoutConfig, open_panels: &[Panel]) -> Vec<(DockedGroup, u16)> {
     let right_ratio = 100u16.saturating_sub(config.left_ratio + config.main_ratio);
-    let [left, middle, right] = split_horizontal(
-        area,
-        [
-            Constraint::Percentage(config.left_ratio),
-            Constraint::Percentage(config.main_ratio),
-            Constraint::Percentage(right_ratio.max(MIN_RIGHT_RATIO)),
-        ],
-    );
-    DockedColumns {
-        left,
-        middle,
-        right,
+    [
+        (
+            DockedGroup::Left,
+            config.left_ratio,
+            &[Panel::Watchlist, Panel::ProviderHealth, Panel::TaskLog][..],
+        ),
+        (
+            DockedGroup::Middle,
+            config.main_ratio,
+            &[Panel::Quote, Panel::History][..],
+        ),
+        (
+            DockedGroup::Right,
+            right_ratio.max(MIN_RIGHT_RATIO),
+            &[Panel::Evidence, Panel::Research][..],
+        ),
+    ]
+    .into_iter()
+    .filter(|(_group, _weight, panels)| panels.iter().any(|panel| open_panels.contains(panel)))
+    .map(|(group, weight, _panels)| (group, weight))
+    .collect()
+}
+
+fn active_has_left(active: &[(DockedGroup, u16)]) -> bool {
+    active
+        .iter()
+        .any(|(group, _weight)| *group == DockedGroup::Left)
+}
+
+fn active_has_right(active: &[(DockedGroup, u16)]) -> bool {
+    active
+        .iter()
+        .any(|(group, _weight)| *group == DockedGroup::Right)
+}
+
+fn scale_visible_ratio(pointer_ratio: u16, active_ratio: u16) -> u16 {
+    ((u32::from(pointer_ratio) * u32::from(active_ratio)) / 100) as u16
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+enum DockedGroup {
+    Left,
+    Middle,
+    Right,
+}
+
+impl DockedColumns {
+    fn single(group: DockedGroup, area: Rect) -> Self {
+        let mut columns = Self::default();
+        columns.set(group, area);
+        columns
+    }
+
+    fn set(&mut self, group: DockedGroup, rect: Rect) {
+        match group {
+            DockedGroup::Left => self.left = rect,
+            DockedGroup::Middle => self.middle = rect,
+            DockedGroup::Right => self.right = rect,
+        }
+    }
+
+    fn visible_splits(self) -> Vec<VisibleSplit> {
+        let visible = [
+            (DockedGroup::Left, self.left),
+            (DockedGroup::Middle, self.middle),
+            (DockedGroup::Right, self.right),
+        ]
+        .into_iter()
+        .filter(|(_group, rect)| has_area(*rect))
+        .collect::<Vec<_>>();
+
+        visible
+            .windows(2)
+            .filter_map(|pair| visible_split(pair[0], pair[1]))
+            .collect()
     }
 }
 
-fn wide_layout(columns: DockedColumns) -> (Rect, Rect, Rect, Rect, Rect, Rect, Rect) {
-    let [watchlist, provider_health, task_log] = split_vertical(
-        columns.left,
-        [
-            Constraint::Percentage(55),
-            Constraint::Percentage(25),
-            Constraint::Percentage(20),
-        ],
-    );
-    let [quote, history] = split_vertical(
-        columns.middle,
-        [
-            Constraint::Length(9.min(columns.middle.height)),
-            Constraint::Min(0),
-        ],
-    );
-    let [evidence, research] = split_vertical(
-        columns.right,
-        [Constraint::Percentage(48), Constraint::Percentage(52)],
-    );
-
-    (
-        non_empty(watchlist),
-        non_empty(quote),
-        non_empty(history),
-        non_empty(evidence),
-        non_empty(research),
-        non_empty(provider_health),
-        non_empty(task_log),
-    )
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+struct VisibleSplit {
+    kind: DockedColumnSplit,
+    left_rect: Rect,
+    right_rect: Rect,
 }
 
-fn compact_layout(area: Rect) -> (Rect, Rect, Rect, Rect, Rect, Rect, Rect) {
-    let [top, middle, bottom] = split_vertical(
-        area,
-        [
-            Constraint::Length(8.min(area.height)),
-            Constraint::Percentage(55),
-            Constraint::Percentage(45),
-        ],
-    );
-    let [watchlist, quote] = split_horizontal(
-        top,
-        [Constraint::Percentage(40), Constraint::Percentage(60)],
-    );
-    let [history, evidence] = split_horizontal(
-        middle,
-        [Constraint::Percentage(60), Constraint::Percentage(40)],
-    );
-    let [research, provider_health, task_log] = split_horizontal(
-        bottom,
-        [
-            Constraint::Percentage(45),
-            Constraint::Percentage(25),
-            Constraint::Percentage(30),
-        ],
-    );
+fn visible_split(left: (DockedGroup, Rect), right: (DockedGroup, Rect)) -> Option<VisibleSplit> {
+    let kind = match (left.0, right.0) {
+        (DockedGroup::Left, DockedGroup::Middle) => DockedColumnSplit::LeftMain,
+        (DockedGroup::Middle, DockedGroup::Right) => DockedColumnSplit::MainRight,
+        (DockedGroup::Left, DockedGroup::Right) => DockedColumnSplit::LeftRight,
+        _ => return None,
+    };
+    Some(VisibleSplit {
+        kind,
+        left_rect: left.1,
+        right_rect: right.1,
+    })
+}
 
-    (
-        non_empty(watchlist),
-        non_empty(quote),
-        non_empty(history),
-        non_empty(evidence),
-        non_empty(research),
-        non_empty(provider_health),
-        non_empty(task_log),
-    )
+fn wide_layout(columns: DockedColumns, open_panels: &[Panel]) -> PanelRects {
+    let mut rects = PanelRects::default();
+    assign_weighted_column(
+        &mut rects,
+        columns.left,
+        &[
+            (Panel::Watchlist, 55),
+            (Panel::ProviderHealth, 25),
+            (Panel::TaskLog, 20),
+        ],
+        open_panels,
+    );
+    assign_middle_column(&mut rects, columns.middle, open_panels);
+    assign_weighted_column(
+        &mut rects,
+        columns.right,
+        &[(Panel::Evidence, 48), (Panel::Research, 52)],
+        open_panels,
+    );
+    rects
+}
+
+fn compact_layout(area: Rect, open_panels: &[Panel]) -> PanelRects {
+    let mut rects = PanelRects::default();
+    assign_weighted_column(
+        &mut rects,
+        area,
+        &Panel::ALL.map(|panel| (panel, 1)),
+        open_panels,
+    );
+    rects
+}
+
+#[derive(Debug, Clone, Copy, Default, Eq, PartialEq)]
+struct PanelRects {
+    rects: [Rect; Panel::ALL.len()],
+}
+
+impl PanelRects {
+    fn get(&self, panel: Panel) -> Rect {
+        self.rects[panel.order()]
+    }
+
+    fn set(&mut self, panel: Panel, rect: Rect) {
+        self.rects[panel.order()] = non_empty(rect);
+    }
+}
+
+fn assign_middle_column(rects: &mut PanelRects, area: Rect, open_panels: &[Panel]) {
+    match (
+        open_panels.contains(&Panel::Quote),
+        open_panels.contains(&Panel::History),
+    ) {
+        (true, true) => {
+            let [quote, history] = split_vertical(
+                area,
+                [Constraint::Length(9.min(area.height)), Constraint::Min(0)],
+            );
+            rects.set(Panel::Quote, quote);
+            rects.set(Panel::History, history);
+        }
+        (true, false) => rects.set(Panel::Quote, area),
+        (false, true) => rects.set(Panel::History, area),
+        (false, false) => {}
+    }
+}
+
+fn assign_weighted_column(
+    rects: &mut PanelRects,
+    area: Rect,
+    specs: &[(Panel, u32)],
+    open_panels: &[Panel],
+) {
+    let active = specs
+        .iter()
+        .copied()
+        .filter(|(panel, _weight)| open_panels.contains(panel))
+        .collect::<Vec<_>>();
+    if active.is_empty() {
+        return;
+    }
+    if active.len() == 1 {
+        rects.set(active[0].0, area);
+        return;
+    }
+
+    let total_weight = active
+        .iter()
+        .map(|(_panel, weight)| *weight)
+        .sum::<u32>()
+        .max(1);
+    let constraints = active
+        .iter()
+        .map(|(_panel, weight)| Constraint::Ratio(*weight, total_weight))
+        .collect::<Vec<_>>();
+    let areas = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints(constraints)
+        .split(area);
+    for ((panel, _weight), rect) in active.into_iter().zip(areas.iter().copied()) {
+        rects.set(panel, rect);
+    }
+}
+
+fn normalized_open_panels(open_panels: &[Panel]) -> Vec<Panel> {
+    let mut normalized = Panel::ALL
+        .into_iter()
+        .filter(|panel| open_panels.contains(panel))
+        .collect::<Vec<_>>();
+    if normalized.is_empty() {
+        normalized.push(Panel::Watchlist);
+    }
+    normalized
 }
 
 fn floating_rect(area: Rect, kind: FloatingKind) -> Rect {
@@ -327,16 +455,6 @@ fn floating_dimension(total: u16, ratio: u32, minimum: u16) -> u16 {
         .clamp(minimum as u32, maximum) as u16
 }
 
-fn split_horizontal<const N: usize>(area: Rect, constraints: [Constraint; N]) -> [Rect; N] {
-    Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints(constraints)
-        .split(area)
-        .to_vec()
-        .try_into()
-        .unwrap_or_else(|_| [Rect::default(); N])
-}
-
 fn split_vertical<const N: usize>(area: Rect, constraints: [Constraint; N]) -> [Rect; N] {
     Layout::default()
         .direction(Direction::Vertical)
@@ -362,6 +480,10 @@ fn contains(rect: Rect, x: u16, y: u16) -> bool {
         && y < rect.y.saturating_add(rect.height)
 }
 
+fn has_area(rect: Rect) -> bool {
+    rect.width > 0 && rect.height > 0
+}
+
 fn near_column_boundary(x: u16, boundary: u16) -> bool {
     x.abs_diff(boundary) <= 1
 }
@@ -369,11 +491,16 @@ fn near_column_boundary(x: u16, boundary: u16) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::state::FloatingPane;
+    use crate::model::FloatingPane;
 
     #[test]
     fn wide_layout_preserves_all_docked_panels_and_status_bar() {
-        let layout = build(Rect::new(0, 0, 160, 48), &LayoutConfig::default(), &[]);
+        let layout = build(
+            Rect::new(0, 0, 160, 48),
+            &LayoutConfig::default(),
+            &[],
+            &Panel::ALL,
+        );
 
         assert_eq!(layout.status.height, 1);
         for panel in [
@@ -385,7 +512,7 @@ mod tests {
             Panel::ProviderHealth,
             Panel::TaskLog,
         ] {
-            let rect = layout.panel_rect(panel);
+            let rect = layout.panel_rect(panel).expect("panel should be open");
             assert!(rect.width > 0, "{panel:?} should have width");
             assert!(rect.height > 0, "{panel:?} should have height");
         }
@@ -393,10 +520,15 @@ mod tests {
 
     #[test]
     fn compact_layout_does_not_generate_zero_sized_panels() {
-        let layout = build(Rect::new(0, 0, 42, 16), &LayoutConfig::default(), &[]);
+        let layout = build(
+            Rect::new(0, 0, 42, 16),
+            &LayoutConfig::default(),
+            &[],
+            &Panel::ALL,
+        );
 
-        assert!(layout.history.width > 0);
-        assert!(layout.evidence.height > 0);
+        assert!(layout.panel_rect(Panel::History).unwrap().width > 0);
+        assert!(layout.panel_rect(Panel::Evidence).unwrap().height > 0);
         assert_eq!(layout.status.height, 1);
     }
 
@@ -415,6 +547,7 @@ mod tests {
                     z_index: 2,
                 },
             ],
+            &Panel::ALL,
         );
 
         assert_eq!(layout.floating[0].kind, FloatingKind::CommandPalette);
@@ -436,6 +569,7 @@ mod tests {
                 kind: FloatingKind::CommandPalette,
                 z_index: 1,
             }],
+            &Panel::ALL,
         );
 
         assert_eq!(layout.floating[0].rect, Rect::new(0, 0, 1, 1));
@@ -445,20 +579,100 @@ mod tests {
     fn wide_layout_maps_points_to_panels_and_split_handles() {
         let area = Rect::new(0, 0, 160, 48);
         let config = LayoutConfig::default();
-        let layout = build(area, &config, &[]);
+        let layout = build(area, &config, &[], &Panel::ALL);
 
         assert_eq!(layout.panel_at(2, 2), Some(Panel::Watchlist));
         assert_eq!(layout.panel_at(80, 2), Some(Panel::Quote));
         assert_eq!(layout.panel_at(150, 36), Some(Panel::Research));
 
         assert_eq!(
-            layout.hit_test(layout.watchlist.x + layout.watchlist.width, 2),
+            layout.hit_test(layout.panel_rect(Panel::Watchlist).unwrap().right(), 2),
             Some(LayoutHit::DockedSplit(DockedColumnSplit::LeftMain))
         );
         assert_eq!(
-            layout.hit_test(layout.quote.x + layout.quote.width, 2),
+            layout.hit_test(layout.panel_rect(Panel::Quote).unwrap().right(), 2),
             Some(LayoutHit::DockedSplit(DockedColumnSplit::MainRight))
         );
+    }
+
+    #[test]
+    fn closed_panels_do_not_hit_test_or_reserve_space() {
+        let area = Rect::new(0, 0, 160, 48);
+        let open = [
+            Panel::Watchlist,
+            Panel::Quote,
+            Panel::Evidence,
+            Panel::ProviderHealth,
+            Panel::TaskLog,
+        ];
+        let layout = build(area, &LayoutConfig::default(), &[], &open);
+
+        assert_eq!(layout.panel_rect(Panel::History), None);
+        assert_eq!(layout.panel_rect(Panel::Research), None);
+        let quote = layout.panel_rect(Panel::Quote).expect("quote is open");
+        assert!(quote.height > 30);
+        assert_ne!(layout.panel_at(150, 36), Some(Panel::Research));
+    }
+
+    #[test]
+    fn closed_column_groups_release_wide_layout_space() {
+        let area = Rect::new(0, 0, 160, 48);
+        let open = [Panel::Watchlist, Panel::Quote, Panel::History];
+
+        let layout = build(area, &LayoutConfig::default(), &[], &open);
+
+        let quote = layout.panel_rect(Panel::Quote).expect("quote is open");
+        let history = layout.panel_rect(Panel::History).expect("history is open");
+        assert_eq!(quote.x + quote.width, area.width);
+        assert_eq!(history.x + history.width, area.width);
+        assert_eq!(
+            layout.hit_test(159, 2),
+            Some(LayoutHit::Panel(Panel::Quote))
+        );
+        assert_eq!(
+            layout.hit_test(159, 20),
+            Some(LayoutHit::Panel(Panel::History))
+        );
+    }
+
+    #[test]
+    fn visible_split_resize_uses_closed_column_group_context() {
+        let area = Rect::new(0, 0, 160, 48);
+        let config = LayoutConfig::default();
+        let open = [Panel::Watchlist, Panel::Quote, Panel::History];
+        let layout = build(area, &config, &[], &open);
+        let watchlist = layout.panel_rect(Panel::Watchlist).unwrap();
+        let x = watchlist.right().saturating_add(10);
+
+        let resized = resize_docked_columns(area, DockedColumnSplit::LeftMain, x, &config, &open);
+
+        assert_eq!(100 - resized.left_ratio - resized.main_ratio, 30);
+        assert!(resized.left_ratio > config.left_ratio);
+        assert!(resized.main_ratio < config.main_ratio);
+    }
+
+    #[test]
+    fn closed_middle_group_exposes_left_right_split() {
+        let area = Rect::new(0, 0, 160, 48);
+        let config = LayoutConfig::default();
+        let open = [Panel::Watchlist, Panel::Evidence, Panel::Research];
+        let layout = build(area, &config, &[], &open);
+        let watchlist = layout.panel_rect(Panel::Watchlist).unwrap();
+
+        assert_eq!(
+            layout.hit_test(watchlist.right(), 2),
+            Some(LayoutHit::DockedSplit(DockedColumnSplit::LeftRight))
+        );
+
+        let resized = resize_docked_columns(
+            area,
+            DockedColumnSplit::LeftRight,
+            watchlist.right().saturating_add(12),
+            &config,
+            &open,
+        );
+        assert_eq!(resized.main_ratio, config.main_ratio);
+        assert!(resized.left_ratio > config.left_ratio);
     }
 
     #[test]
@@ -466,10 +680,17 @@ mod tests {
         let area = Rect::new(0, 0, 160, 48);
         let config = LayoutConfig::default();
 
-        let narrow_left = resize_docked_columns(area, DockedColumnSplit::LeftMain, 4, &config);
+        let narrow_left =
+            resize_docked_columns(area, DockedColumnSplit::LeftMain, 4, &config, &Panel::ALL);
         assert_eq!(narrow_left.left_ratio, 15);
 
-        let wide_main = resize_docked_columns(area, DockedColumnSplit::MainRight, 150, &config);
+        let wide_main = resize_docked_columns(
+            area,
+            DockedColumnSplit::MainRight,
+            150,
+            &config,
+            &Panel::ALL,
+        );
         assert_eq!(wide_main.main_ratio, 56);
         assert!(wide_main.left_ratio + wide_main.main_ratio <= MAX_LEFT_MAIN_RATIO);
     }
@@ -480,7 +701,8 @@ mod tests {
         let config = LayoutConfig::default();
         let initial_right = 100 - config.left_ratio - config.main_ratio;
 
-        let resized = resize_docked_columns(area, DockedColumnSplit::LeftMain, 56, &config);
+        let resized =
+            resize_docked_columns(area, DockedColumnSplit::LeftMain, 56, &config, &Panel::ALL);
 
         assert_eq!(100 - resized.left_ratio - resized.main_ratio, initial_right);
         assert_eq!(resized.left_ratio, 35);
@@ -496,7 +718,8 @@ mod tests {
         };
         let initial_right = 100 - config.left_ratio - config.main_ratio;
 
-        let resized = resize_docked_columns(area, DockedColumnSplit::LeftMain, 56, &config);
+        let resized =
+            resize_docked_columns(area, DockedColumnSplit::LeftMain, 56, &config, &Panel::ALL);
 
         assert_eq!(100 - resized.left_ratio - resized.main_ratio, initial_right);
         assert_eq!(resized.left_ratio, 24);
@@ -512,6 +735,7 @@ mod tests {
                 kind: FloatingKind::Help,
                 z_index: 1,
             }],
+            &Panel::ALL,
         );
         let floating = layout.floating[0];
 
@@ -526,7 +750,13 @@ mod tests {
         let area = Rect::new(0, 0, 1_000, 48);
         let config = LayoutConfig::default();
 
-        let resized = resize_docked_columns(area, DockedColumnSplit::MainRight, 920, &config);
+        let resized = resize_docked_columns(
+            area,
+            DockedColumnSplit::MainRight,
+            920,
+            &config,
+            &Panel::ALL,
+        );
 
         assert_eq!(resized.main_ratio, 56);
     }

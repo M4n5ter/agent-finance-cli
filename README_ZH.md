@@ -177,7 +177,7 @@ agent-finance capabilities
 agent-finance tui --symbols AAPL,CRDO,BTCUSDT
 ```
 
-TUI 是交互式 cockpit，包含 watchlist、quote/sessions、history、crypto evidence、research/Polymarket context、provider health、task log、鼠标聚焦、docked column 拖拽调整和可执行 command palette。Agent 需要结构化数据时，应继续使用 `market ... --json`。
+TUI 是交互式 cockpit，包含 watchlist、quote/sessions、history、crypto evidence、research/Polymarket context、provider health、task log、鼠标聚焦、docked column 拖拽调整、关闭/恢复 panel 控制和可执行 command palette。Agent 需要结构化数据时，应继续使用 `market ... --json`。
 
 ## 签名交易流程
 

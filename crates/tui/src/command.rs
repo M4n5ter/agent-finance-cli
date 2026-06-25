@@ -1,4 +1,4 @@
-use crate::state::{FloatingKind, Panel};
+use crate::model::{FloatingKind, Panel};
 
 #[derive(Debug, Clone, Default, Eq, PartialEq)]
 pub struct CommandPaletteState {
@@ -33,10 +33,13 @@ pub enum CommandEffect {
     OpenFloating(FloatingKind),
     ResetLayout,
     FocusPanel(Panel),
+    TogglePanel(Panel),
+    CloseFocusedPanel,
+    RestorePanels,
     CloseCommandPalette,
 }
 
-pub const COMMANDS: [CommandSpec; 11] = [
+pub const COMMANDS: [CommandSpec; 20] = [
     CommandSpec {
         title: "Open help",
         description: "Show cockpit shortcuts and interaction model",
@@ -51,6 +54,16 @@ pub const COMMANDS: [CommandSpec; 11] = [
         title: "Reset layout",
         description: "Restore default docked columns and close overlays",
         effect: CommandEffect::ResetLayout,
+    },
+    CommandSpec {
+        title: "Close focused panel",
+        description: "Hide the focused docked panel and move focus to another open panel",
+        effect: CommandEffect::CloseFocusedPanel,
+    },
+    CommandSpec {
+        title: "Restore all panels",
+        description: "Reopen every docked panel without changing the current symbol",
+        effect: CommandEffect::RestorePanels,
     },
     CommandSpec {
         title: "Focus watchlist",
@@ -86,6 +99,41 @@ pub const COMMANDS: [CommandSpec; 11] = [
         title: "Focus task log",
         description: "Move keyboard focus to runtime task log",
         effect: CommandEffect::FocusPanel(Panel::TaskLog),
+    },
+    CommandSpec {
+        title: "Toggle watchlist",
+        description: "Show or hide the symbol list panel",
+        effect: CommandEffect::TogglePanel(Panel::Watchlist),
+    },
+    CommandSpec {
+        title: "Toggle quote",
+        description: "Show or hide quote and session summary",
+        effect: CommandEffect::TogglePanel(Panel::Quote),
+    },
+    CommandSpec {
+        title: "Toggle history",
+        description: "Show or hide the historical price chart",
+        effect: CommandEffect::TogglePanel(Panel::History),
+    },
+    CommandSpec {
+        title: "Toggle crypto evidence",
+        description: "Show or hide crypto provider evidence",
+        effect: CommandEffect::TogglePanel(Panel::Evidence),
+    },
+    CommandSpec {
+        title: "Toggle research",
+        description: "Show or hide news and prediction markets",
+        effect: CommandEffect::TogglePanel(Panel::Research),
+    },
+    CommandSpec {
+        title: "Toggle provider health",
+        description: "Show or hide provider capability coverage",
+        effect: CommandEffect::TogglePanel(Panel::ProviderHealth),
+    },
+    CommandSpec {
+        title: "Toggle task log",
+        description: "Show or hide the runtime task log",
+        effect: CommandEffect::TogglePanel(Panel::TaskLog),
     },
     CommandSpec {
         title: "Close command palette",

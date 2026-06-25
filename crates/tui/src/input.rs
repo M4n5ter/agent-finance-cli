@@ -2,7 +2,8 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent,
 use ratatui::layout::Rect;
 
 use crate::layout::{self, DockedColumnSplit, LayoutHit};
-use crate::state::{Action, AppState, FloatingKind, Panel};
+use crate::model::{FloatingKind, Panel};
+use crate::state::{Action, AppState};
 
 #[derive(Debug, Clone, Copy, Default, Eq, PartialEq)]
 pub struct MouseDrag {
@@ -21,6 +22,8 @@ pub fn key_action(state: &AppState, key: KeyEvent) -> Option<Action> {
         KeyCode::Char(':') => Some(Action::ToggleFloating(FloatingKind::CommandPalette)),
         KeyCode::Char('p') => Some(Action::ToggleFloating(FloatingKind::ProviderDetails)),
         KeyCode::Char('r') => Some(Action::ResetLayout),
+        KeyCode::Char('x') => Some(Action::CloseFocusedPanel),
+        KeyCode::Char('0') => Some(Action::RestorePanels),
         KeyCode::Esc => Some(Action::CloseFocusedFloating),
         KeyCode::Char('1') => Some(Action::Focus(Panel::Watchlist)),
         KeyCode::Char('2') => Some(Action::Focus(Panel::Quote)),
@@ -42,7 +45,12 @@ pub fn handle_mouse_event(
 ) {
     match mouse.kind {
         MouseEventKind::Down(MouseButton::Left) => {
-            let layout = layout::build(terminal_area, &state.layout, &state.floating);
+            let layout = layout::build(
+                terminal_area,
+                &state.layout,
+                &state.floating,
+                state.panels.open_panels(),
+            );
             drag.split = None;
             match layout.hit_test(mouse.column, mouse.row) {
                 Some(LayoutHit::Panel(panel)) => state.reduce(Action::Focus(panel)),
@@ -57,6 +65,7 @@ pub fn handle_mouse_event(
                     split,
                     mouse.column,
                     &state.layout,
+                    state.panels.open_panels(),
                 );
                 state.reduce(Action::ResizeDockedColumns {
                     left_ratio: next.left_ratio,
@@ -111,6 +120,14 @@ mod tests {
             key_action(&state, KeyEvent::from(KeyCode::Esc)),
             Some(Action::CloseFocusedFloating)
         );
+        assert_eq!(
+            key_action(&state, KeyEvent::from(KeyCode::Char('x'))),
+            Some(Action::CloseFocusedPanel)
+        );
+        assert_eq!(
+            key_action(&state, KeyEvent::from(KeyCode::Char('0'))),
+            Some(Action::RestorePanels)
+        );
     }
 
     #[test]
@@ -145,7 +162,12 @@ mod tests {
         let area = Rect::new(0, 0, 160, 48);
         let mut state = AppState::from_config(crate::config::TuiConfig::default());
         let mut drag = MouseDrag::default();
-        let layout = layout::build(area, &state.layout, &state.floating);
+        let layout = layout::build(
+            area,
+            &state.layout,
+            &state.floating,
+            state.panels.open_panels(),
+        );
 
         handle_mouse_event(
             area,
@@ -153,7 +175,7 @@ mod tests {
             &mut drag,
             mouse_event(MouseEventKind::Down(MouseButton::Left), 2, 2),
         );
-        assert_eq!(state.focused_panel, Panel::Watchlist);
+        assert_eq!(state.panels.focused(), Panel::Watchlist);
         assert_eq!(drag, MouseDrag::default());
 
         handle_mouse_event(
@@ -162,7 +184,7 @@ mod tests {
             &mut drag,
             mouse_event(
                 MouseEventKind::Down(MouseButton::Left),
-                layout.watchlist.x + layout.watchlist.width,
+                layout.panel_rect(Panel::Watchlist).unwrap().right(),
                 2,
             ),
         );

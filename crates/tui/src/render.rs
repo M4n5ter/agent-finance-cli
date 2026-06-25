@@ -11,10 +11,16 @@ use ratatui::widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Sparkli
 
 use crate::command::COMMANDS;
 use crate::layout::{self, CockpitLayout};
-use crate::state::{AppState, FloatingKind, Panel, TaskLevel};
+use crate::model::{FloatingKind, Panel, TaskLevel};
+use crate::state::AppState;
 
 pub fn render(frame: &mut Frame<'_>, state: &AppState) {
-    let layout = layout::build(frame.area(), &state.layout, &state.floating);
+    let layout = layout::build(
+        frame.area(),
+        &state.layout,
+        &state.floating,
+        state.panels.open_panels(),
+    );
     render_docked(frame, state, &layout);
     render_status(frame, state, layout.status);
     for floating in &layout.floating {
@@ -24,13 +30,20 @@ pub fn render(frame: &mut Frame<'_>, state: &AppState) {
 }
 
 fn render_docked(frame: &mut Frame<'_>, state: &AppState, layout: &CockpitLayout) {
-    render_watchlist(frame, state, layout.panel_rect(Panel::Watchlist));
-    render_quote(frame, state, layout.panel_rect(Panel::Quote));
-    render_history(frame, state, layout.panel_rect(Panel::History));
-    render_evidence(frame, state, layout.panel_rect(Panel::Evidence));
-    render_research(frame, state, layout.panel_rect(Panel::Research));
-    render_provider_health(frame, state, layout.panel_rect(Panel::ProviderHealth));
-    render_task_log(frame, state, layout.panel_rect(Panel::TaskLog));
+    for panel in Panel::ALL {
+        let Some(area) = layout.panel_rect(panel) else {
+            continue;
+        };
+        match panel {
+            Panel::Watchlist => render_watchlist(frame, state, area),
+            Panel::Quote => render_quote(frame, state, area),
+            Panel::History => render_history(frame, state, area),
+            Panel::Evidence => render_evidence(frame, state, area),
+            Panel::Research => render_research(frame, state, area),
+            Panel::ProviderHealth => render_provider_health(frame, state, area),
+            Panel::TaskLog => render_task_log(frame, state, area),
+        }
+    }
 }
 
 fn render_watchlist(frame: &mut Frame<'_>, state: &AppState, area: Rect) {
@@ -506,9 +519,11 @@ fn render_status(frame: &mut Frame<'_>, state: &AppState, area: Rect) {
         .map(|snapshot| snapshot.errors.len())
         .unwrap_or(0);
     let text = format!(
-        " {} | focus: {} | {} | errors: {} | j/k symbol | h help | : command | p providers | q quit ",
+        " {} | focus: {} | panels: {}/{} | {} | errors: {} | j/k symbol | x close | 0 restore | : command | q quit ",
         symbol,
-        state.focused_panel.title(),
+        state.panels.focused().title(),
+        state.panels.open_count(),
+        Panel::ALL.len(),
         if state.scheduler_error.is_some() {
             "scheduler error"
         } else if state.refresh.loading {
@@ -538,6 +553,8 @@ fn render_floating(frame: &mut Frame<'_>, state: &AppState, kind: FloatingKind, 
             Line::from(": open command palette"),
             Line::from("Enter: execute selected command in command palette"),
             Line::from("p inspect provider details"),
+            Line::from("x close focused panel"),
+            Line::from("0 restore all panels"),
             Line::from("r reset layout"),
             Line::from("mouse: focus panels and drag docked column borders"),
             Line::from("q quit"),
@@ -623,7 +640,7 @@ fn command_window(total: usize, selected: usize, capacity: usize) -> Range<usize
 }
 
 fn panel_block(panel: Panel, state: &AppState) -> Block<'static> {
-    let style = if state.focused_panel == panel {
+    let style = if state.panels.focused() == panel {
         Style::default().fg(Color::Cyan)
     } else {
         Style::default().fg(Color::Gray)

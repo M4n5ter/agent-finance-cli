@@ -21,7 +21,7 @@ For an interactive human-facing cockpit, use:
 agent-finance tui --symbols AAPL,CRDO,BTCUSDT
 ```
 
-Prefer structured `market ... --json` commands for agent data collection. The TUI is an interactive cockpit with quote, history, crypto evidence, research/Polymarket context, provider health, task log, mouse focus, docked-column drag resize, and an executable command palette; it is not a machine extraction surface.
+Prefer structured `market ... --json` commands for agent data collection. The TUI is an interactive cockpit with quote, history, crypto evidence, research/Polymarket context, provider health, task log, mouse focus, docked-column drag resize, close/restore panel controls, and an executable command palette; it is not a machine extraction surface.
 
 ## Task Router
 
