@@ -10,6 +10,7 @@ use agent_finance_market::snapshot::MarketSnapshot;
 use crate::command::{CommandEffect, CommandPaletteState};
 use crate::config::{FloatingConfig, LayoutConfig, PanelConfig, TuiConfig};
 use crate::model::{DockedPanels, FloatingKind, FloatingPane, FloatingSize, Panel, TaskLogEntry};
+use crate::task_failure::{TaskFailure, TaskFailureSource, TaskFailures};
 
 #[derive(Debug, Clone)]
 pub struct AppState {
@@ -26,6 +27,7 @@ pub struct AppState {
     pub history: SelectedSymbolLoad<HistorySnapshot>,
     pub evidence: SelectedSymbolLoad<CryptoQuoteEvidenceSnapshot>,
     pub research: SelectedSymbolLoad<ResearchContextSnapshot>,
+    pub task_failures: TaskFailures,
     pub scheduler_error: Option<String>,
 }
 
@@ -45,6 +47,7 @@ impl AppState {
             history: SelectedSymbolLoad::new(),
             evidence: SelectedSymbolLoad::new(),
             research: SelectedSymbolLoad::new(),
+            task_failures: TaskFailures::default(),
             scheduler_error: None,
         }
     }
@@ -113,6 +116,7 @@ impl AppState {
                 snapshot,
             } => {
                 if self.refresh.finish(generation) {
+                    self.task_failures.clear(TaskFailureSource::Quotes, None);
                     if !snapshot.errors.is_empty() {
                         self.push_log(TaskLogEntry::warning(format!(
                             "refresh completed with {} provider errors",
@@ -130,6 +134,7 @@ impl AppState {
             }
             Action::RefreshFailed { generation, error } => {
                 if self.refresh.finish(generation) {
+                    self.task_failures.set(TaskFailure::market(error.clone()));
                     self.push_log(TaskLogEntry::warning(format!(
                         "market refresh failed: {error}"
                     )));
@@ -143,6 +148,11 @@ impl AppState {
                 snapshot,
             } => {
                 if self.history.finish(generation) {
+                    self.task_failures.clear_symbol(
+                        TaskFailureSource::History,
+                        snapshot.requested_symbol.as_str(),
+                        snapshot.symbol.as_str(),
+                    );
                     if !snapshot.errors.is_empty() {
                         self.push_log(TaskLogEntry::warning(format!(
                             "history loaded with {} warnings",
@@ -167,6 +177,8 @@ impl AppState {
                 error,
             } => {
                 if self.history.finish(generation) {
+                    self.task_failures
+                        .set(TaskFailure::history(symbol.clone(), error.clone()));
                     self.push_log(TaskLogEntry::warning(format!(
                         "{symbol} history failed: {error}"
                     )));
@@ -180,6 +192,11 @@ impl AppState {
                 snapshot,
             } => {
                 if self.evidence.finish(generation) {
+                    self.task_failures.clear_symbol(
+                        TaskFailureSource::CryptoEvidence,
+                        snapshot.requested_symbol.as_str(),
+                        snapshot.symbol.as_str(),
+                    );
                     if !snapshot.errors.is_empty() {
                         self.push_log(TaskLogEntry::warning(format!(
                             "crypto evidence loaded with {} warnings",
@@ -204,6 +221,8 @@ impl AppState {
                 error,
             } => {
                 if self.evidence.finish(generation) {
+                    self.task_failures
+                        .set(TaskFailure::evidence(symbol.clone(), error.clone()));
                     self.push_log(TaskLogEntry::warning(format!(
                         "{symbol} crypto evidence failed: {error}"
                     )));
@@ -241,6 +260,8 @@ impl AppState {
                 self.evidence.stop();
                 self.research.stop();
                 self.scheduler_error = Some(error.clone());
+                self.task_failures
+                    .set(TaskFailure::scheduler(error.clone()));
                 self.push_log(TaskLogEntry::warning(format!("scheduler failed: {error}")));
             }
             Action::Log(message) => self.push_log(TaskLogEntry::info(message)),

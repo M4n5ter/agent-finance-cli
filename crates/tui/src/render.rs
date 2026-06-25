@@ -1,6 +1,7 @@
 use agent_finance_market::crypto_evidence_snapshot::CryptoQuoteEvidenceSnapshot;
 use agent_finance_market::research_snapshot::{PredictionMarketSnapshot, ResearchContextSnapshot};
 use agent_finance_market::snapshot::QuoteSnapshot;
+use std::cmp::Reverse;
 use std::ops::Range;
 
 use ratatui::Frame;
@@ -12,6 +13,9 @@ use ratatui::widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Sparkli
 use crate::command::COMMANDS;
 use crate::layout::{self, CockpitLayout};
 use crate::model::{FloatingKind, Panel, TaskLevel};
+use crate::provider_health::{
+    ProviderHealthProvider, ProviderHealthReport, ProviderHealthSeverity, ProviderHealthTask,
+};
 use crate::state::AppState;
 
 pub fn render(frame: &mut Frame<'_>, state: &AppState) {
@@ -317,22 +321,125 @@ fn render_polymarket(frame: &mut Frame<'_>, state: &AppState, area: Rect) {
 }
 
 fn render_provider_health(frame: &mut Frame<'_>, state: &AppState, area: Rect) {
-    let items = state
-        .provider_profiles
-        .iter()
-        .take(8)
-        .map(|profile| {
-            ListItem::new(Line::from(vec![
-                Span::styled(profile.provider.clone(), Style::default().fg(Color::Green)),
-                Span::raw(" "),
-                Span::raw(profile.best_for.clone()),
-            ]))
-        })
-        .collect::<Vec<_>>();
+    let report = ProviderHealthReport::from_state(state);
+    let items = if report.is_empty() {
+        state
+            .provider_profiles
+            .iter()
+            .take(8)
+            .map(|profile| {
+                ListItem::new(Line::from(vec![
+                    Span::styled(
+                        profile.provider.clone(),
+                        Style::default().fg(Color::DarkGray),
+                    ),
+                    Span::raw(" capability "),
+                    Span::raw(profile.best_for.clone()),
+                ]))
+            })
+            .collect::<Vec<_>>()
+    } else {
+        provider_health_items(report, area.height.saturating_sub(2) as usize)
+    };
     frame.render_widget(
-        List::new(items).block(simple_block(Panel::ProviderHealth.title())),
+        List::new(items).block(panel_block(Panel::ProviderHealth, state)),
         area,
     );
+}
+
+fn provider_health_items(report: ProviderHealthReport, limit: usize) -> Vec<ListItem<'static>> {
+    let mut rows = report
+        .providers
+        .into_iter()
+        .map(ProviderHealthRow::Provider)
+        .chain(report.tasks.into_iter().map(ProviderHealthRow::Task))
+        .collect::<Vec<_>>();
+    rows.sort_by_key(|row| {
+        (
+            Reverse(row.severity()),
+            Reverse(row.is_task()),
+            row.label().to_string(),
+        )
+    });
+    rows.into_iter()
+        .map(provider_health_row_item)
+        .take(limit)
+        .collect()
+}
+
+enum ProviderHealthRow {
+    Provider(ProviderHealthProvider),
+    Task(ProviderHealthTask),
+}
+
+impl ProviderHealthRow {
+    fn severity(&self) -> ProviderHealthSeverity {
+        match self {
+            Self::Provider(provider) => provider.severity,
+            Self::Task(task) => task.status,
+        }
+    }
+
+    fn is_task(&self) -> bool {
+        matches!(self, Self::Task(_))
+    }
+
+    fn label(&self) -> &str {
+        match self {
+            Self::Provider(provider) => provider.provider.as_str(),
+            Self::Task(task) => task.source.label(),
+        }
+    }
+}
+
+fn provider_health_row_item(row: ProviderHealthRow) -> ListItem<'static> {
+    match row {
+        ProviderHealthRow::Provider(provider) => provider_health_provider_item(provider),
+        ProviderHealthRow::Task(task) => provider_health_task_item(task),
+    }
+}
+
+fn provider_health_provider_item(provider: ProviderHealthProvider) -> ListItem<'static> {
+    let (marker, style) = provider_health_marker(provider.severity);
+    let freshness = provider
+        .freshness
+        .as_deref()
+        .map(|value| format!(" @ {value}"))
+        .unwrap_or_default();
+    let detail = provider
+        .signals
+        .iter()
+        .take(2)
+        .map(|signal| format!("{}={}", signal.source.label(), signal.detail))
+        .collect::<Vec<_>>()
+        .join("; ");
+    ListItem::new(Line::from(vec![
+        Span::styled(marker, style),
+        Span::raw(" "),
+        Span::styled(provider.provider, style),
+        Span::raw(" "),
+        Span::raw(detail),
+        Span::styled(freshness, Style::default().fg(Color::DarkGray)),
+    ]))
+}
+
+fn provider_health_task_item(task: ProviderHealthTask) -> ListItem<'static> {
+    let (marker, style) = provider_health_marker(task.status);
+    ListItem::new(Line::from(vec![
+        Span::styled(marker, style),
+        Span::raw(" task "),
+        Span::styled(task.source.label(), style),
+        Span::raw(" "),
+        Span::raw(task.detail),
+    ]))
+}
+
+fn provider_health_marker(status: ProviderHealthSeverity) -> (&'static str, Style) {
+    match status {
+        ProviderHealthSeverity::Ok => ("ok", Style::default().fg(Color::Green)),
+        ProviderHealthSeverity::Warning => ("warn", Style::default().fg(Color::Yellow)),
+        ProviderHealthSeverity::Loading => ("load", Style::default().fg(Color::Cyan)),
+    }
 }
 
 fn render_task_log(frame: &mut Frame<'_>, state: &AppState, area: Rect) {
@@ -764,6 +871,7 @@ fn simple_block(title: &'static str) -> Block<'static> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::provider_health::{ProviderHealthSignal, ProviderHealthSource, ProviderHealthTask};
     use agent_finance_market::research_snapshot::ResearchNewsSnapshot;
 
     #[test]
@@ -778,6 +886,34 @@ mod tests {
         assert_eq!(command_window(11, 6, 7), 0..7);
         assert_eq!(command_window(11, 10, 7), 4..11);
         assert_eq!(command_window(11, 10, 0), 0..0);
+    }
+
+    #[test]
+    fn provider_health_items_prioritize_actionable_tasks_before_ok_providers() {
+        let report = ProviderHealthReport {
+            providers: vec![ProviderHealthProvider {
+                provider: "yahoo".to_string(),
+                severity: ProviderHealthSeverity::Ok,
+                signals: vec![ProviderHealthSignal {
+                    source: ProviderHealthSource::Quotes,
+                    status: ProviderHealthSeverity::Ok,
+                    detail: "1 priced quotes".to_string(),
+                }],
+                freshness: None,
+            }],
+            tasks: vec![ProviderHealthTask {
+                source: ProviderHealthSource::History,
+                status: ProviderHealthSeverity::Warning,
+                detail: "timeout".to_string(),
+            }],
+        };
+
+        let items = provider_health_items(report, 1);
+        let item = format!("{:?}", items[0]);
+
+        assert_eq!(items.len(), 1);
+        assert!(item.contains("history"));
+        assert!(!item.contains("yahoo"));
     }
 
     #[test]
