@@ -9,6 +9,7 @@ description = "Interactive terminal cockpit for agent-finance public market data
 [dependencies]
 agent-finance-market.workspace = true
 agent-finance-core.workspace = true
+agent-finance-trading.workspace = true
 anyhow.workspace = true
 crossterm.workspace = true
 ratatui.workspace = true

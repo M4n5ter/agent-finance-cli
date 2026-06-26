@@ -6,6 +6,7 @@ use agent_finance_market::research_snapshot::ResearchContextSnapshot;
 use agent_finance_market::service;
 use agent_finance_market::snapshot::MarketSnapshot;
 
+use crate::account::AccountSnapshot;
 use crate::command::{ActionId, CommandPaletteState};
 use crate::config::{FloatingConfig, LayoutConfig, PanelConfig, TuiConfig, WorkspaceConfig};
 use crate::keymap::KeymapConfig;
@@ -47,6 +48,8 @@ pub struct AppState {
     pub history: SelectedSymbolLoad<HistorySnapshot>,
     pub evidence: SelectedSymbolLoad<CryptoQuoteEvidenceSnapshot>,
     pub research: SelectedSymbolLoad<ResearchContextSnapshot>,
+    account: LoadSlot<String>,
+    pub account_snapshot: Option<AccountSnapshot>,
     pub task_failures: TaskFailures,
     pub scheduler_error: Option<String>,
     pub theme: ThemeConfig,
@@ -75,6 +78,8 @@ impl AppState {
             history: SelectedSymbolLoad::new(),
             evidence: SelectedSymbolLoad::new(),
             research: SelectedSymbolLoad::new(),
+            account: LoadSlot::new(),
+            account_snapshot: None,
             task_failures: TaskFailures::default(),
             scheduler_error: None,
             theme: config.theme,
@@ -114,6 +119,10 @@ impl AppState {
 
     pub fn refresh_loading(&self) -> bool {
         self.refresh.loading()
+    }
+
+    pub fn account_loading(&self) -> bool {
+        self.account.loading()
     }
 
     pub fn write_session_views(&self) -> Vec<WriteSessionView> {
@@ -224,6 +233,19 @@ impl AppState {
                 generation,
                 snapshot,
             } => self.research_loaded(generation, snapshot),
+            Action::AccountStarted {
+                generation,
+                profile,
+            } => self.account_started(generation, profile),
+            Action::AccountLoaded {
+                generation,
+                snapshot,
+            } => self.account_loaded(generation, snapshot),
+            Action::AccountFailed {
+                generation,
+                profile,
+                error,
+            } => self.account_failed(generation, profile, error),
             Action::SchedulerFailed(error) => self.scheduler_failed(error),
             Action::SetDefaultSubmitMode(mode) => {
                 self.default_submit_mode = mode;
@@ -333,6 +355,19 @@ pub enum Action {
     ResearchLoaded {
         generation: u64,
         snapshot: ResearchContextSnapshot,
+    },
+    AccountStarted {
+        generation: u64,
+        profile: String,
+    },
+    AccountLoaded {
+        generation: u64,
+        snapshot: AccountSnapshot,
+    },
+    AccountFailed {
+        generation: u64,
+        profile: String,
+        error: String,
     },
     SchedulerFailed(String),
     #[cfg_attr(

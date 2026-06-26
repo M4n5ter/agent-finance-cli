@@ -7,14 +7,18 @@ use std::str::FromStr;
 pub enum WorkspaceKind {
     #[default]
     Overview,
+    Trade,
+    Account,
     Research,
     Crypto,
     Providers,
 }
 
 impl WorkspaceKind {
-    pub const ALL: [Self; 4] = [
+    pub const ALL: [Self; 6] = [
         Self::Overview,
+        Self::Trade,
+        Self::Account,
         Self::Research,
         Self::Crypto,
         Self::Providers,
@@ -23,6 +27,8 @@ impl WorkspaceKind {
     pub const fn title(self) -> &'static str {
         match self {
             Self::Overview => "Overview",
+            Self::Trade => "Trade",
+            Self::Account => "Account",
             Self::Research => "Research",
             Self::Crypto => "Crypto",
             Self::Providers => "Providers",
@@ -37,6 +43,20 @@ impl WorkspaceKind {
                 Panel::History,
                 Panel::ProviderHealth,
                 Panel::TaskLog,
+            ],
+            Self::Trade => &[
+                Panel::Watchlist,
+                Panel::Quote,
+                Panel::Account,
+                Panel::TaskLog,
+                Panel::ProviderHealth,
+            ],
+            Self::Account => &[
+                Panel::Account,
+                Panel::ProviderHealth,
+                Panel::TaskLog,
+                Panel::Watchlist,
+                Panel::Quote,
             ],
             Self::Research => &[
                 Panel::Watchlist,
@@ -77,6 +97,8 @@ impl WorkspaceKind {
     pub const fn label(self) -> &'static str {
         match self {
             Self::Overview => "overview",
+            Self::Trade => "trade",
+            Self::Account => "account",
             Self::Research => "research",
             Self::Crypto => "crypto",
             Self::Providers => "providers",
@@ -84,7 +106,14 @@ impl WorkspaceKind {
     }
 
     pub const fn labels() -> &'static [&'static str] {
-        &["overview", "research", "crypto", "providers"]
+        &[
+            "overview",
+            "trade",
+            "account",
+            "research",
+            "crypto",
+            "providers",
+        ]
     }
 }
 
@@ -100,6 +129,8 @@ impl FromStr for WorkspaceKind {
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         match value.trim().to_ascii_lowercase().as_str() {
             "overview" => Ok(Self::Overview),
+            "trade" => Ok(Self::Trade),
+            "account" => Ok(Self::Account),
             "research" => Ok(Self::Research),
             "crypto" => Ok(Self::Crypto),
             "providers" => Ok(Self::Providers),
@@ -136,6 +167,7 @@ impl InteractionMode {
 pub enum Panel {
     Watchlist,
     Quote,
+    Account,
     History,
     Evidence,
     Polymarket,
@@ -145,9 +177,10 @@ pub enum Panel {
 }
 
 impl Panel {
-    pub const ALL: [Self; 8] = [
+    pub const ALL: [Self; 9] = [
         Self::Watchlist,
         Self::Quote,
+        Self::Account,
         Self::History,
         Self::Evidence,
         Self::Polymarket,
@@ -160,6 +193,7 @@ impl Panel {
         match self {
             Self::Watchlist => "Watchlist",
             Self::Quote => "Quote / Sessions",
+            Self::Account => "Account",
             Self::History => "History Chart",
             Self::Evidence => "Crypto Evidence",
             Self::Polymarket => "Polymarket",
@@ -173,12 +207,13 @@ impl Panel {
         match self {
             Self::Watchlist => 0,
             Self::Quote => 1,
-            Self::History => 2,
-            Self::Evidence => 3,
-            Self::Polymarket => 4,
-            Self::Research => 5,
-            Self::ProviderHealth => 6,
-            Self::TaskLog => 7,
+            Self::Account => 2,
+            Self::History => 3,
+            Self::Evidence => 4,
+            Self::Polymarket => 5,
+            Self::Research => 6,
+            Self::ProviderHealth => 7,
+            Self::TaskLog => 8,
         }
     }
 }

@@ -102,6 +102,7 @@ version = "0.3.2"
 dependencies = [
  "agent-finance-core",
  "agent-finance-market",
+ "agent-finance-trading",
  "anyhow",
  "crossterm",
  "insta",

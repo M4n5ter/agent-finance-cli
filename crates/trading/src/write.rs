@@ -2,14 +2,28 @@ use anyhow::{Result, anyhow};
 use chrono::Utc;
 use serde_json::json;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct TradingRuntime {
     timeout_seconds: u64,
+    proxy: Option<String>,
+    no_proxy: bool,
 }
 
 impl TradingRuntime {
     pub const fn new(timeout_seconds: u64) -> Self {
-        Self { timeout_seconds }
+        Self {
+            timeout_seconds,
+            proxy: None,
+            no_proxy: false,
+        }
+    }
+
+    pub fn with_http_policy(timeout_seconds: u64, proxy: Option<String>, no_proxy: bool) -> Self {
+        Self {
+            timeout_seconds,
+            proxy,
+            no_proxy,
+        }
     }
 
     pub fn load_profile(&self, name: &str) -> Result<agent_finance_core::Profile> {
@@ -20,7 +34,7 @@ impl TradingRuntime {
         &self,
         profile: &agent_finance_core::Profile,
     ) -> Result<serde_json::Value> {
-        binance_client(profile, self.timeout_seconds)?
+        binance_client_with_policy(profile, self.http_policy())?
             .account_permissions()
             .await
     }
@@ -30,7 +44,7 @@ impl TradingRuntime {
         profile: &agent_finance_core::Profile,
         request: agent_finance_core::SignedReadRequest,
     ) -> Result<agent_finance_core::SignedReadSnapshot> {
-        crate::signed_read::run_signed_read(profile, request, self.timeout_seconds).await
+        crate::signed_read::run_signed_read(profile, request, self.http_policy()).await
     }
 
     pub async fn submit_order_intent(
@@ -101,18 +115,38 @@ impl TradingRuntime {
     }
 }
 
+impl TradingRuntime {
+    fn http_policy(&self) -> agent_finance_binance::BinanceHttpPolicy {
+        agent_finance_binance::BinanceHttpPolicy::new(
+            self.timeout_seconds,
+            self.proxy.as_deref(),
+            self.no_proxy,
+        )
+    }
+}
+
 pub(crate) fn binance_client(
     profile: &agent_finance_core::Profile,
     timeout_seconds: u64,
+) -> Result<agent_finance_binance::BinanceClient> {
+    binance_client_with_policy(
+        profile,
+        agent_finance_binance::BinanceHttpPolicy::new(timeout_seconds, None, false),
+    )
+}
+
+pub(crate) fn binance_client_with_policy(
+    profile: &agent_finance_core::Profile,
+    policy: agent_finance_binance::BinanceHttpPolicy,
 ) -> Result<agent_finance_binance::BinanceClient> {
     let credentials = agent_finance_binance::BinanceCredentials::from_env(
         &profile.provider.api_key_env,
         &profile.provider.api_secret_env,
     )?;
-    agent_finance_binance::BinanceClient::new(
+    agent_finance_binance::BinanceClient::with_http_policy(
         credentials,
         binance_endpoints(profile),
-        timeout_seconds,
+        policy,
     )
 }
 

@@ -8,6 +8,7 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Cell, List, ListItem, Paragraph, Row, Table, Wrap};
 
+use crate::account::ACCOUNT_READ_PLAN;
 use crate::layout::CockpitLayout;
 use crate::model::Panel;
 use crate::provider_health::ProviderHealthReport;
@@ -27,6 +28,7 @@ pub(super) fn render_docked(frame: &mut Frame<'_>, state: &AppState, layout: &Co
         match panel {
             Panel::Watchlist => render_watchlist(frame, state, area),
             Panel::Quote => render_quote(frame, state, area),
+            Panel::Account => render_account(frame, state, area),
             Panel::History => render_history(frame, state, area),
             Panel::Evidence => render_evidence(frame, state, area),
             Panel::Polymarket => render_polymarket(frame, state, area),
@@ -35,6 +37,67 @@ pub(super) fn render_docked(frame: &mut Frame<'_>, state: &AppState, layout: &Co
             Panel::TaskLog => render_task_log(frame, state, area),
         }
     }
+}
+
+fn render_account(frame: &mut Frame<'_>, state: &AppState, area: Rect) {
+    let mut lines = Vec::new();
+    if let Some(profile) = state.trading_profile.as_deref() {
+        lines.push(Line::from(vec![
+            Span::styled(
+                profile.to_string(),
+                state.theme.accent_style().add_modifier(Modifier::BOLD),
+            ),
+            Span::raw(if state.account_loading() {
+                " account loading..."
+            } else {
+                " account"
+            }),
+        ]));
+    } else {
+        lines.push(Line::from("No trading profile selected."));
+    }
+
+    match state.account_snapshot.as_ref() {
+        Some(snapshot) => {
+            lines.push(Line::from(format!(
+                "provider: {}  environment: {}",
+                snapshot.provider, snapshot.environment
+            )));
+            lines.push(Line::from(format!(
+                "signed reads: {} ok / {} warning",
+                snapshot.reads.len(),
+                snapshot.errors.len()
+            )));
+            for plan in ACCOUNT_READ_PLAN {
+                let kind = plan.kind();
+                let label = if snapshot.read(kind).is_some() {
+                    "ok"
+                } else {
+                    "missing"
+                };
+                lines.push(Line::from(format!("{kind}: {label}")));
+            }
+            for error in snapshot.errors.iter().take(2) {
+                lines.push(Line::from(Span::styled(
+                    format!("{} warning: {}", error.kind, compact_text(&error.error, 96)),
+                    state.theme.warning_style(),
+                )));
+            }
+        }
+        None if state.trading_profile.is_some() => lines.push(Line::from(
+            "No account snapshot loaded yet. Waiting for signed read.",
+        )),
+        None => lines.push(Line::from(
+            "Start the TUI with --profile <name> to enable signed account reads.",
+        )),
+    }
+
+    frame.render_widget(
+        Paragraph::new(lines)
+            .block(panel_block(Panel::Account, state))
+            .wrap(Wrap { trim: true }),
+        area,
+    );
 }
 
 fn render_watchlist(frame: &mut Frame<'_>, state: &AppState, area: Rect) {

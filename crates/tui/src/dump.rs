@@ -1,6 +1,7 @@
 use agent_finance_core::submit::SubmitMode;
 use serde::Serialize;
 
+use crate::account::AccountSnapshot;
 use crate::hints;
 use crate::model::{InteractionMode, Panel, WorkspaceKind};
 use crate::pane_status::{TuiPaneStatus, pane_health};
@@ -18,6 +19,7 @@ pub struct TuiDump {
     pub tasks: Vec<ProviderHealthTask>,
     pub default_submit_mode: SubmitMode,
     pub trading_profile: Option<String>,
+    pub account: Option<AccountSnapshot>,
     pub write_sessions: Vec<WriteSessionView>,
     pub errors: Vec<String>,
     pub key_hints: Vec<String>,
@@ -49,6 +51,7 @@ impl TuiDump {
             tasks: provider_health.tasks.clone(),
             default_submit_mode: state.default_submit_mode,
             trading_profile: state.trading_profile.clone(),
+            account: state.account_snapshot.clone(),
             write_sessions: state.write_session_views(),
             errors: dump_errors(state),
             provider_health,
@@ -84,6 +87,14 @@ fn dump_errors(state: &AppState) -> Vec<String> {
             .iter()
             .map(|failure| failure.error.clone()),
     );
+    if let Some(account) = state.account_snapshot.as_ref() {
+        errors.extend(
+            account
+                .errors
+                .iter()
+                .map(|error| format!("{} account read warning: {}", error.kind, error.error)),
+        );
+    }
     errors
 }
 
@@ -95,6 +106,7 @@ mod tests {
     use crate::model::FloatingKind;
     use crate::state::{Action, WriteSessionEvent, WriteSessionRequest};
     use agent_finance_core::submit::{SubmitIntentKind, SubmitMode};
+    use agent_finance_core::{Environment, Provider, SignedReadSnapshot};
 
     #[test]
     fn dump_marks_only_workspace_panels_visible() {
@@ -266,5 +278,100 @@ mod tests {
         assert_eq!(value["write_sessions"][0]["mode"], "live");
         assert_eq!(value["write_sessions"][0]["intent_id"], "intent-1");
         assert_eq!(value["write_sessions"][0]["intent_status"], "submitted");
+    }
+
+    #[test]
+    fn dump_exposes_signed_account_snapshot_for_agents() {
+        let mut state = AppState::from_config(TuiConfig {
+            trading: crate::config::TradingConfig {
+                default_profile: Some("mainnet".to_string()),
+            },
+            ..TuiConfig::default()
+        });
+        state.reduce(Action::AccountStarted {
+            generation: 1,
+            profile: "mainnet".to_string(),
+        });
+        state.reduce(Action::AccountLoaded {
+            generation: 1,
+            snapshot: account_snapshot("mainnet"),
+        });
+
+        let value = serde_json::to_value(TuiDump::from_state(&state, true)).expect("serialize");
+
+        assert_eq!(value["account"]["profile"], "mainnet");
+        assert_eq!(value["account"]["provider"], "binance");
+        assert_eq!(value["account"]["environment"], "live");
+        assert_eq!(value["account"]["reads"][0]["kind"], "api-permissions");
+    }
+
+    #[test]
+    fn dump_surfaces_partial_account_read_warnings() {
+        let mut state = AppState::from_config(TuiConfig {
+            workspace: WorkspaceConfig {
+                current: WorkspaceKind::Account,
+            },
+            trading: crate::config::TradingConfig {
+                default_profile: Some("testnet".to_string()),
+            },
+            ..TuiConfig::default()
+        });
+        let mut snapshot = account_snapshot("testnet");
+        snapshot.reads.pop();
+        snapshot.errors.push(AccountReadError::new(
+            agent_finance_core::SignedReadSnapshotKind::UsdsFuturesPositions,
+            "futures account timeout",
+        ));
+        state.reduce(Action::AccountStarted {
+            generation: 1,
+            profile: "testnet".to_string(),
+        });
+        state.reduce(Action::AccountLoaded {
+            generation: 1,
+            snapshot,
+        });
+
+        let value = serde_json::to_value(TuiDump::from_state(&state, false)).expect("serialize");
+
+        assert!(
+            value["errors"]
+                .as_array()
+                .expect("errors")
+                .iter()
+                .any(|error| error.as_str().is_some_and(|text| {
+                    text.contains("usds-futures-positions account read warning")
+                        && text.contains("futures account timeout")
+                }))
+        );
+        assert!(
+            value["panes"]
+                .as_array()
+                .expect("panes")
+                .iter()
+                .any(|pane| pane["panel"] == "account" && pane["status"] == "stale")
+        );
+    }
+
+    use crate::AccountReadError;
+
+    fn account_snapshot(profile: &str) -> AccountSnapshot {
+        AccountSnapshot::new(
+            profile.to_string(),
+            Provider::Binance,
+            Environment::Live,
+            crate::account::ACCOUNT_READ_PLAN
+                .into_iter()
+                .map(|plan| {
+                    SignedReadSnapshot::new(
+                        profile.to_string(),
+                        Provider::Binance,
+                        Environment::Live,
+                        plan.request(),
+                        serde_json::json!({ "ok": true }),
+                    )
+                })
+                .collect(),
+            Vec::new(),
+        )
     }
 }

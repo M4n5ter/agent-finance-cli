@@ -64,6 +64,7 @@ pub enum ProviderHealthSource {
     Quotes,
     History,
     CryptoEvidence,
+    Account,
     News,
     PredictionMarkets,
     Scheduler,
@@ -75,6 +76,7 @@ impl ProviderHealthSource {
             Self::Quotes => "quotes",
             Self::History => "history",
             Self::CryptoEvidence => "crypto",
+            Self::Account => "account",
             Self::News => "news",
             Self::PredictionMarkets => "predictions",
             Self::Scheduler => "scheduler",
@@ -260,12 +262,18 @@ impl ProviderHealthBuilder {
     fn add_task_failures(&mut self, state: &AppState) {
         let selected_symbol = state.selected_symbol();
         for failure in state.task_failures.iter() {
-            if let Some(symbol) = failure.symbol.as_deref()
-                && selected_symbol != Some(symbol)
-            {
+            if !failure.scope.selected_symbol_matches(selected_symbol) {
                 continue;
             }
             self.task_warning(failure_source(failure.source), failure.error.clone());
+        }
+        if let Some(account) = state.account_snapshot.as_ref() {
+            for error in &account.errors {
+                self.task_warning(
+                    ProviderHealthSource::Account,
+                    format!("{}: {}", error.kind, error.error),
+                );
+            }
         }
     }
 
@@ -285,6 +293,9 @@ impl ProviderHealthBuilder {
                 ProviderHealthSource::PredictionMarkets,
                 "research load in flight",
             );
+        }
+        if state.account_loading() {
+            self.task_loading(ProviderHealthSource::Account, "account load in flight");
         }
     }
 
@@ -359,6 +370,7 @@ fn failure_source(source: TaskFailureSource) -> ProviderHealthSource {
         TaskFailureSource::Quotes => ProviderHealthSource::Quotes,
         TaskFailureSource::History => ProviderHealthSource::History,
         TaskFailureSource::CryptoEvidence => ProviderHealthSource::CryptoEvidence,
+        TaskFailureSource::Account => ProviderHealthSource::Account,
         TaskFailureSource::Scheduler => ProviderHealthSource::Scheduler,
     }
 }

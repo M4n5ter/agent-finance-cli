@@ -274,10 +274,22 @@ impl Default for PanelConfig {
 
 impl PanelConfig {
     pub fn normalize(&mut self) {
+        add_new_panels_to_legacy_default(&mut self.open);
         let (open, focused) =
             DockedPanels::from_open_focused(self.open.clone(), self.focused).into_parts();
         self.open = open;
         self.focused = focused;
+    }
+}
+
+fn add_new_panels_to_legacy_default(open: &mut Vec<Panel>) {
+    let legacy_default = Panel::ALL
+        .iter()
+        .copied()
+        .filter(|panel| *panel != Panel::Account)
+        .all(|panel| open.contains(&panel));
+    if legacy_default && !open.contains(&Panel::Account) {
+        open.push(Panel::Account);
     }
 }
 
@@ -679,6 +691,24 @@ mod tests {
         assert!(encoded.contains("default_profile = \"mainnet\""));
         assert!(encoded.contains("[theme]"));
         assert!(!encoded.contains("[keymap]"));
+    }
+
+    #[test]
+    fn legacy_default_panel_config_gains_new_account_panel() {
+        let mut config = TuiConfig {
+            panels: PanelConfig {
+                open: Panel::ALL
+                    .into_iter()
+                    .filter(|panel| *panel != Panel::Account)
+                    .collect(),
+                focused: Panel::Watchlist,
+            },
+            ..TuiConfig::default()
+        };
+
+        config.normalize();
+
+        assert!(config.panels.open.contains(&Panel::Account));
     }
 
     #[test]

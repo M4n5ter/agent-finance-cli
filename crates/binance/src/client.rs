@@ -1,3 +1,4 @@
+use std::fmt;
 use std::time::Duration;
 
 use agent_finance_core::{
@@ -9,7 +10,7 @@ use chrono::Utc;
 use serde::Serialize;
 use serde_json::Value;
 use url::Url;
-use wreq::Client;
+use wreq::{Client, Proxy};
 
 use crate::exchange_rules::{ExchangeRuleCheck, check_order_exchange_rules};
 use crate::futures_state;
@@ -248,8 +249,28 @@ impl BinanceClient {
         endpoints: BinanceEndpoints,
         timeout_seconds: u64,
     ) -> Result<Self> {
-        let http = Client::builder()
-            .timeout(Duration::from_secs(timeout_seconds))
+        Self::with_http_policy(
+            credentials,
+            endpoints,
+            BinanceHttpPolicy::new(timeout_seconds, None, false),
+        )
+    }
+
+    pub fn with_http_policy(
+        credentials: BinanceCredentials,
+        endpoints: BinanceEndpoints,
+        policy: BinanceHttpPolicy,
+    ) -> Result<Self> {
+        let mut builder = Client::builder().timeout(Duration::from_secs(policy.timeout_seconds));
+        if let Some(proxy) = policy.selected_proxy() {
+            let redacted = redacted_url(&proxy);
+            builder = builder.proxy(
+                Proxy::all(&proxy).with_context(|| format!("invalid proxy URL: {redacted}"))?,
+            );
+        } else if policy.no_proxy {
+            builder = builder.no_proxy();
+        }
+        let http = builder
             .build()
             .context("failed to build Binance HTTP client")?;
         endpoints.validate_signed_hosts()?;
@@ -512,6 +533,60 @@ impl BinanceClient {
             .context("Binance public request failed")?;
         decode_response(response).await
     }
+}
+
+#[derive(Clone, Eq, PartialEq)]
+pub struct BinanceHttpPolicy {
+    timeout_seconds: u64,
+    proxy: Option<String>,
+    no_proxy: bool,
+}
+
+impl fmt::Debug for BinanceHttpPolicy {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("BinanceHttpPolicy")
+            .field("timeout_seconds", &self.timeout_seconds)
+            .field(
+                "proxy",
+                &self.proxy.as_ref().map(|proxy| redacted_url(proxy)),
+            )
+            .field("no_proxy", &self.no_proxy)
+            .finish()
+    }
+}
+
+impl BinanceHttpPolicy {
+    pub fn new(timeout_seconds: u64, proxy: Option<&str>, no_proxy: bool) -> Self {
+        Self {
+            timeout_seconds,
+            proxy: proxy.map(ToString::to_string),
+            no_proxy,
+        }
+    }
+
+    fn selected_proxy(&self) -> Option<String> {
+        if self.no_proxy {
+            return None;
+        }
+        self.proxy
+            .clone()
+            .or_else(|| std::env::var("AGENT_FINANCE_PROXY").ok())
+            .or_else(|| std::env::var("ALL_PROXY").ok())
+            .or_else(|| std::env::var("HTTPS_PROXY").ok())
+            .or_else(|| std::env::var("HTTP_PROXY").ok())
+    }
+}
+
+fn redacted_url(value: &str) -> String {
+    let Ok(mut url) = Url::parse(value) else {
+        return "<invalid-url>".to_string();
+    };
+    if url.password().is_some() || !url.username().is_empty() {
+        let _ = url.set_username("<redacted>");
+        let _ = url.set_password(None);
+    }
+    url.to_string()
 }
 
 async fn decode_response(response: wreq::Response) -> Result<Value> {
@@ -1005,6 +1080,32 @@ mod tests {
         assert!(
             format!("{error:#}").contains("Binance spot"),
             "unexpected error: {error:#}"
+        );
+    }
+
+    #[test]
+    fn http_policy_honors_explicit_proxy_and_no_proxy_override() {
+        let proxy = BinanceHttpPolicy::new(10, Some("http://127.0.0.1:7890"), false);
+        let no_proxy = BinanceHttpPolicy::new(10, Some("http://127.0.0.1:7890"), true);
+
+        assert_eq!(
+            proxy.selected_proxy().as_deref(),
+            Some("http://127.0.0.1:7890")
+        );
+        assert_eq!(no_proxy.selected_proxy(), None);
+    }
+
+    #[test]
+    fn http_policy_debug_and_proxy_errors_do_not_expose_userinfo() {
+        let policy = BinanceHttpPolicy::new(10, Some("http://user:secret@127.0.0.1:7890"), false);
+        let debug = format!("{policy:?}");
+
+        assert!(!debug.contains("user"));
+        assert!(!debug.contains("secret"));
+        assert!(debug.contains("redacted"));
+        assert_eq!(
+            redacted_url("http://user:secret@127.0.0.1:7890/path"),
+            "http://%3Credacted%3E@127.0.0.1:7890/path"
         );
     }
 }

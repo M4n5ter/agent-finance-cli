@@ -242,7 +242,7 @@ fn active_docked_groups(config: &LayoutConfig, open_panels: &[Panel]) -> Vec<(Do
         (
             DockedGroup::Middle,
             config.main_ratio,
-            &[Panel::Quote, Panel::History][..],
+            &[Panel::Account, Panel::Quote, Panel::History][..],
         ),
         (
             DockedGroup::Right,
@@ -385,6 +385,20 @@ impl PanelRects {
 }
 
 fn assign_middle_column(rects: &mut PanelRects, area: Rect, open_panels: &[Panel]) {
+    if open_panels.contains(&Panel::Account) {
+        assign_weighted_column(
+            rects,
+            area,
+            &[
+                (Panel::Account, 55),
+                (Panel::Quote, 20),
+                (Panel::History, 25),
+            ],
+            open_panels,
+        );
+        return;
+    }
+
     match (
         open_panels.contains(&Panel::Quote),
         open_panels.contains(&Panel::History),
@@ -669,7 +683,8 @@ mod tests {
         let layout = build(area, &config, &[], &Panel::ALL);
 
         assert_eq!(layout.panel_at(2, 2), Some(Panel::Watchlist));
-        assert_eq!(layout.panel_at(80, 2), Some(Panel::Quote));
+        assert_eq!(layout.panel_at(80, 2), Some(Panel::Account));
+        assert_eq!(layout.panel_at(80, 30), Some(Panel::Quote));
         assert_eq!(layout.panel_at(150, 36), Some(Panel::Research));
         assert_eq!(layout.panel_at(150, 22), Some(Panel::Polymarket));
 

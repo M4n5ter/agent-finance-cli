@@ -398,7 +398,7 @@ pub struct CancelIntent {
     pub target: OrderIdentifier,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "kebab-case")]
 pub enum OrderIdentifier {
     OrderId { order_id: String },
@@ -500,7 +500,7 @@ impl FuturesStateChange {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ProviderConfig {
     pub provider: Provider,
     pub environment: Environment,
@@ -535,7 +535,7 @@ impl fmt::Display for SignedReadSnapshotKind {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "kebab-case")]
 pub enum SignedReadRequest {
     ApiPermissions,
@@ -590,7 +590,7 @@ impl SignedReadRequest {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SignedReadSnapshot {
     pub profile: String,
     pub provider: Provider,

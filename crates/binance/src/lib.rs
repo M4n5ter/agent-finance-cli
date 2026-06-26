@@ -7,7 +7,8 @@ mod signer;
 
 pub use client::{
     BinanceClient, BinanceCredentials, BinanceEndpoints, BinanceFuturesStateSubmitResponse,
-    BinanceOrderSubmitResponse, BinancePlanner, BinanceRequestMode, SignedRequest,
+    BinanceHttpPolicy, BinanceOrderSubmitResponse, BinancePlanner, BinanceRequestMode,
+    SignedRequest,
 };
 pub use exchange_rules::{ExchangeRuleCheck, ExchangeRuleFinding, check_order_exchange_rules};
 pub use metadata::{profile_template, provider_capability};

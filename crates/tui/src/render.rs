@@ -35,6 +35,7 @@ mod tests {
     use crate::config::TuiConfig;
     use crate::model::{FloatingKind, WorkspaceKind};
     use crate::theme::{ThemeColor, ThemeConfig};
+    use agent_finance_core::{Environment, Provider, SignedReadSnapshot};
     use agent_finance_market::crypto_evidence_snapshot::CryptoQuoteEvidenceSnapshot;
     use agent_finance_market::history_snapshot::HistorySnapshot;
     use agent_finance_market::research_snapshot::{ResearchContextSnapshot, ResearchNewsSnapshot};
@@ -78,6 +79,51 @@ mod tests {
         let text = render_to_text(&state, 120, 32);
 
         assert!(text.contains("profile: mainnet"));
+    }
+
+    #[test]
+    fn account_workspace_renders_signed_account_state() {
+        let mut state = AppState::from_config(TuiConfig {
+            trading: crate::config::TradingConfig {
+                default_profile: Some("mainnet".to_string()),
+            },
+            workspace: crate::config::WorkspaceConfig {
+                current: WorkspaceKind::Account,
+            },
+            ..TuiConfig::default()
+        });
+        state.reduce(crate::state::Action::AccountStarted {
+            generation: 1,
+            profile: "mainnet".to_string(),
+        });
+        state.reduce(crate::state::Action::AccountLoaded {
+            generation: 1,
+            snapshot: crate::AccountSnapshot::new(
+                "mainnet".to_string(),
+                Provider::Binance,
+                Environment::Live,
+                crate::account::ACCOUNT_READ_PLAN
+                    .into_iter()
+                    .map(|plan| {
+                        SignedReadSnapshot::new(
+                            "mainnet",
+                            Provider::Binance,
+                            Environment::Live,
+                            plan.request(),
+                            serde_json::json!({ "ok": true }),
+                        )
+                    })
+                    .collect(),
+                Vec::new(),
+            ),
+        });
+
+        let text = render_to_text_grid(&state, 180, 40);
+
+        assert!(text.contains("Account"));
+        assert!(text.contains("provider: binance"));
+        assert!(text.contains("environment: live"));
+        assert!(text.contains("signed reads: 3 ok / 0 warning"));
     }
 
     #[test]

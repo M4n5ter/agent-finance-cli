@@ -3,6 +3,7 @@ use agent_finance_market::history_snapshot::HistorySnapshot;
 use agent_finance_market::research_snapshot::ResearchContextSnapshot;
 use agent_finance_market::snapshot::MarketSnapshot;
 
+use crate::account::AccountSnapshot;
 use crate::task_failure::{TaskFailure, TaskFailureSource};
 use crate::task_log::TaskKey;
 
@@ -19,7 +20,7 @@ impl AppState {
 
     pub(super) fn snapshot_loaded(&mut self, generation: u64, snapshot: MarketSnapshot) {
         if let Some(active) = self.refresh.finish(generation) {
-            self.task_failures.clear(TaskFailureSource::Quotes, None);
+            self.task_failures.clear_global(TaskFailureSource::Quotes);
             if !snapshot.errors.is_empty() {
                 self.task_log.warning(
                     TaskKey::Refresh {
@@ -224,6 +225,63 @@ impl AppState {
         }
     }
 
+    pub(super) fn account_started(&mut self, generation: u64, profile: String) {
+        self.task_log.running(
+            TaskKey::Account {
+                generation,
+                profile: profile.clone(),
+            },
+            format!("{profile} account snapshot loading"),
+        );
+        self.account.start(generation, profile);
+    }
+
+    pub(super) fn account_loaded(&mut self, generation: u64, snapshot: AccountSnapshot) {
+        if let Some(active) = self.account.finish(generation) {
+            self.task_failures
+                .clear_profile(TaskFailureSource::Account, &active.key);
+            if !snapshot.errors.is_empty() {
+                self.task_log.warning(
+                    TaskKey::Account {
+                        generation: active.generation,
+                        profile: active.key.clone(),
+                    },
+                    format!(
+                        "{} account loaded with {} warnings",
+                        snapshot.profile,
+                        snapshot.errors.len()
+                    ),
+                );
+            } else {
+                self.task_log.succeeded(
+                    TaskKey::Account {
+                        generation: active.generation,
+                        profile: active.key.clone(),
+                    },
+                    format!("{} account snapshot loaded", snapshot.profile),
+                );
+            }
+            self.account_snapshot = Some(snapshot);
+        } else {
+            self.task_log
+                .warning_event(format!("ignored stale account generation {generation}",));
+        }
+    }
+
+    pub(super) fn account_failed(&mut self, generation: u64, profile: String, error: String) {
+        if let Some(active) = self.account.finish(generation) {
+            self.task_failures
+                .set(TaskFailure::account(profile.clone(), error.clone()));
+            self.task_log.failed(
+                TaskKey::Account {
+                    generation: active.generation,
+                    profile: active.key,
+                },
+                format!("{profile} account snapshot failed: {error}"),
+            );
+        }
+    }
+
     pub(super) fn scheduler_failed(&mut self, error: String) {
         if let Some(active) = self.refresh.cancel() {
             self.task_log.failed(
@@ -258,6 +316,15 @@ impl AppState {
                     symbol: active.key.clone(),
                 },
                 format!("{} research loading cancelled: {error}", active.key),
+            );
+        }
+        if let Some(active) = self.account.cancel() {
+            self.task_log.failed(
+                TaskKey::Account {
+                    generation: active.generation,
+                    profile: active.key.clone(),
+                },
+                format!("{} account loading cancelled: {error}", active.key),
             );
         }
         self.scheduler_error = Some(error.clone());

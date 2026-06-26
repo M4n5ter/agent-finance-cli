@@ -12,8 +12,10 @@ use agent_finance_market::{
     service::MarketRuntime,
     snapshot::{self, MarketSnapshot, PublicQuoteSnapshotRequest},
 };
+use agent_finance_trading::TradingRuntime;
 use anyhow::{Result, anyhow};
 
+use crate::account::{ACCOUNT_READ_PLAN, AccountReadError, AccountSnapshot};
 use crate::config::{EquityProvider, ProviderConfig, TuiLaunch};
 
 #[derive(Debug)]
@@ -22,6 +24,7 @@ pub struct Scheduler {
     history_commands: Sender<HistoryCommand>,
     evidence_commands: Sender<EvidenceCommand>,
     research_commands: Sender<ResearchCommand>,
+    account_commands: Sender<AccountCommand>,
     events: Receiver<SchedulerEvent>,
     disconnected_reported: Cell<bool>,
 }
@@ -32,6 +35,7 @@ impl Scheduler {
         let (history_commands, history_command_rx) = mpsc::channel();
         let (evidence_commands, evidence_command_rx) = mpsc::channel();
         let (research_commands, research_command_rx) = mpsc::channel();
+        let (account_commands, account_command_rx) = mpsc::channel();
         let (event_tx, events) = mpsc::channel();
         let runtime = MarketRuntime::new(
             launch.proxy.as_deref(),
@@ -75,15 +79,17 @@ impl Scheduler {
             "research",
             runtime,
             research_command_rx,
-            event_tx,
+            event_tx.clone(),
             handle_research_command,
         );
+        spawn_account_worker(launch, account_command_rx, event_tx);
 
         Self {
             refresh_commands,
             history_commands,
             evidence_commands,
             research_commands,
+            account_commands,
             events,
             disconnected_reported: Cell::new(false),
         }
@@ -122,6 +128,15 @@ impl Scheduler {
         result.map_err(|error| anyhow!("failed to request TUI {}: {error}", kind.label()))
     }
 
+    pub fn request_account(&self, generation: u64, profile: String) -> Result<()> {
+        self.account_commands
+            .send(AccountCommand {
+                generation,
+                profile,
+            })
+            .map_err(|error| anyhow!("failed to request TUI account snapshot: {error}"))
+    }
+
     pub fn try_recv(&self) -> Option<SchedulerEvent> {
         match self.events.try_recv() {
             Ok(event) => Some(event),
@@ -156,6 +171,12 @@ struct EvidenceCommand {
 struct ResearchCommand {
     generation: u64,
     symbol: String,
+}
+
+#[derive(Debug)]
+struct AccountCommand {
+    generation: u64,
+    profile: String,
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
@@ -209,6 +230,15 @@ pub enum SchedulerEvent {
         generation: u64,
         snapshot: ResearchContextSnapshot,
     },
+    Account {
+        generation: u64,
+        snapshot: AccountSnapshot,
+    },
+    AccountFailed {
+        generation: u64,
+        profile: String,
+        error: String,
+    },
     Fatal(String),
 }
 
@@ -236,6 +266,35 @@ fn spawn_scheduler_worker<C, F>(
             }
         })
         .unwrap_or_else(|error| panic!("failed to spawn TUI {name} scheduler thread: {error}"));
+}
+
+fn spawn_account_worker(
+    launch: &TuiLaunch,
+    commands: Receiver<AccountCommand>,
+    events: Sender<SchedulerEvent>,
+) {
+    let runtime = TradingRuntime::with_http_policy(
+        launch.timeout_seconds,
+        launch.proxy.clone(),
+        launch.no_proxy,
+    );
+    thread::Builder::new()
+        .name("agent-finance-tui-account".to_string())
+        .spawn(move || {
+            let Some(tokio) = scheduler_runtime("account", &events) else {
+                return;
+            };
+
+            while let Ok(command) = commands.recv() {
+                if events
+                    .send(handle_account_command(&tokio, &runtime, command))
+                    .is_err()
+                {
+                    break;
+                }
+            }
+        })
+        .unwrap_or_else(|error| panic!("failed to spawn TUI account scheduler thread: {error}"));
 }
 
 fn handle_refresh_command(
@@ -312,6 +371,28 @@ fn handle_research_command(
     }
 }
 
+fn handle_account_command(
+    tokio: &tokio::runtime::Runtime,
+    runtime: &TradingRuntime,
+    command: AccountCommand,
+) -> SchedulerEvent {
+    let AccountCommand {
+        generation,
+        profile,
+    } = command;
+    match tokio.block_on(fetch_account(runtime, profile.clone())) {
+        Ok(snapshot) => SchedulerEvent::Account {
+            generation,
+            snapshot,
+        },
+        Err(error) => SchedulerEvent::AccountFailed {
+            generation,
+            profile,
+            error: error.to_string(),
+        },
+    }
+}
+
 fn scheduler_runtime(
     worker_name: &str,
     events: &Sender<SchedulerEvent>,
@@ -370,6 +451,39 @@ async fn fetch_research(runtime: &MarketRuntime, symbol: String) -> ResearchCont
         },
     )
     .await
+}
+
+async fn fetch_account(runtime: &TradingRuntime, profile_name: String) -> Result<AccountSnapshot> {
+    let profile = runtime.load_profile(&profile_name)?;
+    let mut reads = Vec::new();
+    let mut errors = Vec::new();
+
+    for plan in ACCOUNT_READ_PLAN {
+        let kind = plan.kind();
+        if plan.live_only() && !profile.provider.environment.is_live() {
+            errors.push(AccountReadError::new(
+                kind,
+                format!(
+                    "{kind} uses Binance live SAPI account data and is skipped for {} profiles",
+                    profile.provider.environment
+                ),
+            ));
+            continue;
+        }
+
+        match runtime.run_signed_read(&profile, plan.request()).await {
+            Ok(snapshot) => reads.push(snapshot),
+            Err(error) => errors.push(AccountReadError::new(kind, error.to_string())),
+        }
+    }
+
+    Ok(AccountSnapshot::new(
+        profile.name,
+        profile.provider.provider,
+        profile.provider.environment,
+        reads,
+        errors,
+    ))
 }
 
 #[derive(Debug, Clone)]

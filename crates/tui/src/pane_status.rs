@@ -65,6 +65,9 @@ fn pane_is_empty(state: &AppState, panel: Panel, data: PaneDataState) -> bool {
         (Panel::Evidence, _) if !selected_symbol_is_crypto(state)
     ) || matches!(
         (panel, data.selected_data),
+        (Panel::Account, SelectedDataState::Empty) if state.account_snapshot.is_none()
+    ) || matches!(
+        (panel, data.selected_data),
         (Panel::TaskLog, SelectedDataState::Empty)
     )
 }
@@ -106,6 +109,16 @@ fn pane_data_state(state: &AppState, panel: Panel) -> PaneDataState {
                 SelectedDataState::Empty
             },
             state.task_failures.has_source(TaskFailureSource::Quotes),
+        ),
+        Panel::Account => PaneDataState::new(
+            state.account_loading(),
+            match state.account_snapshot.as_ref() {
+                Some(snapshot) if snapshot.complete() => SelectedDataState::Fresh,
+                Some(snapshot) if snapshot.has_data() => SelectedDataState::Stale,
+                Some(_) => SelectedDataState::Empty,
+                None => SelectedDataState::Empty,
+            },
+            state.task_failures.has_source(TaskFailureSource::Account),
         ),
         Panel::History => PaneDataState::new(
             state.history.loading(),

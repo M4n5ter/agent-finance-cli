@@ -13,6 +13,7 @@ use ratatui::backend::CrosstermBackend;
 
 use agent_finance_market::is_likely_crypto_pair;
 
+use crate::account_load::{AccountLoadRuntime, request_account_load};
 use crate::config::TuiLaunch;
 use crate::dump::TuiDump;
 use crate::input::{self, MouseDrag};
@@ -37,8 +38,10 @@ pub fn run(launch: TuiLaunch) -> Result<()> {
     let mut terminal = TerminalGuard::enter().context("failed to initialize terminal UI")?;
     let scheduler = Scheduler::start(&launch, runtime_config.providers.clone());
     let mut next_refresh_generation = 1;
+    let mut account_load = AccountLoadRuntime::new();
     let mut symbol_loads = SymbolLoadRuntimes::new();
     request_refresh(&scheduler, &mut state, &mut next_refresh_generation);
+    request_account_load(&scheduler, &mut state, &mut account_load, false);
     request_symbol_loads(&scheduler, &mut state, &mut symbol_loads, false);
 
     let result = run_loop(
@@ -50,6 +53,7 @@ pub fn run(launch: TuiLaunch) -> Result<()> {
             scheduler: &scheduler,
             next_refresh_generation: &mut next_refresh_generation,
             symbol_loads: &mut symbol_loads,
+            account_load: &mut account_load,
             launch: &launch,
         },
     );
@@ -75,14 +79,17 @@ fn run_dump_state(
         .context("dump-state options were not configured")?;
     let scheduler = Scheduler::start(launch, runtime_config.providers.clone());
     let mut next_refresh_generation = 1;
+    let mut account_load = AccountLoadRuntime::new();
     let mut symbol_loads = SymbolLoadRuntimes::new();
     let deadline = Instant::now() + Duration::from_secs(options.wait_seconds);
 
     request_refresh(&scheduler, &mut state, &mut next_refresh_generation);
+    request_account_load(&scheduler, &mut state, &mut account_load, false);
     request_symbol_loads(&scheduler, &mut state, &mut symbol_loads, false);
 
     while Instant::now() < deadline {
         drain_scheduler_events(&scheduler, &mut state);
+        request_account_load(&scheduler, &mut state, &mut account_load, false);
         request_symbol_loads(&scheduler, &mut state, &mut symbol_loads, false);
         if dump_is_ready(&state) {
             break;
@@ -122,6 +129,7 @@ fn run_loop(
         terminal.draw(|frame| render::render(frame, state))?;
 
         drain_scheduler_events(context.scheduler, state);
+        request_account_load(context.scheduler, state, context.account_load, false);
         request_symbol_loads(context.scheduler, state, context.symbol_loads, false);
 
         let timeout = context
@@ -135,6 +143,7 @@ fn run_loop(
                 Event::Key(key) => {
                     if let Some(action) = input::key_action(state, key) {
                         state.reduce(action);
+                        request_account_load(context.scheduler, state, context.account_load, false);
                         request_symbol_loads(context.scheduler, state, context.symbol_loads, false);
                     }
                 }
@@ -226,6 +235,22 @@ fn apply_scheduler_event(state: &mut AppState, event: SchedulerEvent) {
             generation,
             snapshot,
         }),
+        SchedulerEvent::Account {
+            generation,
+            snapshot,
+        } => state.reduce(Action::AccountLoaded {
+            generation,
+            snapshot,
+        }),
+        SchedulerEvent::AccountFailed {
+            generation,
+            profile,
+            error,
+        } => state.reduce(Action::AccountFailed {
+            generation,
+            profile,
+            error,
+        }),
         SchedulerEvent::Fatal(error) => state.reduce(Action::SchedulerFailed(error)),
     }
 }
@@ -237,6 +262,9 @@ fn dump_is_ready(state: &AppState) -> bool {
     if state.refresh_loading() {
         return false;
     }
+    if state.account_loading() {
+        return false;
+    }
     if state.market_snapshot.is_none() && !state.task_failures.has_source(TaskFailureSource::Quotes)
     {
         return false;
@@ -246,6 +274,7 @@ fn dump_is_ready(state: &AppState) -> bool {
         Panel::History => !state.history.loading(),
         Panel::Evidence => !state.evidence.loading(),
         Panel::Polymarket | Panel::Research => !state.research.loading(),
+        Panel::Account => !state.account_loading(),
         Panel::Watchlist | Panel::Quote | Panel::ProviderHealth | Panel::TaskLog => true,
     })
 }
@@ -256,6 +285,7 @@ struct LoopContext<'a> {
     scheduler: &'a Scheduler,
     next_refresh_generation: &'a mut u64,
     symbol_loads: &'a mut SymbolLoadRuntimes,
+    account_load: &'a mut AccountLoadRuntime,
     launch: &'a TuiLaunch,
 }
 

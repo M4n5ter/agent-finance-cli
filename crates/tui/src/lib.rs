@@ -1,3 +1,5 @@
+mod account;
+mod account_load;
 mod app;
 mod command;
 mod config;
@@ -17,6 +19,7 @@ mod task_failure;
 mod task_log;
 mod theme;
 
+pub use account::{AccountReadError, AccountSnapshot};
 pub use app::run;
 pub use config::{TuiConfig, TuiDumpOptions, TuiLaunch};
 pub use model::WorkspaceKind;

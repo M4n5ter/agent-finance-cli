@@ -1,5 +1,6 @@
 ---
 source: crates/tui/src/render.rs
+assertion_line: 155
 expression: "render_to_text_grid(&state, 140, 40)"
 ---
 ┌Watchlist [fresh]─────────────────────────────┐┌Quote / Sessions [partial]────────────────────────────────────────────────────────────────┐
@@ -41,4 +42,4 @@ expression: "render_to_text_grid(&state, 140, 40)"
 │                                              ││                                                                                          │
 │                                              ││                                                                                          │
 └──────────────────────────────────────────────┘└──────────────────────────────────────────────────────────────────────────────────────────┘
- Overview | Research | Crypto | Providers  CRDO | mode: command | focus: Watchlist | visible: 5/5 | ready | errors: 0 | type filter
+ Overview | Trade | Account | Research | Crypto | Providers  CRDO | mode: command | focus: Watchlist | ready | e:0

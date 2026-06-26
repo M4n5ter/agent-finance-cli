@@ -1,10 +1,12 @@
 use super::*;
+use crate::account::ACCOUNT_READ_PLAN;
 use crate::command::ActionId;
 use crate::config::MAX_LEFT_MAIN_RATIO;
 use crate::model::InteractionMode;
 use crate::task_log::TaskStatus;
 use agent_finance_core::intent::IntentStatus;
 use agent_finance_core::submit::{SubmitIntentKind, SubmitMode};
+use agent_finance_core::{Environment, Provider, SignedReadSnapshot};
 use agent_finance_market::crypto_evidence_snapshot::CryptoQuoteEvidenceSnapshot;
 use agent_finance_market::history_snapshot::HistorySnapshot;
 use agent_finance_market::research_snapshot::ResearchContextSnapshot;
@@ -151,6 +153,40 @@ fn reducer_does_not_replace_active_write_session_with_new_submit_mode() {
     assert_eq!(view.mode, SubmitMode::DryRun);
     assert_eq!(view.stage, WriteSessionStage::Validating);
     assert_eq!(view.summary, "Dry run order");
+}
+
+#[test]
+fn reducer_ignores_stale_account_snapshots_after_new_profile_request() {
+    let mut state = AppState::from_config(TuiConfig {
+        trading: crate::config::TradingConfig {
+            default_profile: Some("mainnet".to_string()),
+        },
+        ..TuiConfig::default()
+    });
+
+    state.reduce(Action::AccountStarted {
+        generation: 1,
+        profile: "mainnet".to_string(),
+    });
+    state.reduce(Action::AccountStarted {
+        generation: 2,
+        profile: "hedge".to_string(),
+    });
+    state.reduce(Action::AccountLoaded {
+        generation: 1,
+        snapshot: account_snapshot("mainnet"),
+    });
+
+    assert!(state.account_loading());
+    assert!(state.account_snapshot.is_none());
+
+    state.reduce(Action::AccountLoaded {
+        generation: 2,
+        snapshot: account_snapshot("hedge"),
+    });
+
+    assert!(!state.account_loading());
+    assert_eq!(state.account_snapshot.as_ref().unwrap().profile, "hedge");
 }
 
 #[test]
@@ -914,4 +950,29 @@ fn research_snapshot(
             .collect(),
         errors: Vec::new(),
     }
+}
+
+fn account_snapshot(profile: &str) -> crate::account::AccountSnapshot {
+    crate::account::AccountSnapshot::new(
+        profile.to_string(),
+        Provider::Binance,
+        Environment::Live,
+        account_reads(profile),
+        Vec::new(),
+    )
+}
+
+fn account_reads(profile: &str) -> Vec<SignedReadSnapshot> {
+    ACCOUNT_READ_PLAN
+        .into_iter()
+        .map(|plan| {
+            SignedReadSnapshot::new(
+                profile.to_string(),
+                Provider::Binance,
+                Environment::Live,
+                plan.request(),
+                serde_json::json!({ "ok": true }),
+            )
+        })
+        .collect()
 }

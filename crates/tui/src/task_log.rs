@@ -87,6 +87,7 @@ pub enum TaskKey {
     History { generation: u64, symbol: String },
     Evidence { generation: u64, symbol: String },
     Research { generation: u64, symbol: String },
+    Account { generation: u64, profile: String },
     Scheduler,
 }
 

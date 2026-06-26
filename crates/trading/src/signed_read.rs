@@ -11,11 +11,11 @@ trait SignedReadExecutor {
 pub(crate) async fn run_signed_read(
     profile: &agent_finance_core::Profile,
     request: agent_finance_core::SignedReadRequest,
-    timeout_seconds: u64,
+    policy: agent_finance_binance::BinanceHttpPolicy,
 ) -> Result<agent_finance_core::SignedReadSnapshot> {
     let request = request.normalized();
     validate_signed_read_request(profile, &request)?;
-    let client = crate::write::binance_client(profile, timeout_seconds)?;
+    let client = crate::write::binance_client_with_policy(profile, policy)?;
     signed_read_snapshot(profile, &client, request).await
 }
 
