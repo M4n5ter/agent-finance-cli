@@ -3,6 +3,7 @@ mod command;
 mod config;
 mod dump;
 mod input;
+mod keymap;
 mod layout;
 mod model;
 mod provider_health;

@@ -1,6 +1,6 @@
 use serde::Serialize;
 
-use crate::command::ACTION_SPECS;
+use crate::command::ACTION_REGISTRY;
 use crate::model::{InteractionMode, Panel, WorkspaceKind};
 use crate::provider_health::{ProviderHealthReport, ProviderHealthTask};
 use crate::state::AppState;
@@ -54,8 +54,9 @@ impl TuiDump {
             tasks: provider_health.tasks.clone(),
             errors: dump_errors(state),
             provider_health,
-            key_hints: ACTION_SPECS
+            key_hints: ACTION_REGISTRY
                 .iter()
+                .filter_map(|action| action.command())
                 .map(|command| command.title.to_string())
                 .collect(),
         }

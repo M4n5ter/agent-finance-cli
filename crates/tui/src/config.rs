@@ -9,6 +9,7 @@ use agent_finance_market::args::{CryptoProvider, Provider};
 use anyhow::{Context, Result};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
+use crate::keymap::KeymapConfig;
 use crate::model::{DockedPanels, FloatingPane, FloatingSize, Panel, WorkspaceKind};
 
 pub const MIN_LEFT_RATIO: u16 = 15;
@@ -137,6 +138,8 @@ pub struct TuiConfig {
     pub refresh: RefreshConfig,
     #[serde(default)]
     pub providers: ProviderConfig,
+    #[serde(default, skip_serializing_if = "KeymapConfig::is_empty")]
+    pub keymap: KeymapConfig,
 }
 
 impl Default for TuiConfig {
@@ -149,6 +152,7 @@ impl Default for TuiConfig {
             floating: FloatingConfig::default(),
             refresh: RefreshConfig::default(),
             providers: ProviderConfig::default(),
+            keymap: KeymapConfig::default(),
         }
     }
 }
@@ -184,6 +188,7 @@ impl TuiConfig {
         self.panels.normalize();
         self.floating.normalize();
         self.refresh.normalize();
+        self.keymap.normalize();
     }
 }
 
@@ -591,6 +596,7 @@ mod tests {
                 equity: EquityProvider::Yahoo,
                 crypto: CryptoProvider::Binance,
             },
+            keymap: KeymapConfig::default(),
         };
         config.normalize();
 
@@ -612,8 +618,10 @@ mod tests {
         assert_eq!(decoded.refresh.research_seconds, 60);
         assert_eq!(decoded.providers.equity, EquityProvider::Yahoo);
         assert_eq!(decoded.providers.crypto, CryptoProvider::Binance);
+        assert_eq!(decoded.keymap.normal, KeymapConfig::default().normal);
         assert!(encoded.contains("equity = \"yahoo\""));
         assert!(encoded.contains("crypto = \"binance\""));
+        assert!(!encoded.contains("[keymap]"));
     }
 
     #[test]

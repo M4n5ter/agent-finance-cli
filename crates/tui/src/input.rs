@@ -4,9 +4,8 @@ use crossterm::event::{
 use ratatui::layout::Rect;
 use tui_input::backend::crossterm::to_input_request;
 
-use crate::command::ActionId;
 use crate::layout::{self, DockedColumnSplit, LayoutHit};
-use crate::model::{FloatingKind, Panel};
+use crate::model::FloatingKind;
 use crate::state::{Action, AppState};
 
 #[derive(Debug, Clone, Copy, Default, Eq, PartialEq)]
@@ -25,35 +24,7 @@ pub fn key_action(state: &AppState, key: KeyEvent) -> Option<Action> {
         return command_palette_key_action(state, key);
     }
 
-    match key.code {
-        KeyCode::Char('j') | KeyCode::Down => Some(Action::SelectNextSymbol),
-        KeyCode::Char('k') | KeyCode::Up => Some(Action::SelectPreviousSymbol),
-        KeyCode::Char('h') | KeyCode::F(1) => {
-            Some(Action::Execute(ActionId::OpenFloating(FloatingKind::Help)))
-        }
-        KeyCode::Char(':') => Some(Action::Execute(ActionId::OpenFloating(
-            FloatingKind::CommandPalette,
-        ))),
-        KeyCode::Char('p') => Some(Action::Execute(ActionId::OpenFloating(
-            FloatingKind::ProviderDetails,
-        ))),
-        KeyCode::Char('r') => Some(Action::Execute(ActionId::ResetLayout)),
-        KeyCode::Char('x') => Some(Action::Execute(ActionId::CloseFocusedPanel)),
-        KeyCode::Char('0') => Some(Action::Execute(ActionId::RestorePanels)),
-        KeyCode::Tab => Some(Action::Execute(ActionId::FocusPanelBy(1))),
-        KeyCode::BackTab => Some(Action::Execute(ActionId::FocusPanelBy(-1))),
-        KeyCode::Char('z') => Some(Action::Execute(ActionId::ToggleFocusedZoom)),
-        KeyCode::Char(']') => Some(Action::Execute(ActionId::ShiftWorkspace(1))),
-        KeyCode::Char('[') => Some(Action::Execute(ActionId::ShiftWorkspace(-1))),
-        KeyCode::Esc => Some(Action::CloseFocusedFloating),
-        KeyCode::Char('1') => Some(Action::Execute(ActionId::FocusPanel(Panel::Watchlist))),
-        KeyCode::Char('2') => Some(Action::Execute(ActionId::FocusPanel(Panel::Quote))),
-        KeyCode::Char('3') => Some(Action::Execute(ActionId::FocusPanel(Panel::History))),
-        KeyCode::Char('4') => Some(Action::Execute(ActionId::FocusPanel(Panel::Evidence))),
-        KeyCode::Char('5') => Some(Action::Execute(ActionId::FocusPanel(Panel::Polymarket))),
-        KeyCode::Char('6') => Some(Action::Execute(ActionId::FocusPanel(Panel::Research))),
-        _ => None,
-    }
+    state.keymap.normal_action(key).map(Action::Execute)
 }
 
 pub fn should_quit(state: &AppState, key: KeyEvent) -> bool {
@@ -142,6 +113,8 @@ fn command_palette_is_top(state: &AppState) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::command::ActionId;
+    use crate::model::Panel;
     use crossterm::event::KeyEvent;
 
     #[test]
@@ -150,7 +123,7 @@ mod tests {
 
         assert_eq!(
             key_action(&state, KeyEvent::from(KeyCode::Char('j'))),
-            Some(Action::SelectNextSymbol)
+            Some(Action::Execute(ActionId::SelectSymbolBy(1)))
         );
         assert_eq!(
             key_action(&state, KeyEvent::from(KeyCode::Char(':'))),
@@ -160,7 +133,7 @@ mod tests {
         );
         assert_eq!(
             key_action(&state, KeyEvent::from(KeyCode::Esc)),
-            Some(Action::CloseFocusedFloating)
+            Some(Action::Execute(ActionId::CloseFocusedFloating))
         );
         assert_eq!(
             key_action(&state, KeyEvent::from(KeyCode::Char('x'))),

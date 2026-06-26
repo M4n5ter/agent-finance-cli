@@ -9,6 +9,7 @@ use agent_finance_market::snapshot::MarketSnapshot;
 
 use crate::command::{ActionId, CommandPaletteState};
 use crate::config::{FloatingConfig, LayoutConfig, PanelConfig, TuiConfig, WorkspaceConfig};
+use crate::keymap::KeymapConfig;
 use crate::model::{
     DockedPanels, FloatingKind, FloatingPane, FloatingSize, InteractionMode, Panel, TaskLogEntry,
     WorkspaceKind,
@@ -27,6 +28,7 @@ pub struct AppState {
     pub panels: DockedPanels,
     pub floating: Vec<FloatingPane>,
     pub command_palette: CommandPaletteState,
+    pub keymap: KeymapConfig,
     pub task_log: VecDeque<TaskLogEntry>,
     pub provider_profiles: Vec<ProviderProfile>,
     pub market_snapshot: Option<MarketSnapshot>,
@@ -49,6 +51,7 @@ impl AppState {
             panels: DockedPanels::from_open_focused(config.panels.open, config.panels.focused),
             floating: config.floating.panes,
             command_palette: CommandPaletteState::default(),
+            keymap: config.keymap,
             task_log: VecDeque::new(),
             provider_profiles: service::provider_profiles(),
             market_snapshot: None,
@@ -82,6 +85,7 @@ impl AppState {
                 .filter(|pane| pane.kind.persistent())
                 .collect(),
         };
+        config.keymap = self.keymap.clone();
         config.normalize();
         config
     }
@@ -136,8 +140,6 @@ impl AppState {
             Action::Focus(panel) => {
                 self.focus_panel(panel);
             }
-            Action::SelectNextSymbol => self.shift_symbol(1),
-            Action::SelectPreviousSymbol => self.shift_symbol(-1),
             Action::MoveCommandSelection(direction) => {
                 self.command_palette.shift(direction);
             }
@@ -597,8 +599,6 @@ impl<T: SymbolSnapshot> SelectedSymbolLoad<T> {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Action {
     Focus(Panel),
-    SelectNextSymbol,
-    SelectPreviousSymbol,
     MoveCommandSelection(isize),
     EditCommandQuery(tui_input::InputRequest),
     Execute(ActionId),
@@ -687,11 +687,11 @@ mod tests {
             ..TuiConfig::default()
         });
 
-        state.reduce(Action::SelectPreviousSymbol);
+        state.reduce(Action::Execute(ActionId::SelectSymbolBy(-1)));
 
         assert_eq!(state.selected_symbol(), Some("CRDO"));
 
-        state.reduce(Action::SelectNextSymbol);
+        state.reduce(Action::Execute(ActionId::SelectSymbolBy(1)));
 
         assert_eq!(state.selected_symbol(), Some("AAPL"));
     }
@@ -975,7 +975,11 @@ mod tests {
             Some(ActionId::CloseCommandPalette)
         );
 
-        state.reduce(Action::MoveCommandSelection(1));
+        for character in "open help".chars() {
+            state.reduce(Action::EditCommandQuery(
+                tui_input::InputRequest::InsertChar(character),
+            ));
+        }
         assert_eq!(
             state.command_palette.selected_action(),
             Some(ActionId::OpenFloating(FloatingKind::Help))
@@ -1026,11 +1030,14 @@ mod tests {
         assert_eq!(state.command_palette.query(), "");
         assert_eq!(
             state.command_palette.len(),
-            crate::command::ACTION_SPECS.len()
+            crate::command::ACTION_REGISTRY
+                .iter()
+                .filter(|action| action.command().is_some())
+                .count()
         );
         assert_eq!(
             state.command_palette.selected_action(),
-            Some(ActionId::OpenFloating(FloatingKind::Help))
+            Some(ActionId::SelectSymbolBy(1))
         );
     }
 

@@ -565,6 +565,7 @@ impl Drop for TerminalGuard {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::command::ActionId;
     use agent_finance_market::crypto_evidence_snapshot::CryptoQuoteEvidenceSnapshot;
     use agent_finance_market::history_snapshot::HistorySnapshot;
     use agent_finance_market::research_snapshot::ResearchContextSnapshot;
@@ -652,7 +653,7 @@ mod tests {
             generation: 1,
             snapshot: history_snapshot("AAPL"),
         });
-        state.reduce(Action::SelectNextSymbol);
+        state.reduce(Action::Execute(ActionId::SelectSymbolBy(1)));
         assert_eq!(
             prepare_symbol_task_request(&mut state, &mut runtime, SymbolTaskKind::History, false),
             Some(SymbolLoadRequest {
@@ -726,7 +727,7 @@ mod tests {
                 symbol: "AAPL".to_string(),
             })
         );
-        state.reduce(Action::SelectNextSymbol);
+        state.reduce(Action::Execute(ActionId::SelectSymbolBy(1)));
         assert_eq!(
             prepare_symbol_task_request(&mut state, &mut runtime, SymbolTaskKind::History, false),
             None
@@ -760,7 +761,7 @@ mod tests {
                 symbol: "BTCUSDT".to_string(),
             })
         );
-        state.reduce(Action::SelectNextSymbol);
+        state.reduce(Action::Execute(ActionId::SelectSymbolBy(1)));
         assert_eq!(
             prepare_symbol_task_request(&mut state, &mut runtime, SymbolTaskKind::Evidence, false),
             None
@@ -824,7 +825,7 @@ mod tests {
                 symbol: "AAPL".to_string(),
             })
         );
-        state.reduce(Action::SelectNextSymbol);
+        state.reduce(Action::Execute(ActionId::SelectSymbolBy(1)));
         assert_eq!(
             prepare_symbol_task_request(&mut state, &mut runtime, SymbolTaskKind::Research, false),
             None
@@ -857,7 +858,7 @@ mod tests {
         );
         assert_eq!(runtime.next_generation, 1);
 
-        state.reduce(Action::SelectNextSymbol);
+        state.reduce(Action::Execute(ActionId::SelectSymbolBy(1)));
         assert_eq!(
             prepare_symbol_task_request(&mut state, &mut runtime, SymbolTaskKind::Evidence, false),
             Some(SymbolLoadRequest {

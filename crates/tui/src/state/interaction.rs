@@ -5,11 +5,18 @@ use crate::state::{Action, AppState};
 impl AppState {
     pub(super) fn execute(&mut self, action: ActionId) {
         match action {
+            ActionId::SelectSymbolBy(direction) => {
+                self.close_floating(FloatingKind::CommandPalette);
+                self.shift_symbol(direction);
+            }
             ActionId::OpenFloating(kind) => {
                 if kind != FloatingKind::CommandPalette {
                     self.close_floating(FloatingKind::CommandPalette);
                 }
                 self.open_floating(kind);
+            }
+            ActionId::CloseFocusedFloating => {
+                self.reduce(Action::CloseFocusedFloating);
             }
             ActionId::ResetLayout => {
                 self.reduce(Action::ResetLayout);
