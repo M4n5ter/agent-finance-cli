@@ -8,12 +8,10 @@ use crate::cli::{
     OrderCommand, ProfileArgs, ProfileCommand, RiskArgs, RiskCommand, TransferArgs,
     TransferCommand,
 };
-use crate::signed_read::run_signed_read;
-use crate::terminal_write::{
-    ExpectedIntentKind, WriteMode, binance_client, check_order_with_runtime_limits, load_profile,
-    print_json_or_text, print_submit_report, risk_findings_text, save_intent_with_audit,
-    submit_intent,
+use crate::terminal_output::{
+    print_json_or_text, print_submit_report, risk_findings_text, submit_mode_from_flags,
 };
+use agent_finance_trading::TradingRuntime;
 
 pub(crate) fn run_capabilities(args: CapabilitiesArgs) -> Result<()> {
     let report = agent_finance_core::CapabilityReport::new(vec![
@@ -47,6 +45,7 @@ pub(crate) fn run_capabilities(args: CapabilitiesArgs) -> Result<()> {
 
 pub(crate) async fn run_profile(args: ProfileArgs, timeout_seconds: u64) -> Result<()> {
     let store = agent_finance_core::ProfileStore::from_default_dir()?;
+    let runtime = TradingRuntime::new(timeout_seconds);
     match args.command {
         ProfileCommand::Path(args) => {
             let path = store.path(&args.profile);
@@ -106,10 +105,7 @@ pub(crate) async fn run_profile(args: ProfileArgs, timeout_seconds: u64) -> Resu
                 &profile,
             ));
             if key_ok && secret_ok {
-                match binance_client(&profile, timeout_seconds)?
-                    .account_permissions()
-                    .await
-                {
+                match runtime.account_permissions(&profile).await {
                     Ok(payload) => {
                         let permission_checks =
                             agent_finance_binance::profile_permission_checks(&profile, &payload);
@@ -160,23 +156,24 @@ struct ProfileDoctorReport {
 }
 
 pub(crate) async fn run_account(args: AccountArgs, timeout_seconds: u64) -> Result<()> {
+    let runtime = TradingRuntime::new(timeout_seconds);
     match args.command {
         AccountCommand::Permissions(args) => {
-            let profile = load_profile(&args.profile)?;
+            let profile = runtime.load_profile(&args.profile)?;
             let request = agent_finance_core::SignedReadRequest::ApiPermissions;
-            let snapshot = run_signed_read(&profile, request, timeout_seconds).await?;
+            let snapshot = runtime.run_signed_read(&profile, request).await?;
             print_signed_read_snapshot(args.json, &snapshot)
         }
         AccountCommand::Balances(args) => {
-            let profile = load_profile(&args.profile)?;
+            let profile = runtime.load_profile(&args.profile)?;
             let request = agent_finance_core::SignedReadRequest::SpotBalances;
-            let snapshot = run_signed_read(&profile, request, timeout_seconds).await?;
+            let snapshot = runtime.run_signed_read(&profile, request).await?;
             print_signed_read_snapshot(args.json, &snapshot)
         }
         AccountCommand::Positions(args) => {
-            let profile = load_profile(&args.profile)?;
+            let profile = runtime.load_profile(&args.profile)?;
             let request = agent_finance_core::SignedReadRequest::UsdsFuturesPositions;
-            let snapshot = run_signed_read(&profile, request, timeout_seconds).await?;
+            let snapshot = runtime.run_signed_read(&profile, request).await?;
             print_signed_read_snapshot(args.json, &snapshot)
         }
     }
@@ -199,9 +196,10 @@ fn print_signed_read_snapshot(
 }
 
 pub(crate) async fn run_order(args: OrderArgs, timeout_seconds: u64) -> Result<()> {
+    let runtime = TradingRuntime::new(timeout_seconds);
     match args.command {
         OrderCommand::Create(args) => {
-            let profile = load_profile(&args.profile)?;
+            let profile = runtime.load_profile(&args.profile)?;
             let market = args.market.into();
             let intent = agent_finance_core::OrderIntent {
                 profile: profile.name.clone(),
@@ -225,7 +223,7 @@ pub(crate) async fn run_order(args: OrderArgs, timeout_seconds: u64) -> Result<(
             };
             let risk = agent_finance_core::check_order_intent(&profile, &intent, false);
             let envelope = agent_finance_core::create_order_intent(intent, args.ttl_seconds)?;
-            let path = save_intent_with_audit(
+            let path = runtime.save_intent_with_audit(
                 &profile,
                 &envelope,
                 &risk,
@@ -245,7 +243,7 @@ pub(crate) async fn run_order(args: OrderArgs, timeout_seconds: u64) -> Result<(
             )
         }
         OrderCommand::Cancel(args) => {
-            let profile = load_profile(&args.profile)?;
+            let profile = runtime.load_profile(&args.profile)?;
             let intent = agent_finance_core::CancelIntent {
                 profile: profile.name.clone(),
                 provider: profile.provider.provider,
@@ -259,7 +257,7 @@ pub(crate) async fn run_order(args: OrderArgs, timeout_seconds: u64) -> Result<(
             };
             let risk = agent_finance_core::check_cancel_intent(&profile, &intent, false);
             let envelope = agent_finance_core::create_cancel_intent(intent, args.ttl_seconds)?;
-            let path = save_intent_with_audit(
+            let path = runtime.save_intent_with_audit(
                 &profile,
                 &envelope,
                 &risk,
@@ -279,20 +277,15 @@ pub(crate) async fn run_order(args: OrderArgs, timeout_seconds: u64) -> Result<(
             )
         }
         OrderCommand::Submit(args) => {
-            let profile = load_profile(&args.profile)?;
-            let mode = WriteMode::from_flags(args.live, args.test)?;
-            let report = submit_intent(
-                &profile,
-                &args.intent_id,
-                ExpectedIntentKind::Order,
-                mode,
-                timeout_seconds,
-            )
-            .await?;
+            let profile = runtime.load_profile(&args.profile)?;
+            let mode = submit_mode_from_flags(args.live, args.test)?;
+            let report = runtime
+                .submit_order_intent(&profile, &args.intent_id, mode)
+                .await?;
             print_submit_report(args.json, &report)
         }
         OrderCommand::Query(args) => {
-            let profile = load_profile(&args.profile)?;
+            let profile = runtime.load_profile(&args.profile)?;
             let target =
                 agent_finance_core::OrderIdentifier::new(args.order_id, args.client_order_id)?;
             let request = agent_finance_core::SignedReadRequest::OrderQuery {
@@ -300,25 +293,26 @@ pub(crate) async fn run_order(args: OrderArgs, timeout_seconds: u64) -> Result<(
                 symbol: args.symbol.to_ascii_uppercase(),
                 target,
             };
-            let snapshot = run_signed_read(&profile, request, timeout_seconds).await?;
+            let snapshot = runtime.run_signed_read(&profile, request).await?;
             print_signed_read_snapshot(args.json, &snapshot)
         }
         OrderCommand::Open(args) => {
-            let profile = load_profile(&args.profile)?;
+            let profile = runtime.load_profile(&args.profile)?;
             let request = agent_finance_core::SignedReadRequest::OpenOrders {
                 market: args.market.into(),
                 symbol: args.symbol.map(|symbol| symbol.to_ascii_uppercase()),
             };
-            let snapshot = run_signed_read(&profile, request, timeout_seconds).await?;
+            let snapshot = runtime.run_signed_read(&profile, request).await?;
             print_signed_read_snapshot(args.json, &snapshot)
         }
     }
 }
 
 pub(crate) async fn run_transfer(args: TransferArgs, timeout_seconds: u64) -> Result<()> {
+    let runtime = TradingRuntime::new(timeout_seconds);
     match args.command {
         TransferCommand::Create(args) => {
-            let profile = load_profile(&args.profile)?;
+            let profile = runtime.load_profile(&args.profile)?;
             let intent = agent_finance_core::TransferIntent {
                 profile: profile.name.clone(),
                 provider: profile.provider.provider,
@@ -330,7 +324,7 @@ pub(crate) async fn run_transfer(args: TransferArgs, timeout_seconds: u64) -> Re
             };
             let risk = agent_finance_core::check_transfer_intent(&profile, &intent, false);
             let envelope = agent_finance_core::create_transfer_intent(intent, args.ttl_seconds)?;
-            let path = save_intent_with_audit(
+            let path = runtime.save_intent_with_audit(
                 &profile,
                 &envelope,
                 &risk,
@@ -350,40 +344,36 @@ pub(crate) async fn run_transfer(args: TransferArgs, timeout_seconds: u64) -> Re
             )
         }
         TransferCommand::Submit(args) => {
-            let profile = load_profile(&args.profile)?;
-            let mode = WriteMode::from_flags(args.live, false)?;
-            let report = submit_intent(
-                &profile,
-                &args.intent_id,
-                ExpectedIntentKind::Transfer,
-                mode,
-                timeout_seconds,
-            )
-            .await?;
+            let profile = runtime.load_profile(&args.profile)?;
+            let mode = submit_mode_from_flags(args.live, false)?;
+            let report = runtime
+                .submit_transfer_intent(&profile, &args.intent_id, mode)
+                .await?;
             print_submit_report(args.json, &report)
         }
         TransferCommand::History(args) => {
-            let profile = load_profile(&args.profile)?;
+            let profile = runtime.load_profile(&args.profile)?;
             let request = agent_finance_core::SignedReadRequest::transfer_history(
                 args.direction.into(),
                 args.current,
                 args.size,
             );
-            let snapshot = run_signed_read(&profile, request, timeout_seconds).await?;
+            let snapshot = runtime.run_signed_read(&profile, request).await?;
             print_signed_read_snapshot(args.json, &snapshot)
         }
     }
 }
 
 pub(crate) fn run_risk(args: RiskArgs) -> Result<()> {
+    let runtime = TradingRuntime::new(0);
     match args.command {
         RiskCommand::Check(args) => {
-            let profile = load_profile(&args.profile)?;
+            let profile = runtime.load_profile(&args.profile)?;
             let envelope =
                 agent_finance_core::IntentStore::from_default_dir()?.load(&args.intent_id)?;
             let risk = match &envelope.kind {
                 agent_finance_core::IntentKind::Order(intent) => {
-                    check_order_with_runtime_limits(&profile, intent, args.live)?
+                    runtime.check_order_with_runtime_limits(&profile, intent, args.live)?
                 }
                 agent_finance_core::IntentKind::Cancel(intent) => {
                     agent_finance_core::check_cancel_intent(&profile, intent, args.live)
@@ -405,7 +395,7 @@ pub(crate) fn run_risk(args: RiskArgs) -> Result<()> {
             })
         }
         RiskCommand::Explain(args) => {
-            let profile = load_profile(&args.profile)?;
+            let profile = runtime.load_profile(&args.profile)?;
             let used = agent_finance_core::daily_live_order_notional_used_today(&profile)?;
             let report = json!({
                 "profile": profile.name,

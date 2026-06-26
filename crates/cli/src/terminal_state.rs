@@ -2,15 +2,16 @@ use anyhow::{Result, anyhow};
 use serde_json::json;
 
 use crate::cli::{StateArgs, StateCommand};
-use crate::terminal_write::{
-    ExpectedIntentKind, WriteMode, load_profile, print_json_or_text, print_submit_report,
-    risk_findings_text, save_intent_with_audit, submit_intent,
+use crate::terminal_output::{
+    print_json_or_text, print_submit_report, risk_findings_text, submit_mode_from_flags,
 };
+use agent_finance_trading::TradingRuntime;
 
 pub(crate) async fn run(args: StateArgs, timeout_seconds: u64) -> Result<()> {
+    let runtime = TradingRuntime::new(timeout_seconds);
     match args.command {
         StateCommand::Create(args) => {
-            let profile = load_profile(&args.profile)?;
+            let profile = runtime.load_profile(&args.profile)?;
             let change = futures_state_change(&args)?;
             let intent = agent_finance_core::FuturesStateIntent {
                 profile: profile.name.clone(),
@@ -21,7 +22,7 @@ pub(crate) async fn run(args: StateArgs, timeout_seconds: u64) -> Result<()> {
             let risk = agent_finance_core::check_futures_state_intent(&profile, &intent, false);
             let envelope =
                 agent_finance_core::create_futures_state_intent(intent, args.ttl_seconds)?;
-            let path = save_intent_with_audit(
+            let path = runtime.save_intent_with_audit(
                 &profile,
                 &envelope,
                 &risk,
@@ -43,16 +44,11 @@ pub(crate) async fn run(args: StateArgs, timeout_seconds: u64) -> Result<()> {
             )
         }
         StateCommand::Submit(args) => {
-            let profile = load_profile(&args.profile)?;
-            let mode = WriteMode::from_flags(args.live, false)?;
-            let report = submit_intent(
-                &profile,
-                &args.intent_id,
-                ExpectedIntentKind::State,
-                mode,
-                timeout_seconds,
-            )
-            .await?;
+            let profile = runtime.load_profile(&args.profile)?;
+            let mode = submit_mode_from_flags(args.live, false)?;
+            let report = runtime
+                .submit_futures_state_intent(&profile, &args.intent_id, mode)
+                .await?;
             print_submit_report(args.json, &report)
         }
     }

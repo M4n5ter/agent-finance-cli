@@ -14,6 +14,7 @@ path = "src/main.rs"
 agent-finance-binance.workspace = true
 agent-finance-core.workspace = true
 agent-finance-market.workspace = true
+agent-finance-trading.workspace = true
 agent-finance-tui.workspace = true
 anyhow.workspace = true
 chrono.workspace = true

@@ -32,6 +32,7 @@ dependencies = [
  "agent-finance-binance",
  "agent-finance-core",
  "agent-finance-market",
+ "agent-finance-trading",
  "agent-finance-tui",
  "anyhow",
  "chrono",
@@ -80,6 +81,19 @@ dependencies = [
  "wreq",
  "wreq-util",
  "zip",
+]
+
+[[package]]
+name = "agent-finance-trading"
+version = "0.3.2"
+dependencies = [
+ "agent-finance-binance",
+ "agent-finance-core",
+ "anyhow",
+ "chrono",
+ "serde",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]

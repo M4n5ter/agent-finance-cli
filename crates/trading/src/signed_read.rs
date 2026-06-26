@@ -1,7 +1,7 @@
 use anyhow::{Result, anyhow};
 use serde_json::Value;
 
-pub(crate) trait SignedReadExecutor {
+trait SignedReadExecutor {
     async fn execute_signed_read(
         &self,
         request: agent_finance_core::SignedReadRequest,
@@ -15,7 +15,7 @@ pub(crate) async fn run_signed_read(
 ) -> Result<agent_finance_core::SignedReadSnapshot> {
     let request = request.normalized();
     validate_signed_read_request(profile, &request)?;
-    let client = crate::terminal_write::binance_client(profile, timeout_seconds)?;
+    let client = crate::write::binance_client(profile, timeout_seconds)?;
     signed_read_snapshot(profile, &client, request).await
 }
 

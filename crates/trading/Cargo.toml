@@ -1,0 +1,18 @@
+[package]
+name = "agent-finance-trading"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Reusable signed trading runtime for agent-finance CLI and TUI."
+
+[dependencies]
+agent-finance-binance.workspace = true
+agent-finance-core.workspace = true
+anyhow.workspace = true
+chrono.workspace = true
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt"] }

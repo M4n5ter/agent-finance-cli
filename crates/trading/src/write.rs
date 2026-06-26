@@ -1,10 +1,104 @@
 use anyhow::{Result, anyhow};
 use chrono::Utc;
-use serde::Serialize;
 use serde_json::json;
 
-pub(crate) fn load_profile(name: &str) -> Result<agent_finance_core::Profile> {
-    agent_finance_core::ProfileStore::from_default_dir()?.load(name)
+#[derive(Debug, Clone, Copy)]
+pub struct TradingRuntime {
+    timeout_seconds: u64,
+}
+
+impl TradingRuntime {
+    pub const fn new(timeout_seconds: u64) -> Self {
+        Self { timeout_seconds }
+    }
+
+    pub fn load_profile(&self, name: &str) -> Result<agent_finance_core::Profile> {
+        agent_finance_core::ProfileStore::from_default_dir()?.load(name)
+    }
+
+    pub async fn account_permissions(
+        &self,
+        profile: &agent_finance_core::Profile,
+    ) -> Result<serde_json::Value> {
+        binance_client(profile, self.timeout_seconds)?
+            .account_permissions()
+            .await
+    }
+
+    pub async fn run_signed_read(
+        &self,
+        profile: &agent_finance_core::Profile,
+        request: agent_finance_core::SignedReadRequest,
+    ) -> Result<agent_finance_core::SignedReadSnapshot> {
+        crate::signed_read::run_signed_read(profile, request, self.timeout_seconds).await
+    }
+
+    pub async fn submit_order_intent(
+        &self,
+        profile: &agent_finance_core::Profile,
+        intent_id: &str,
+        mode: agent_finance_core::SubmitMode,
+    ) -> Result<agent_finance_core::SubmitSnapshot> {
+        submit_intent(
+            profile,
+            intent_id,
+            ExpectedIntentKind::Order,
+            mode,
+            self.timeout_seconds,
+        )
+        .await
+    }
+
+    pub async fn submit_transfer_intent(
+        &self,
+        profile: &agent_finance_core::Profile,
+        intent_id: &str,
+        mode: agent_finance_core::SubmitMode,
+    ) -> Result<agent_finance_core::SubmitSnapshot> {
+        submit_intent(
+            profile,
+            intent_id,
+            ExpectedIntentKind::Transfer,
+            mode,
+            self.timeout_seconds,
+        )
+        .await
+    }
+
+    pub async fn submit_futures_state_intent(
+        &self,
+        profile: &agent_finance_core::Profile,
+        intent_id: &str,
+        mode: agent_finance_core::SubmitMode,
+    ) -> Result<agent_finance_core::SubmitSnapshot> {
+        submit_intent(
+            profile,
+            intent_id,
+            ExpectedIntentKind::State,
+            mode,
+            self.timeout_seconds,
+        )
+        .await
+    }
+
+    pub fn check_order_with_runtime_limits(
+        &self,
+        profile: &agent_finance_core::Profile,
+        intent: &agent_finance_core::OrderIntent,
+        live: bool,
+    ) -> Result<agent_finance_core::RiskDecision> {
+        check_order_with_runtime_limits(profile, intent, live)
+    }
+
+    pub fn save_intent_with_audit(
+        &self,
+        profile: &agent_finance_core::Profile,
+        envelope: &agent_finance_core::IntentEnvelope,
+        risk: &agent_finance_core::RiskDecision,
+        summary: String,
+    ) -> Result<std::path::PathBuf> {
+        save_intent_with_audit(profile, envelope, risk, summary)
+    }
 }
 
 pub(crate) fn binance_client(
@@ -22,7 +116,7 @@ pub(crate) fn binance_client(
     )
 }
 
-pub(crate) fn binance_endpoints(
+fn binance_endpoints(
     profile: &agent_finance_core::Profile,
 ) -> agent_finance_binance::BinanceEndpoints {
     agent_finance_binance::BinanceEndpoints::new(
@@ -34,14 +128,14 @@ pub(crate) fn binance_endpoints(
 }
 
 #[derive(Debug, Clone, Copy)]
-pub(crate) enum WriteMode {
+enum WriteMode {
     DryRun,
     Test,
     Live,
 }
 
 #[derive(Debug, Clone, Copy)]
-pub(crate) enum ExpectedIntentKind {
+enum ExpectedIntentKind {
     Order,
     Transfer,
     State,
@@ -82,15 +176,6 @@ impl ExpectedIntentKind {
 }
 
 impl WriteMode {
-    pub(crate) fn from_flags(live: bool, test: bool) -> Result<Self> {
-        match (live, test) {
-            (true, true) => Err(anyhow!("--live and --test are mutually exclusive")),
-            (true, false) => Ok(Self::Live),
-            (false, true) => Ok(Self::Test),
-            (false, false) => Ok(Self::DryRun),
-        }
-    }
-
     fn is_live(self) -> bool {
         matches!(self, Self::Live)
     }
@@ -138,6 +223,16 @@ impl WriteMode {
     }
 }
 
+impl From<agent_finance_core::SubmitMode> for WriteMode {
+    fn from(mode: agent_finance_core::SubmitMode) -> Self {
+        match mode {
+            agent_finance_core::SubmitMode::DryRun => Self::DryRun,
+            agent_finance_core::SubmitMode::Test => Self::Test,
+            agent_finance_core::SubmitMode::Live => Self::Live,
+        }
+    }
+}
+
 #[derive(serde::Serialize)]
 #[serde(untagged)]
 enum SubmitExecution {
@@ -163,11 +258,11 @@ struct ExchangeRulePlan {
     request: agent_finance_binance::SignedRequest,
 }
 
-pub(crate) async fn submit_intent(
+async fn submit_intent(
     profile: &agent_finance_core::Profile,
     intent_id: &str,
     expected_kind: ExpectedIntentKind,
-    mode: WriteMode,
+    mode: agent_finance_core::SubmitMode,
     timeout_seconds: u64,
 ) -> Result<agent_finance_core::SubmitSnapshot> {
     let store = agent_finance_core::IntentStore::from_default_dir()?;
@@ -176,7 +271,7 @@ pub(crate) async fn submit_intent(
         &store,
         intent_id,
         expected_kind,
-        mode,
+        mode.into(),
         LivePermissionSource::Binance { timeout_seconds },
         timeout_seconds,
     )
@@ -386,7 +481,7 @@ fn check_intent(
     }
 }
 
-pub(crate) fn check_order_with_runtime_limits(
+fn check_order_with_runtime_limits(
     profile: &agent_finance_core::Profile,
     intent: &agent_finance_core::OrderIntent,
     live: bool,
@@ -462,40 +557,7 @@ fn plan_intent(
     }))
 }
 
-pub(crate) fn print_submit_report(
-    json_output: bool,
-    report: &agent_finance_core::SubmitSnapshot,
-) -> Result<()> {
-    print_json_or_text(json_output, report, || {
-        let findings = risk_findings_text(&report.risk);
-        format!(
-            "submitted intent {}\nmode: {}\nexecution: {}\nrisk allowed: {}\n{}{}",
-            report.intent_id,
-            report.mode,
-            report.execution.kind,
-            report.risk.allowed,
-            findings,
-            serde_json::to_string_pretty(&report.execution.payload).unwrap()
-        )
-    })
-}
-
-pub(crate) fn risk_findings_text(risk: &agent_finance_core::RiskDecision) -> String {
-    if risk.findings.is_empty() {
-        return String::new();
-    }
-    let mut text = String::from("risk findings:");
-    for finding in &risk.findings {
-        text.push_str(&format!(
-            "\n- {} {}: {}",
-            finding.severity, finding.code, finding.message
-        ));
-    }
-    text.push('\n');
-    text
-}
-
-pub(crate) fn save_intent_with_audit(
+fn save_intent_with_audit(
     profile: &agent_finance_core::Profile,
     envelope: &agent_finance_core::IntentEnvelope,
     risk: &agent_finance_core::RiskDecision,
@@ -512,7 +574,7 @@ pub(crate) fn save_intent_with_audit(
     Ok(path)
 }
 
-pub(crate) fn append_audit(
+fn append_audit(
     profile: &agent_finance_core::Profile,
     intent_id: Option<String>,
     kind: agent_finance_core::AuditEventKind,
@@ -530,19 +592,6 @@ pub(crate) fn append_audit(
         payload,
     };
     agent_finance_core::append_audit_event(&event)?;
-    Ok(())
-}
-
-pub(crate) fn print_json_or_text<T, F>(json_output: bool, value: &T, text: F) -> Result<()>
-where
-    T: Serialize,
-    F: FnOnce() -> String,
-{
-    if json_output {
-        println!("{}", serde_json::to_string_pretty(value)?);
-    } else {
-        println!("{}", text());
-    }
     Ok(())
 }
 
