@@ -42,7 +42,7 @@ try {
     "-s",
     session,
     "-x",
-    "100",
+    "140",
     "-y",
     "30",
     "sh",
@@ -79,6 +79,16 @@ try {
   runTmux(["send-keys", "-t", session, "Enter"]);
   if (!waitForScreen(["mode: normal", "focus: Quote / Sessions"], 4_000)) {
     fail("TUI did not execute the filtered command palette action");
+  }
+
+  runTmux(["send-keys", "-t", session, "z"]);
+  if (!waitForScreen(["visible: 1/5", "focus: Quote / Sessions"], 4_000)) {
+    fail("TUI did not zoom the focused pane");
+  }
+
+  runTmux(["send-keys", "-t", session, "z"]);
+  if (!waitForScreen(["visible: 5/5", "focus: Quote / Sessions"], 4_000)) {
+    fail("TUI did not restore the workspace layout after zoom");
   }
 
   runTmux(["send-keys", "-t", session, "q"]);

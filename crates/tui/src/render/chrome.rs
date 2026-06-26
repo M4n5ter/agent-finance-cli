@@ -68,6 +68,8 @@ pub(super) fn render_floating(
         FloatingKind::Help => vec![
             Line::from("agent-finance cockpit"),
             Line::from("[/]: switch workspace"),
+            Line::from("Tab/Shift-Tab: move pane focus"),
+            Line::from("z: zoom focused pane or restore workspace layout"),
             Line::from("j/k or arrows: switch selected symbol"),
             Line::from("1-6: focus watchlist, quote, history, evidence, Polymarket, research"),
             Line::from(": open command palette"),
@@ -212,7 +214,7 @@ fn status_detail(state: &AppState, symbol: &str, errors: usize, width: u16) -> S
         state.panels.focused().title(),
         state.visible_panels().len(),
         state.workspace.panels().len(),
-        "[/] workspace  j/k symbol  : command  h help  x close  0 restore  q quit"
+        "[/] workspace  Tab pane  z zoom  : command  h help  x close  0 restore  q quit"
     )
 }
 

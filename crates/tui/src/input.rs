@@ -40,6 +40,9 @@ pub fn key_action(state: &AppState, key: KeyEvent) -> Option<Action> {
         KeyCode::Char('r') => Some(Action::Execute(ActionId::ResetLayout)),
         KeyCode::Char('x') => Some(Action::Execute(ActionId::CloseFocusedPanel)),
         KeyCode::Char('0') => Some(Action::Execute(ActionId::RestorePanels)),
+        KeyCode::Tab => Some(Action::Execute(ActionId::FocusPanelBy(1))),
+        KeyCode::BackTab => Some(Action::Execute(ActionId::FocusPanelBy(-1))),
+        KeyCode::Char('z') => Some(Action::Execute(ActionId::ToggleFocusedZoom)),
         KeyCode::Char(']') => Some(Action::Execute(ActionId::ShiftWorkspace(1))),
         KeyCode::Char('[') => Some(Action::Execute(ActionId::ShiftWorkspace(-1))),
         KeyCode::Esc => Some(Action::CloseFocusedFloating),
@@ -166,6 +169,18 @@ mod tests {
         assert_eq!(
             key_action(&state, KeyEvent::from(KeyCode::Char('0'))),
             Some(Action::Execute(ActionId::RestorePanels))
+        );
+        assert_eq!(
+            key_action(&state, KeyEvent::from(KeyCode::Tab)),
+            Some(Action::Execute(ActionId::FocusPanelBy(1)))
+        );
+        assert_eq!(
+            key_action(&state, KeyEvent::from(KeyCode::BackTab)),
+            Some(Action::Execute(ActionId::FocusPanelBy(-1)))
+        );
+        assert_eq!(
+            key_action(&state, KeyEvent::from(KeyCode::Char('z'))),
+            Some(Action::Execute(ActionId::ToggleFocusedZoom))
         );
         assert_eq!(
             key_action(&state, KeyEvent::from(KeyCode::Char('5'))),

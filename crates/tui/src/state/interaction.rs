@@ -29,6 +29,14 @@ impl AppState {
                 self.close_floating(FloatingKind::CommandPalette);
                 self.reduce(Action::RestorePanels);
             }
+            ActionId::FocusPanelBy(direction) => {
+                self.close_floating(FloatingKind::CommandPalette);
+                self.reduce(Action::FocusPanelBy(direction));
+            }
+            ActionId::ToggleFocusedZoom => {
+                self.close_floating(FloatingKind::CommandPalette);
+                self.reduce(Action::ToggleFocusedZoom);
+            }
             ActionId::CloseCommandPalette => {
                 self.close_floating(FloatingKind::CommandPalette);
             }

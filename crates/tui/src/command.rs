@@ -118,6 +118,8 @@ pub enum ActionId {
     ResetLayout,
     CloseFocusedPanel,
     RestorePanels,
+    FocusPanelBy(isize),
+    ToggleFocusedZoom,
     ShiftWorkspace(isize),
     SetWorkspace(WorkspaceKind),
     FocusPanel(Panel),
@@ -125,7 +127,7 @@ pub enum ActionId {
     CloseCommandPalette,
 }
 
-pub const ACTION_SPECS: [CommandSpec; 28] = [
+pub const ACTION_SPECS: [CommandSpec; 31] = [
     CommandSpec {
         title: "Open help",
         description: "Show cockpit shortcuts and interaction model",
@@ -150,6 +152,21 @@ pub const ACTION_SPECS: [CommandSpec; 28] = [
         title: "Restore all panels",
         description: "Reopen every docked panel without changing the current symbol",
         action: ActionId::RestorePanels,
+    },
+    CommandSpec {
+        title: "Next pane",
+        description: "Move focus to the next workspace pane",
+        action: ActionId::FocusPanelBy(1),
+    },
+    CommandSpec {
+        title: "Previous pane",
+        description: "Move focus to the previous workspace pane",
+        action: ActionId::FocusPanelBy(-1),
+    },
+    CommandSpec {
+        title: "Toggle pane zoom",
+        description: "Expand the focused docked pane or restore the workspace layout",
+        action: ActionId::ToggleFocusedZoom,
     },
     CommandSpec {
         title: "Next workspace",

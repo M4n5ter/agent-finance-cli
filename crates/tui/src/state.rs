@@ -22,6 +22,7 @@ pub struct AppState {
     pub watchlist: Vec<String>,
     pub selected_symbol: usize,
     pub workspace: WorkspaceKind,
+    pub zoomed: bool,
     pub layout: LayoutConfig,
     pub panels: DockedPanels,
     pub floating: Vec<FloatingPane>,
@@ -43,6 +44,7 @@ impl AppState {
             watchlist: config.watchlist,
             selected_symbol: 0,
             workspace: config.workspace.current,
+            zoomed: false,
             layout: config.layout,
             panels: DockedPanels::from_open_focused(config.panels.open, config.panels.focused),
             floating: config.floating.panes,
@@ -89,12 +91,35 @@ impl AppState {
     }
 
     pub fn visible_panels(&self) -> Vec<Panel> {
-        self.panels
-            .open_panels()
+        self.layout_panels()
+    }
+
+    /// Panels that should be rendered in the current layout.
+    pub fn layout_panels(&self) -> Vec<Panel> {
+        let panels = self.workspace_panels();
+        if self.zoomed
+            && let Some(focused) = panels
+                .iter()
+                .copied()
+                .find(|panel| *panel == self.panels.focused())
+        {
+            return vec![focused];
+        }
+        panels
+    }
+
+    /// Open panels in the current workspace, independent of zoom.
+    pub fn workspace_panels(&self) -> Vec<Panel> {
+        self.workspace
+            .panels()
             .iter()
             .copied()
-            .filter(|panel| self.workspace.panels().contains(panel))
+            .filter(|panel| self.panels.contains(*panel))
             .collect()
+    }
+
+    pub fn is_open_in_workspace(&self, panel: Panel) -> bool {
+        self.panels.contains(panel) && self.workspace_contains(panel)
     }
 
     pub fn interaction_mode(&self) -> InteractionMode {
@@ -122,16 +147,24 @@ impl AppState {
             Action::Execute(action) => self.execute(action),
             Action::CloseFocusedPanel => {
                 self.panels.close_focused();
+                self.clear_zoom();
                 self.ensure_visible_focus();
             }
             Action::RestorePanels => {
                 self.panels.restore();
+                self.clear_zoom();
                 self.ensure_visible_focus();
             }
             Action::ShiftWorkspace(direction) => {
                 self.set_workspace(self.workspace.shift(direction))
             }
             Action::SetWorkspace(workspace) => self.set_workspace(workspace),
+            Action::FocusPanelBy(direction) => self.focus_panel_by(direction),
+            Action::ToggleFocusedZoom => {
+                if !self.visible_panels().is_empty() {
+                    self.zoomed = !self.zoomed;
+                }
+            }
             Action::CloseFocusedFloating => {
                 if self
                     .floating
@@ -152,6 +185,7 @@ impl AppState {
                     self.command_palette.reset();
                 }
                 self.floating.clear();
+                self.clear_zoom();
                 self.layout = LayoutConfig::default();
                 self.panels = DockedPanels::default();
                 self.ensure_visible_focus();
@@ -335,6 +369,24 @@ impl AppState {
         self.selected_symbol = (selected + direction).rem_euclid(len) as usize;
     }
 
+    fn clear_zoom(&mut self) {
+        self.zoomed = false;
+    }
+
+    fn focus_panel_by(&mut self, direction: isize) {
+        let visible = self.workspace_panels();
+        if visible.is_empty() {
+            self.ensure_visible_focus();
+            return;
+        }
+        let current = visible
+            .iter()
+            .position(|panel| *panel == self.panels.focused())
+            .unwrap_or(0) as isize;
+        let next = (current + direction).rem_euclid(visible.len() as isize) as usize;
+        self.panels.focus(visible[next]);
+    }
+
     fn close_floating(&mut self, kind: FloatingKind) {
         let had_pane = self.floating.iter().any(|pane| pane.kind == kind);
         self.floating.retain(|pane| pane.kind != kind);
@@ -365,7 +417,7 @@ impl AppState {
     }
 
     fn focus_panel(&mut self, panel: Panel) {
-        if !self.workspace.panels().contains(&panel)
+        if !self.workspace_contains(panel)
             && let Some(workspace) = WorkspaceKind::ALL
                 .iter()
                 .copied()
@@ -378,18 +430,20 @@ impl AppState {
         } else {
             self.panels.open_panel(panel);
         }
+        self.clear_zoom();
         self.ensure_visible_focus();
     }
 
     fn set_workspace(&mut self, workspace: WorkspaceKind) {
         self.workspace = workspace;
+        self.clear_zoom();
         self.ensure_visible_focus();
     }
 
     fn toggle_panel(&mut self, panel: Panel) {
-        let is_visible = self.visible_panels().contains(&panel);
-        if is_visible {
+        if self.is_open_in_workspace(panel) {
             self.panels.toggle(panel);
+            self.clear_zoom();
             self.ensure_visible_focus();
         } else {
             self.focus_panel(panel);
@@ -397,10 +451,11 @@ impl AppState {
     }
 
     fn ensure_visible_focus(&mut self) {
-        let visible_panels = self.visible_panels();
+        let visible_panels = self.workspace_panels();
         if visible_panels.contains(&self.panels.focused()) {
             return;
         }
+        self.clear_zoom();
 
         if let Some(panel) = visible_panels.first().copied() {
             self.panels.focus(panel);
@@ -408,6 +463,10 @@ impl AppState {
         }
 
         self.panels.open_panel(self.workspace.default_panel());
+    }
+
+    fn workspace_contains(&self, panel: Panel) -> bool {
+        self.workspace.panels().contains(&panel)
     }
 
     fn push_log(&mut self, entry: TaskLogEntry) {
@@ -543,6 +602,8 @@ pub enum Action {
     MoveCommandSelection(isize),
     EditCommandQuery(tui_input::InputRequest),
     Execute(ActionId),
+    FocusPanelBy(isize),
+    ToggleFocusedZoom,
     CloseFocusedPanel,
     RestorePanels,
     ShiftWorkspace(isize),
@@ -708,6 +769,96 @@ mod tests {
         assert_eq!(state.workspace, WorkspaceKind::Research);
         assert!(state.visible_panels().contains(&state.panels.focused()));
         assert_eq!(state.panels.focused(), Panel::Watchlist);
+    }
+
+    #[test]
+    fn pane_focus_navigation_wraps_visible_workspace_panels() {
+        let mut state = AppState::from_config(TuiConfig {
+            workspace: WorkspaceConfig {
+                current: WorkspaceKind::Research,
+            },
+            ..TuiConfig::default()
+        });
+
+        assert_eq!(state.panels.focused(), Panel::Watchlist);
+        state.reduce(Action::FocusPanelBy(1));
+        assert_eq!(state.panels.focused(), Panel::Quote);
+        state.reduce(Action::FocusPanelBy(-1));
+        assert_eq!(state.panels.focused(), Panel::Watchlist);
+        state.reduce(Action::FocusPanelBy(-1));
+        assert_eq!(state.panels.focused(), Panel::TaskLog);
+    }
+
+    #[test]
+    fn pane_focus_navigation_uses_workspace_declared_order() {
+        let mut state = AppState::from_config(TuiConfig {
+            workspace: WorkspaceConfig {
+                current: WorkspaceKind::Providers,
+            },
+            ..TuiConfig::default()
+        });
+
+        assert_eq!(
+            state.workspace_panels(),
+            vec![
+                Panel::Watchlist,
+                Panel::ProviderHealth,
+                Panel::TaskLog,
+                Panel::Quote
+            ]
+        );
+        state.reduce(Action::FocusPanelBy(1));
+        assert_eq!(state.panels.focused(), Panel::ProviderHealth);
+    }
+
+    #[test]
+    fn pane_zoom_limits_visible_panels_without_trapping_focus_navigation() {
+        let mut state = AppState::from_config(TuiConfig::default());
+
+        state.reduce(Action::Focus(Panel::History));
+        state.reduce(Action::ToggleFocusedZoom);
+        assert!(state.zoomed);
+        assert_eq!(state.visible_panels(), vec![Panel::History]);
+
+        state.reduce(Action::FocusPanelBy(1));
+        assert!(state.zoomed);
+        assert_eq!(state.panels.focused(), Panel::ProviderHealth);
+        assert_eq!(state.visible_panels(), vec![Panel::ProviderHealth]);
+
+        state.reduce(Action::ToggleFocusedZoom);
+        assert!(!state.zoomed);
+        assert!(state.visible_panels().len() > 1);
+    }
+
+    #[test]
+    fn zoom_does_not_turn_hidden_open_panels_into_focus_actions() {
+        let mut state = AppState::from_config(TuiConfig::default());
+
+        state.reduce(Action::Focus(Panel::History));
+        state.reduce(Action::ToggleFocusedZoom);
+        assert_eq!(state.visible_panels(), vec![Panel::History]);
+        assert!(state.is_open_in_workspace(Panel::Quote));
+
+        state.reduce(Action::Execute(ActionId::TogglePanel(Panel::Quote)));
+
+        assert!(!state.panels.contains(Panel::Quote));
+        assert!(!state.zoomed);
+        assert_eq!(state.panels.focused(), Panel::History);
+    }
+
+    #[test]
+    fn workspace_and_layout_restore_leave_zoom_mode() {
+        let mut state = AppState::from_config(TuiConfig::default());
+
+        state.reduce(Action::ToggleFocusedZoom);
+        assert!(state.zoomed);
+        state.reduce(Action::SetWorkspace(WorkspaceKind::Research));
+        assert!(!state.zoomed);
+
+        state.reduce(Action::ToggleFocusedZoom);
+        assert!(state.zoomed);
+        state.reduce(Action::RestorePanels);
+        assert!(!state.zoomed);
     }
 
     #[test]
