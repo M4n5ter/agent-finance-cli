@@ -1,6 +1,6 @@
 use serde::Serialize;
 
-use crate::command::ACTION_REGISTRY;
+use crate::hints;
 use crate::model::{InteractionMode, Panel, WorkspaceKind};
 use crate::provider_health::{ProviderHealthReport, ProviderHealthTask};
 use crate::state::AppState;
@@ -54,11 +54,7 @@ impl TuiDump {
             tasks: provider_health.tasks.clone(),
             errors: dump_errors(state),
             provider_health,
-            key_hints: ACTION_REGISTRY
-                .iter()
-                .filter_map(|action| action.command())
-                .map(|command| command.title.to_string())
-                .collect(),
+            key_hints: hints::mode_key_hints(state),
         }
     }
 }
@@ -151,7 +147,10 @@ fn selected_symbol_is_crypto(state: &AppState) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::command::ActionId;
     use crate::config::{TuiConfig, WorkspaceConfig};
+    use crate::model::FloatingKind;
+    use crate::state::Action;
 
     #[test]
     fn dump_marks_only_workspace_panels_visible() {
@@ -203,6 +202,40 @@ mod tests {
                 .expect("panes")
                 .iter()
                 .any(|pane| pane["panel"] == "provider-health")
+        );
+        assert!(
+            value["key_hints"]
+                .as_array()
+                .expect("key_hints")
+                .iter()
+                .any(|hint| hint == "q quit")
+        );
+    }
+
+    #[test]
+    fn dump_key_hints_follow_current_interaction_mode() {
+        let mut state = AppState::from_config(TuiConfig::default());
+
+        state.reduce(Action::Execute(ActionId::OpenFloating(
+            FloatingKind::SymbolSearch,
+        )));
+        let search = serde_json::to_value(TuiDump::from_state(&state, true)).expect("serialize");
+        assert!(
+            search["key_hints"]
+                .as_array()
+                .expect("key_hints")
+                .iter()
+                .any(|hint| hint == "enter select")
+        );
+
+        state.reduce(Action::Execute(ActionId::OpenFloating(FloatingKind::Help)));
+        let help = serde_json::to_value(TuiDump::from_state(&state, true)).expect("serialize");
+        assert!(
+            help["key_hints"]
+                .as_array()
+                .expect("key_hints")
+                .iter()
+                .any(|hint| hint == "q quit")
         );
     }
 }

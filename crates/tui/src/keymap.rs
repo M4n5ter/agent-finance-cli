@@ -40,6 +40,13 @@ impl KeymapConfig {
             .find(|binding| binding.key.matches(key))
             .map(|binding| binding.action)
     }
+
+    pub fn normal_key_for(&self, action: ActionId) -> Option<KeyStroke> {
+        self.normal
+            .iter()
+            .find(|binding| binding.action == action)
+            .map(|binding| binding.key)
+    }
 }
 
 impl Serialize for KeymapConfig {

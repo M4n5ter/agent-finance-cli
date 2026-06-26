@@ -6,7 +6,8 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, List, ListItem, Paragraph, Shadow, Tabs, Wrap};
 
-use crate::model::{FloatingKind, WorkspaceKind};
+use crate::hints;
+use crate::model::{FloatingKind, InteractionMode, WorkspaceKind};
 use crate::state::AppState;
 
 pub(super) fn render_status(frame: &mut Frame<'_>, state: &AppState, area: Rect) {
@@ -120,7 +121,8 @@ fn render_command_palette(frame: &mut Frame<'_>, state: &AppState, area: Rect) {
         area,
         SearchFloating {
             title: "Command Palette",
-            input_title: "Command Palette  type filter  Enter run  Esc close",
+            input_title: hints::input_floating_title(InteractionMode::Command)
+                .expect("command mode has an input title"),
             placeholder: "filter commands",
             query: state.command_palette.query(),
             selected: state.command_palette.selected(),
@@ -154,7 +156,8 @@ fn render_symbol_search(frame: &mut Frame<'_>, state: &AppState, area: Rect) {
         area,
         SearchFloating {
             title: "Symbol Search",
-            input_title: "Symbol Search  type filter  Enter select  Esc close",
+            input_title: hints::input_floating_title(InteractionMode::Search)
+                .expect("search mode has an input title"),
             placeholder: "filter symbols",
             query: state.symbol_search.query(),
             selected: state.symbol_search.selected(),
@@ -189,7 +192,7 @@ fn render_symbol_search(frame: &mut Frame<'_>, state: &AppState, area: Rect) {
 
 struct SearchFloating<'a> {
     title: &'static str,
-    input_title: &'static str,
+    input_title: String,
     placeholder: &'static str,
     query: &'a str,
     selected: usize,
@@ -225,7 +228,7 @@ fn render_search_floating(
             } else {
                 Style::default().fg(Color::Cyan)
             })
-            .block(floating_block(floating.input_title)),
+            .block(dynamic_floating_block(floating.input_title)),
         input_area,
     );
 
@@ -289,14 +292,15 @@ fn status_detail(state: &AppState, symbol: &str, errors: usize, width: u16) -> S
         );
     }
 
-    format!(
-        " {symbol} | mode: {} | focus: {} | visible: {}/{} | {runtime} | errors: {errors} | {} ",
+    let prefix = format!(
+        " {symbol} | mode: {} | focus: {} | visible: {}/{} | {runtime} | errors: {errors} | ",
         state.interaction_mode().label(),
         state.panels.focused().title(),
         state.visible_panels().len(),
         state.workspace.panels().len(),
-        "[/] workspace  Tab pane  z zoom  : command  / search  h help  x close  0 restore  q quit"
-    )
+    );
+    let hint_budget = width.saturating_sub(prefix.len() as u16 + 1) as usize;
+    format!("{}{} ", prefix, hints::status_key_hints(state, hint_budget))
 }
 
 fn workspace_index(current: WorkspaceKind) -> usize {

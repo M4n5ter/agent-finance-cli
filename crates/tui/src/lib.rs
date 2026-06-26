@@ -2,6 +2,7 @@ mod app;
 mod command;
 mod config;
 mod dump;
+mod hints;
 mod input;
 mod keymap;
 mod layout;
