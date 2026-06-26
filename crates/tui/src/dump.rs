@@ -17,6 +17,7 @@ pub struct TuiDump {
     pub provider_health: ProviderHealthReport,
     pub tasks: Vec<ProviderHealthTask>,
     pub default_submit_mode: SubmitMode,
+    pub trading_profile: Option<String>,
     pub write_sessions: Vec<WriteSessionView>,
     pub errors: Vec<String>,
     pub key_hints: Vec<String>,
@@ -47,6 +48,7 @@ impl TuiDump {
                 .collect(),
             tasks: provider_health.tasks.clone(),
             default_submit_mode: state.default_submit_mode,
+            trading_profile: state.trading_profile.clone(),
             write_sessions: state.write_session_views(),
             errors: dump_errors(state),
             provider_health,
@@ -132,12 +134,16 @@ mod tests {
             workspace: WorkspaceConfig {
                 current: WorkspaceKind::Providers,
             },
+            trading: crate::config::TradingConfig {
+                default_profile: Some("mainnet".to_string()),
+            },
             ..TuiConfig::default()
         });
 
         let value = serde_json::to_value(TuiDump::from_state(&state, true)).expect("serialize");
 
         assert_eq!(value["workspace"], "providers");
+        assert_eq!(value["trading_profile"], "mainnet");
         assert!(
             value["panes"]
                 .as_array()

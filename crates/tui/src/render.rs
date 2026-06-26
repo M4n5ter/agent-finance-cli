@@ -66,6 +66,21 @@ mod tests {
     }
 
     #[test]
+    fn status_bar_keeps_trading_profile_visible_at_common_width() {
+        let state = AppState::from_config(TuiConfig {
+            watchlist: vec!["CRDO".to_string()],
+            trading: crate::config::TradingConfig {
+                default_profile: Some("mainnet".to_string()),
+            },
+            ..TuiConfig::default()
+        });
+
+        let text = render_to_text(&state, 120, 32);
+
+        assert!(text.contains("profile: mainnet"));
+    }
+
+    #[test]
     fn overview_workspace_matches_snapshot_at_100x30() {
         let mut state = snapshot_state();
         state.reduce(crate::state::Action::Execute(ActionId::SetWorkspace(

@@ -40,6 +40,7 @@ pub async fn run() -> Result<()> {
                     timeout_seconds,
                     timezone,
                 )
+                .with_profile(args.profile)
                 .with_workspace(args.workspace)
                 .with_dump_state(dump_state),
             )

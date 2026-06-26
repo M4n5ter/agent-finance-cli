@@ -282,6 +282,12 @@ fn status_detail(state: &AppState, symbol: &str, errors: usize, width: u16) -> S
     }
 
     if width < 82 {
+        if let Some(profile) = state.trading_profile.as_deref() {
+            return format!(
+                " {symbol} | mode: {} | profile: {profile} | {runtime} | e:{errors} ",
+                state.interaction_mode().label(),
+            );
+        }
         return format!(
             " {symbol} | mode: {} | focus: {} | {runtime} | e:{errors} ",
             state.interaction_mode().label(),
@@ -289,8 +295,13 @@ fn status_detail(state: &AppState, symbol: &str, errors: usize, width: u16) -> S
         );
     }
 
+    let profile = state
+        .trading_profile
+        .as_deref()
+        .map(|profile| format!(" | profile: {profile}"))
+        .unwrap_or_default();
     let prefix = format!(
-        " {symbol} | mode: {} | focus: {} | visible: {}/{} | {runtime} | errors: {errors} | ",
+        " {symbol} | mode: {}{profile} | focus: {} | visible: {}/{} | {runtime} | errors: {errors} | ",
         state.interaction_mode().label(),
         state.panels.focused().title(),
         state.visible_panels().len(),

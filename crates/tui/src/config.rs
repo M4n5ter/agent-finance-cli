@@ -26,6 +26,7 @@ pub struct TuiLaunch {
     pub config_path: Option<PathBuf>,
     pub no_persist: bool,
     pub workspace: Option<WorkspaceKind>,
+    pub profile: Option<String>,
     pub dump_state: Option<TuiDumpOptions>,
     pub tick_rate: Duration,
     pub proxy: Option<String>,
@@ -59,6 +60,7 @@ impl TuiLaunch {
             config_path,
             no_persist,
             workspace: None,
+            profile: None,
             dump_state: None,
             tick_rate: Duration::from_millis(250),
             proxy: proxy.map(ToString::to_string),
@@ -70,6 +72,11 @@ impl TuiLaunch {
 
     pub fn with_workspace(mut self, workspace: Option<WorkspaceKind>) -> Self {
         self.workspace = workspace;
+        self
+    }
+
+    pub fn with_profile(mut self, profile: Option<String>) -> Self {
+        self.profile = normalize_profile_name(profile);
         self
     }
 
@@ -105,7 +112,17 @@ impl TuiLaunch {
         if let Some(workspace) = self.workspace {
             config.workspace.current = workspace;
         }
+        if let Some(profile) = self.profile.as_ref() {
+            config.trading.default_profile = Some(profile.clone());
+        }
         config.normalize();
+        config
+    }
+
+    pub fn persistence_config(&self, mut config: TuiConfig, persisted: &TuiConfig) -> TuiConfig {
+        if self.profile.is_some() {
+            config.trading.default_profile = persisted.trading.default_profile.clone();
+        }
         config
     }
 
@@ -139,6 +156,8 @@ pub struct TuiConfig {
     pub refresh: RefreshConfig,
     #[serde(default)]
     pub providers: ProviderConfig,
+    #[serde(default, skip_serializing_if = "TradingConfig::is_empty")]
+    pub trading: TradingConfig,
     #[serde(default)]
     pub theme: ThemeConfig,
     #[serde(default, skip_serializing_if = "KeymapConfig::is_empty")]
@@ -155,6 +174,7 @@ impl Default for TuiConfig {
             floating: FloatingConfig::default(),
             refresh: RefreshConfig::default(),
             providers: ProviderConfig::default(),
+            trading: TradingConfig::default(),
             theme: ThemeConfig::default(),
             keymap: KeymapConfig::default(),
         }
@@ -192,6 +212,7 @@ impl TuiConfig {
         self.panels.normalize();
         self.floating.normalize();
         self.refresh.normalize();
+        self.trading.normalize();
         self.theme.normalize();
         self.keymap.normalize();
     }
@@ -337,8 +358,30 @@ impl Default for ProviderConfig {
     }
 }
 
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Eq, PartialEq)]
+pub struct TradingConfig {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_profile: Option<String>,
+}
+
+impl TradingConfig {
+    pub fn normalize(&mut self) {
+        self.default_profile = normalize_profile_name(self.default_profile.take());
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.default_profile.is_none()
+    }
+}
+
 fn default_config_path() -> Option<PathBuf> {
     paths::config_dir().ok().map(|path| path.join("tui.toml"))
+}
+
+fn normalize_profile_name(profile: Option<String>) -> Option<String> {
+    profile
+        .map(|profile| profile.trim().to_string())
+        .filter(|profile| !profile.is_empty())
 }
 
 fn normalize_symbols(symbols: &[String]) -> Vec<String> {
@@ -601,6 +644,9 @@ mod tests {
                 equity: EquityProvider::Yahoo,
                 crypto: CryptoProvider::Binance,
             },
+            trading: TradingConfig {
+                default_profile: Some("mainnet".to_string()),
+            },
             theme: ThemeConfig::default(),
             keymap: KeymapConfig::default(),
         };
@@ -624,12 +670,37 @@ mod tests {
         assert_eq!(decoded.refresh.research_seconds, 60);
         assert_eq!(decoded.providers.equity, EquityProvider::Yahoo);
         assert_eq!(decoded.providers.crypto, CryptoProvider::Binance);
+        assert_eq!(decoded.trading.default_profile.as_deref(), Some("mainnet"));
         assert_eq!(decoded.theme, ThemeConfig::default());
         assert_eq!(decoded.keymap.normal, KeymapConfig::default().normal);
         assert!(encoded.contains("equity = \"yahoo\""));
         assert!(encoded.contains("crypto = \"binance\""));
+        assert!(encoded.contains("[trading]"));
+        assert!(encoded.contains("default_profile = \"mainnet\""));
         assert!(encoded.contains("[theme]"));
         assert!(!encoded.contains("[keymap]"));
+    }
+
+    #[test]
+    fn launch_profile_override_is_runtime_only() {
+        let launch =
+            TuiLaunch::new(Vec::new(), None, true).with_profile(Some(" live-main ".to_string()));
+        let persisted = TuiConfig {
+            trading: TradingConfig {
+                default_profile: Some("paper".to_string()),
+            },
+            ..TuiConfig::default()
+        };
+
+        let runtime = launch.runtime_config(persisted.clone());
+        let export = launch.persistence_config(runtime.clone(), &persisted);
+
+        assert_eq!(
+            runtime.trading.default_profile.as_deref(),
+            Some("live-main")
+        );
+        assert_eq!(persisted.trading.default_profile.as_deref(), Some("paper"));
+        assert_eq!(export.trading.default_profile.as_deref(), Some("paper"));
     }
 
     #[test]

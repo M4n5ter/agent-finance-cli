@@ -51,6 +51,7 @@ pub struct AppState {
     pub scheduler_error: Option<String>,
     pub theme: ThemeConfig,
     pub default_submit_mode: SubmitMode,
+    pub trading_profile: Option<String>,
     write_sessions: WriteSessions,
 }
 
@@ -78,6 +79,7 @@ impl AppState {
             scheduler_error: None,
             theme: config.theme,
             default_submit_mode: SubmitMode::DryRun,
+            trading_profile: config.trading.default_profile,
             write_sessions: WriteSessions::default(),
         };
         state.ensure_visible_focus();
@@ -105,6 +107,7 @@ impl AppState {
         };
         config.keymap = self.keymap.clone();
         config.theme = self.theme.clone();
+        config.trading.default_profile = self.trading_profile.clone();
         config.normalize();
         config
     }
