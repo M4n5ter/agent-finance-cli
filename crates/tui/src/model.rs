@@ -362,31 +362,3 @@ impl FloatingSize {
         }
     }
 }
-
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
-pub enum TaskLevel {
-    Info,
-    Warning,
-}
-
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub struct TaskLogEntry {
-    pub level: TaskLevel,
-    pub message: String,
-}
-
-impl TaskLogEntry {
-    pub(crate) fn info(message: String) -> Self {
-        Self {
-            level: TaskLevel::Info,
-            message,
-        }
-    }
-
-    pub(crate) fn warning(message: String) -> Self {
-        Self {
-            level: TaskLevel::Warning,
-            message,
-        }
-    }
-}

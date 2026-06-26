@@ -1,5 +1,3 @@
-use std::collections::VecDeque;
-
 use agent_finance_market::crypto_evidence_snapshot::CryptoQuoteEvidenceSnapshot;
 use agent_finance_market::history_snapshot::HistorySnapshot;
 use agent_finance_market::model::ProviderProfile;
@@ -11,11 +9,13 @@ use crate::command::{ActionId, CommandPaletteState};
 use crate::config::{FloatingConfig, LayoutConfig, PanelConfig, TuiConfig, WorkspaceConfig};
 use crate::keymap::KeymapConfig;
 use crate::model::{
-    DockedPanels, FloatingKind, FloatingPane, FloatingSize, InteractionMode, Panel, TaskLogEntry,
-    WorkspaceKind,
+    DockedPanels, FloatingKind, FloatingPane, FloatingSize, InteractionMode, Panel, WorkspaceKind,
 };
 use crate::search::SymbolSearchState;
 use crate::task_failure::{TaskFailure, TaskFailureSource, TaskFailures};
+#[cfg(test)]
+use crate::task_log::TaskStatus;
+use crate::task_log::{TaskKey, TaskLog};
 
 mod interaction;
 
@@ -31,7 +31,7 @@ pub struct AppState {
     pub command_palette: CommandPaletteState,
     pub symbol_search: SymbolSearchState,
     pub keymap: KeymapConfig,
-    pub task_log: VecDeque<TaskLogEntry>,
+    pub task_log: TaskLog,
     pub provider_profiles: Vec<ProviderProfile>,
     pub market_snapshot: Option<MarketSnapshot>,
     pub refresh: LoadSlot<()>,
@@ -55,7 +55,7 @@ impl AppState {
             command_palette: CommandPaletteState::default(),
             symbol_search: SymbolSearchState::default(),
             keymap: config.keymap,
-            task_log: VecDeque::new(),
+            task_log: TaskLog::default(),
             provider_profiles: service::provider_profiles(),
             market_snapshot: None,
             refresh: LoadSlot::new(),
@@ -208,65 +208,98 @@ impl AppState {
             }
             Action::RefreshStarted(generation) => {
                 self.refresh.start(generation, ());
+                self.task_log.running(
+                    TaskKey::Refresh { generation },
+                    "market snapshot refreshing",
+                );
             }
             Action::SnapshotLoaded {
                 generation,
                 snapshot,
             } => {
-                if self.refresh.finish(generation) {
+                if let Some(active) = self.refresh.finish(generation) {
                     self.task_failures.clear(TaskFailureSource::Quotes, None);
                     if !snapshot.errors.is_empty() {
-                        self.push_log(TaskLogEntry::warning(format!(
-                            "refresh completed with {} provider errors",
-                            snapshot.errors.len()
-                        )));
+                        self.task_log.warning(
+                            TaskKey::Refresh {
+                                generation: active.generation,
+                            },
+                            format!(
+                                "refresh completed with {} provider errors",
+                                snapshot.errors.len()
+                            ),
+                        );
                     } else {
-                        self.push_log(TaskLogEntry::info("market snapshot refreshed".to_string()));
+                        self.task_log.succeeded(
+                            TaskKey::Refresh {
+                                generation: active.generation,
+                            },
+                            "market snapshot refreshed",
+                        );
                     }
                     self.market_snapshot = Some(snapshot);
                 } else {
-                    self.push_log(TaskLogEntry::warning(format!(
+                    self.task_log.warning_event(format!(
                         "ignored stale market snapshot generation {generation}",
-                    )));
+                    ));
                 }
             }
             Action::RefreshFailed { generation, error } => {
-                if self.refresh.finish(generation) {
+                if let Some(active) = self.refresh.finish(generation) {
                     self.task_failures.set(TaskFailure::market(error.clone()));
-                    self.push_log(TaskLogEntry::warning(format!(
-                        "market refresh failed: {error}"
-                    )));
+                    self.task_log.failed(
+                        TaskKey::Refresh {
+                            generation: active.generation,
+                        },
+                        format!("market refresh failed: {error}"),
+                    );
                 }
             }
             Action::HistoryStarted { generation, symbol } => {
+                self.task_log.running(
+                    TaskKey::History {
+                        generation,
+                        symbol: symbol.clone(),
+                    },
+                    format!("{symbol} history loading"),
+                );
                 self.history.start(generation, symbol);
             }
             Action::HistoryLoaded {
                 generation,
                 snapshot,
             } => {
-                if self.history.finish(generation) {
+                if let Some(active) = self.history.finish(generation) {
                     self.task_failures.clear_symbol(
                         TaskFailureSource::History,
                         snapshot.requested_symbol.as_str(),
                         snapshot.symbol.as_str(),
                     );
                     if !snapshot.errors.is_empty() {
-                        self.push_log(TaskLogEntry::warning(format!(
-                            "history loaded with {} warnings",
-                            snapshot.errors.len()
-                        )));
+                        self.task_log.warning(
+                            TaskKey::History {
+                                generation: active.generation,
+                                symbol: active.key.clone(),
+                            },
+                            format!(
+                                "{} history loaded with {} warnings",
+                                snapshot.symbol,
+                                snapshot.errors.len()
+                            ),
+                        );
                     } else {
-                        self.push_log(TaskLogEntry::info(format!(
-                            "{} history loaded",
-                            snapshot.symbol
-                        )));
+                        self.task_log.succeeded(
+                            TaskKey::History {
+                                generation: active.generation,
+                                symbol: active.key.clone(),
+                            },
+                            format!("{} history loaded", snapshot.symbol),
+                        );
                     }
                     self.history.set_snapshot(snapshot);
                 } else {
-                    self.push_log(TaskLogEntry::warning(format!(
-                        "ignored stale history generation {generation}",
-                    )));
+                    self.task_log
+                        .warning_event(format!("ignored stale history generation {generation}",));
                 }
             }
             Action::HistoryFailed {
@@ -274,43 +307,64 @@ impl AppState {
                 symbol,
                 error,
             } => {
-                if self.history.finish(generation) {
+                if let Some(active) = self.history.finish(generation) {
                     self.task_failures
                         .set(TaskFailure::history(symbol.clone(), error.clone()));
-                    self.push_log(TaskLogEntry::warning(format!(
-                        "{symbol} history failed: {error}"
-                    )));
+                    self.task_log.failed(
+                        TaskKey::History {
+                            generation: active.generation,
+                            symbol: active.key,
+                        },
+                        format!("{symbol} history failed: {error}"),
+                    );
                 }
             }
             Action::EvidenceStarted { generation, symbol } => {
+                self.task_log.running(
+                    TaskKey::Evidence {
+                        generation,
+                        symbol: symbol.clone(),
+                    },
+                    format!("{symbol} crypto evidence loading"),
+                );
                 self.evidence.start(generation, symbol);
             }
             Action::EvidenceLoaded {
                 generation,
                 snapshot,
             } => {
-                if self.evidence.finish(generation) {
+                if let Some(active) = self.evidence.finish(generation) {
                     self.task_failures.clear_symbol(
                         TaskFailureSource::CryptoEvidence,
                         snapshot.requested_symbol.as_str(),
                         snapshot.symbol.as_str(),
                     );
                     if !snapshot.errors.is_empty() {
-                        self.push_log(TaskLogEntry::warning(format!(
-                            "crypto evidence loaded with {} warnings",
-                            snapshot.errors.len()
-                        )));
+                        self.task_log.warning(
+                            TaskKey::Evidence {
+                                generation: active.generation,
+                                symbol: active.key.clone(),
+                            },
+                            format!(
+                                "{} crypto evidence loaded with {} warnings",
+                                snapshot.symbol,
+                                snapshot.errors.len()
+                            ),
+                        );
                     } else {
-                        self.push_log(TaskLogEntry::info(format!(
-                            "{} crypto evidence loaded",
-                            snapshot.symbol
-                        )));
+                        self.task_log.succeeded(
+                            TaskKey::Evidence {
+                                generation: active.generation,
+                                symbol: active.key.clone(),
+                            },
+                            format!("{} crypto evidence loaded", snapshot.symbol),
+                        );
                     }
                     self.evidence.set_snapshot(snapshot);
                 } else {
-                    self.push_log(TaskLogEntry::warning(format!(
+                    self.task_log.warning_event(format!(
                         "ignored stale crypto evidence generation {generation}",
-                    )));
+                    ));
                 }
             }
             Action::EvidenceFailed {
@@ -318,51 +372,103 @@ impl AppState {
                 symbol,
                 error,
             } => {
-                if self.evidence.finish(generation) {
+                if let Some(active) = self.evidence.finish(generation) {
                     self.task_failures
                         .set(TaskFailure::evidence(symbol.clone(), error.clone()));
-                    self.push_log(TaskLogEntry::warning(format!(
-                        "{symbol} crypto evidence failed: {error}"
-                    )));
+                    self.task_log.failed(
+                        TaskKey::Evidence {
+                            generation: active.generation,
+                            symbol: active.key,
+                        },
+                        format!("{symbol} crypto evidence failed: {error}"),
+                    );
                 }
             }
             Action::ResearchStarted { generation, symbol } => {
+                self.task_log.running(
+                    TaskKey::Research {
+                        generation,
+                        symbol: symbol.clone(),
+                    },
+                    format!("{symbol} research loading"),
+                );
                 self.research.start(generation, symbol);
             }
             Action::ResearchLoaded {
                 generation,
                 snapshot,
             } => {
-                if self.research.finish(generation) {
+                if let Some(active) = self.research.finish(generation) {
                     if !snapshot.errors.is_empty() {
-                        self.push_log(TaskLogEntry::warning(format!(
-                            "research loaded with {} warnings",
-                            snapshot.errors.len()
-                        )));
+                        self.task_log.warning(
+                            TaskKey::Research {
+                                generation: active.generation,
+                                symbol: active.key.clone(),
+                            },
+                            format!(
+                                "{} research loaded with {} warnings",
+                                snapshot.symbol,
+                                snapshot.errors.len()
+                            ),
+                        );
                     } else {
-                        self.push_log(TaskLogEntry::info(format!(
-                            "{} research context loaded",
-                            snapshot.symbol
-                        )));
+                        self.task_log.succeeded(
+                            TaskKey::Research {
+                                generation: active.generation,
+                                symbol: active.key.clone(),
+                            },
+                            format!("{} research context loaded", snapshot.symbol),
+                        );
                     }
                     self.research.set_snapshot(snapshot);
                 } else {
-                    self.push_log(TaskLogEntry::warning(format!(
-                        "ignored stale research generation {generation}",
-                    )));
+                    self.task_log
+                        .warning_event(format!("ignored stale research generation {generation}",));
                 }
             }
             Action::SchedulerFailed(error) => {
-                self.refresh.stop();
-                self.history.stop();
-                self.evidence.stop();
-                self.research.stop();
+                if let Some(active) = self.refresh.cancel() {
+                    self.task_log.failed(
+                        TaskKey::Refresh {
+                            generation: active.generation,
+                        },
+                        format!("market snapshot refresh cancelled: {error}"),
+                    );
+                }
+                if let Some(active) = self.history.cancel() {
+                    self.task_log.failed(
+                        TaskKey::History {
+                            generation: active.generation,
+                            symbol: active.key.clone(),
+                        },
+                        format!("{} history loading cancelled: {error}", active.key),
+                    );
+                }
+                if let Some(active) = self.evidence.cancel() {
+                    self.task_log.failed(
+                        TaskKey::Evidence {
+                            generation: active.generation,
+                            symbol: active.key.clone(),
+                        },
+                        format!("{} crypto evidence loading cancelled: {error}", active.key),
+                    );
+                }
+                if let Some(active) = self.research.cancel() {
+                    self.task_log.failed(
+                        TaskKey::Research {
+                            generation: active.generation,
+                            symbol: active.key.clone(),
+                        },
+                        format!("{} research loading cancelled: {error}", active.key),
+                    );
+                }
                 self.scheduler_error = Some(error.clone());
                 self.task_failures
                     .set(TaskFailure::scheduler(error.clone()));
-                self.push_log(TaskLogEntry::warning(format!("scheduler failed: {error}")));
+                self.task_log
+                    .failed(TaskKey::Scheduler, format!("scheduler failed: {error}"));
             }
-            Action::Log(message) => self.push_log(TaskLogEntry::info(message)),
+            Action::Log(message) => self.task_log.info(message),
         }
     }
 
@@ -507,13 +613,6 @@ impl AppState {
     fn workspace_contains(&self, panel: Panel) -> bool {
         self.workspace.panels().contains(&panel)
     }
-
-    fn push_log(&mut self, entry: TaskLogEntry) {
-        self.task_log.push_back(entry);
-        while self.task_log.len() > 200 {
-            self.task_log.pop_front();
-        }
-    }
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -521,6 +620,12 @@ pub struct LoadSlot<K> {
     pub generation: u64,
     pub loading: bool,
     pub key: Option<K>,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct ActiveLoad<K> {
+    pub generation: u64,
+    pub key: K,
 }
 
 impl<K> LoadSlot<K> {
@@ -538,16 +643,28 @@ impl<K> LoadSlot<K> {
         self.key = Some(key);
     }
 
-    fn finish(&mut self, generation: u64) -> bool {
-        if generation != self.generation {
-            return false;
+    fn finish(&mut self, generation: u64) -> Option<ActiveLoad<K>> {
+        if !self.loading || generation != self.generation {
+            return None;
         }
+        let active = ActiveLoad {
+            generation: self.generation,
+            key: self.key.take()?,
+        };
         self.loading = false;
-        true
+        Some(active)
     }
 
-    fn stop(&mut self) {
+    fn cancel(&mut self) -> Option<ActiveLoad<K>> {
+        if !self.loading {
+            return None;
+        }
+        let active = ActiveLoad {
+            generation: self.generation,
+            key: self.key.take()?,
+        };
         self.loading = false;
+        Some(active)
     }
 }
 
@@ -573,7 +690,7 @@ impl<T> SelectedSymbolLoad<T> {
         self.request.start(generation, symbol);
     }
 
-    fn finish(&mut self, generation: u64) -> bool {
+    fn finish(&mut self, generation: u64) -> Option<ActiveLoad<String>> {
         self.request.finish(generation)
     }
 
@@ -581,8 +698,8 @@ impl<T> SelectedSymbolLoad<T> {
         self.snapshot = Some(snapshot);
     }
 
-    fn stop(&mut self) {
-        self.request.stop();
+    fn cancel(&mut self) -> Option<ActiveLoad<String>> {
+        self.request.cancel()
     }
 }
 
@@ -1311,6 +1428,32 @@ mod tests {
             state.scheduler_error.as_deref(),
             Some("scheduler runtime failed")
         );
+
+        state.reduce(Action::SnapshotLoaded {
+            generation: 1,
+            snapshot: snapshot(1, "CRDO"),
+        });
+        state.reduce(Action::HistoryLoaded {
+            generation: 1,
+            snapshot: history_snapshot("CRDO", 250.0),
+        });
+        state.reduce(Action::EvidenceLoaded {
+            generation: 1,
+            snapshot: evidence_snapshot("BTCUSDT", 2, 3),
+        });
+        state.reduce(Action::ResearchLoaded {
+            generation: 1,
+            snapshot: research_snapshot("CRDO", 1, 1),
+        });
+
+        assert!(state.market_snapshot.is_none());
+        assert!(state.history.selected_snapshot("CRDO").is_none());
+        assert!(state.evidence.selected_snapshot("BTCUSDT").is_none());
+        assert!(state.research.selected_snapshot("CRDO").is_none());
+        assert!(state.task_log.iter().any(|entry| {
+            entry.status == TaskStatus::Failed
+                && entry.message == "CRDO history loading cancelled: scheduler runtime failed"
+        }));
     }
 
     #[test]

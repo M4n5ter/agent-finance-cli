@@ -382,22 +382,14 @@ mod tests {
             ..TuiConfig::default()
         });
 
-        state.reduce(Action::SnapshotLoaded {
-            generation: 0,
-            snapshot: quote_snapshot("BTCUSDT", Some(250.0), "test"),
-        });
-        state.reduce(Action::HistoryLoaded {
-            generation: 0,
-            snapshot: history_snapshot("BTCUSDT", "test"),
-        });
-        state.reduce(Action::EvidenceLoaded {
-            generation: 0,
-            snapshot: evidence_snapshot("BTCUSDT", "binance", true),
-        });
-        state.reduce(Action::ResearchLoaded {
-            generation: 0,
-            snapshot: research_snapshot("BTCUSDT", 2, 1),
-        });
+        load_quote_snapshot(
+            &mut state,
+            1,
+            quote_snapshot("BTCUSDT", Some(250.0), "test"),
+        );
+        load_history_snapshot(&mut state, 2, history_snapshot("BTCUSDT", "test"));
+        load_evidence_snapshot(&mut state, 3, evidence_snapshot("BTCUSDT", "binance", true));
+        load_research_snapshot(&mut state, 4, research_snapshot("BTCUSDT", 2, 1));
 
         let report = ProviderHealthReport::from_state(&state);
 
@@ -436,10 +428,7 @@ mod tests {
     fn report_keeps_last_provider_state_while_showing_new_failures_and_loading() {
         let mut state = AppState::from_config(TuiConfig::default());
 
-        state.reduce(Action::SnapshotLoaded {
-            generation: 0,
-            snapshot: quote_snapshot("AAPL", Some(250.0), "yahoo"),
-        });
+        load_quote_snapshot(&mut state, 1, quote_snapshot("AAPL", Some(250.0), "yahoo"));
         state.reduce(Action::RefreshStarted(1));
         state.reduce(Action::RefreshFailed {
             generation: 1,
@@ -471,10 +460,7 @@ mod tests {
     fn report_treats_missing_price_quotes_as_task_warnings_not_ok_providers() {
         let mut state = AppState::from_config(TuiConfig::default());
 
-        state.reduce(Action::SnapshotLoaded {
-            generation: 0,
-            snapshot: quote_snapshot("AAPL", None, "unavailable"),
-        });
+        load_quote_snapshot(&mut state, 1, quote_snapshot("AAPL", None, "unavailable"));
 
         let report = ProviderHealthReport::from_state(&state);
 
@@ -527,10 +513,7 @@ mod tests {
             "AAPL yahoo: unavailable".to_string(),
         ];
 
-        state.reduce(Action::SnapshotLoaded {
-            generation: 0,
-            snapshot,
-        });
+        load_quote_snapshot(&mut state, 1, snapshot);
 
         let report = ProviderHealthReport::from_state(&state);
 
@@ -559,10 +542,7 @@ mod tests {
             "polymarket: unavailable".to_string(),
         ];
 
-        state.reduce(Action::ResearchLoaded {
-            generation: 0,
-            snapshot,
-        });
+        load_research_snapshot(&mut state, 1, snapshot);
 
         let report = ProviderHealthReport::from_state(&state);
 
@@ -638,6 +618,49 @@ mod tests {
             .iter()
             .find(|row| row.provider == provider)
             .expect("provider should exist")
+    }
+
+    fn load_quote_snapshot(state: &mut AppState, generation: u64, snapshot: MarketSnapshot) {
+        state.reduce(Action::RefreshStarted(generation));
+        state.reduce(Action::SnapshotLoaded {
+            generation,
+            snapshot,
+        });
+    }
+
+    fn load_history_snapshot(state: &mut AppState, generation: u64, snapshot: HistorySnapshot) {
+        let symbol = snapshot.requested_symbol.clone();
+        state.reduce(Action::HistoryStarted { generation, symbol });
+        state.reduce(Action::HistoryLoaded {
+            generation,
+            snapshot,
+        });
+    }
+
+    fn load_evidence_snapshot(
+        state: &mut AppState,
+        generation: u64,
+        snapshot: CryptoQuoteEvidenceSnapshot,
+    ) {
+        let symbol = snapshot.requested_symbol.clone();
+        state.reduce(Action::EvidenceStarted { generation, symbol });
+        state.reduce(Action::EvidenceLoaded {
+            generation,
+            snapshot,
+        });
+    }
+
+    fn load_research_snapshot(
+        state: &mut AppState,
+        generation: u64,
+        snapshot: ResearchContextSnapshot,
+    ) {
+        let symbol = snapshot.requested_symbol.clone();
+        state.reduce(Action::ResearchStarted { generation, symbol });
+        state.reduce(Action::ResearchLoaded {
+            generation,
+            snapshot,
+        });
     }
 
     fn quote_snapshot(symbol: &str, price: Option<f64>, provider: &str) -> MarketSnapshot {

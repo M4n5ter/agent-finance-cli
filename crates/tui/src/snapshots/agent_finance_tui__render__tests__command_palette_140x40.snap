@@ -34,7 +34,7 @@ expression: "render_to_text_grid(&state, 140, 40)"
 │robin capa extended-hours quo -               ││                                                                                          │
 └──────────────────────────────────────────────┘│                                                                                          │
 ┌Task Log [empty]──────────────────────────────┐│                                                                                          │
-│                                              ││                                                                                          │
+│status     event                              ││                                                                                          │
 │                                              ││                                                                                          │
 │                                              ││                                                                                          │
 │                                              ││                                                                                          │

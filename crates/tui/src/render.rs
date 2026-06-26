@@ -9,10 +9,11 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Cell, Clear, List, ListItem, Paragraph, Row, Table, Wrap};
 
 use crate::layout::{self, CockpitLayout};
-use crate::model::{Panel, TaskLevel};
+use crate::model::Panel;
 use crate::pane_status::{TuiPaneStatus, pane_health};
 use crate::provider_health::ProviderHealthReport;
 use crate::state::AppState;
+use crate::task_log::TaskStatus;
 
 mod chrome;
 mod history;
@@ -349,23 +350,35 @@ fn render_provider_health(frame: &mut Frame<'_>, state: &AppState, area: Rect) {
 }
 
 fn render_task_log(frame: &mut Frame<'_>, state: &AppState, area: Rect) {
-    let items = state
+    let rows = state
         .task_log
         .iter()
         .rev()
-        .take(area.height.saturating_sub(2) as usize)
+        .take(area.height.saturating_sub(3) as usize)
         .map(|entry| {
-            let style = match entry.level {
-                TaskLevel::Info => Style::default().fg(Color::Gray),
-                TaskLevel::Warning => Style::default().fg(Color::Yellow),
-            };
-            ListItem::new(Line::from(Span::styled(entry.message.clone(), style)))
+            let style = task_status_style(entry.status);
+            Row::new([
+                Cell::from(entry.status.label()).style(style),
+                Cell::from(entry.message.clone()),
+            ])
         })
         .collect::<Vec<_>>();
     frame.render_widget(
-        List::new(items).block(panel_block(Panel::TaskLog, state)),
+        Table::new(rows, [Constraint::Length(10), Constraint::Min(10)])
+            .header(Row::new(["status", "event"]).style(Style::default().fg(Color::Cyan)))
+            .block(panel_block(Panel::TaskLog, state)),
         area,
     );
+}
+
+fn task_status_style(status: TaskStatus) -> Style {
+    match status {
+        TaskStatus::Info => Style::default().fg(Color::Gray),
+        TaskStatus::Running => Style::default().fg(Color::Yellow),
+        TaskStatus::Succeeded => Style::default().fg(Color::Green),
+        TaskStatus::Warning => Style::default().fg(Color::Yellow),
+        TaskStatus::Failed => Style::default().fg(Color::Red),
+    }
 }
 
 fn quote_lines(quote: &QuoteSnapshot) -> Vec<Line<'static>> {
@@ -747,6 +760,49 @@ mod tests {
         assert!(text.contains("History Chart [stale]"));
         assert!(text.contains("Crypto Evidence [empty]"));
         assert!(!text.contains("Crypto Evidence [stale]"));
+    }
+
+    #[test]
+    fn task_log_renders_task_queue_statuses() {
+        let mut state = snapshot_state();
+
+        state.reduce(crate::state::Action::HistoryStarted {
+            generation: 1,
+            symbol: "CRDO".to_string(),
+        });
+        state.reduce(crate::state::Action::HistoryLoaded {
+            generation: 1,
+            snapshot: history_snapshot("CRDO"),
+        });
+        state.reduce(crate::state::Action::ResearchStarted {
+            generation: 2,
+            symbol: "CRDO".to_string(),
+        });
+        let mut research = research_snapshot();
+        research.errors = vec!["news: provider timeout".to_string()];
+        state.reduce(crate::state::Action::ResearchLoaded {
+            generation: 2,
+            snapshot: research,
+        });
+        state.reduce(crate::state::Action::RefreshStarted(3));
+        state.reduce(crate::state::Action::RefreshFailed {
+            generation: 3,
+            error: "provider timeout".to_string(),
+        });
+        state.reduce(crate::state::Action::EvidenceStarted {
+            generation: 4,
+            symbol: "CRDO".to_string(),
+        });
+
+        let text = render_to_text_grid(&state, 140, 40);
+
+        assert!(text.contains("Task Log [fresh]"));
+        assert!(text.contains("status"));
+        assert!(text.contains("running"));
+        assert!(text.contains("succeeded"));
+        assert!(text.contains("warning"));
+        assert!(text.contains("failed"));
+        assert!(!text.contains("CRDO history loading"));
     }
 
     #[test]

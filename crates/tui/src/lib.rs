@@ -14,6 +14,7 @@ mod scheduler;
 mod search;
 mod state;
 mod task_failure;
+mod task_log;
 
 pub use app::run;
 pub use config::{TuiConfig, TuiDumpOptions, TuiLaunch};
