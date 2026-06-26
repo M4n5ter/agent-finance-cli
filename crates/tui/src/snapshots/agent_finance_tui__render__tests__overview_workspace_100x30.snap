@@ -1,0 +1,34 @@
+---
+source: crates/tui/src/render.rs
+expression: "render_to_text_grid(&state, 100, 30)"
+---
+┌Watchlist [fresh]───────────────┐┌Quote / Sessions [partial]──────────────────────────────────────┐
+│> CRDO -                        ││CRDO market snapshot                                            │
+│  BTCUSDT -                     ││No quote loaded yet. Waiting for the next refresh.              │
+│                                ││                                                                │
+│                                ││                                                                │
+│                                ││                                                                │
+│                                ││                                                                │
+│                                ││                                                                │
+│                                │└────────────────────────────────────────────────────────────────┘
+│                                │┌History Chart [partial]─────────────────────────────────────────┐
+│                                ││CRDO history                                                    │
+│                                ││No history loaded yet. Waiting for the selected symbol.         │
+│                                ││                                                                │
+│                                ││                                                                │
+│                                ││                                                                │
+└────────────────────────────────┘│                                                         ┌─────┐│
+┌Provider Health [partial]───────┐│                                                         │close││
+│  detail             freshness  ││                                                         └─────┘│
+│  Default router; se -          ││                                                                │
+│  Broadest no-key re -          ││                                                                │
+│  Official filings,  -          ││                                                                │
+│  Delayed quotes, no -          ││                                                                │
+└────────────────────────────────┘│                                                                │
+┌Task Log [empty]────────────────┐│                                                                │
+│                                ││                                                                │
+│                                ││                                                                │
+│                                ││                                                                │
+│                                ││                                                                │
+└────────────────────────────────┘└────────────────────────────────────────────────────────────────┘
+ Overview | Research | Crypto | Providers  CRDO | mode: normal | focus: Watchlist | ready | e:0

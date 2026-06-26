@@ -1,0 +1,44 @@
+---
+source: crates/tui/src/render.rs
+expression: "render_to_text_grid(&state, 140, 40)"
+---
+┌Watchlist [fresh]─────────────────────────────┐┌Quote / Sessions [partial]────────────────────────────────────────────────────────────────┐
+│> CRDO -                                      ││CRDO market snapshot                                                                      │
+│  BTCUSDT -                                   ││No quote loaded yet. Waiting for the next refresh.                                        │
+│                                              ││                                                                                          │
+│                                              ││                                                                                          │
+│                                              ││                                                                                          │
+│                                              ││                                                                                          │
+│                                              ││                                                                                          │
+│                                              │└──────────────────────────────────────────────────────────────────────────────────────────┘
+│                                              │┌History Chart [partial]───────────────────────────────────────────────────────────────────┐
+│                                              ││CRDO history                                                                              │
+│                                              ││No history loaded yet. Waiting for the selected symbol.                                   │
+│                    ┌Command Palette  type filter  enter run  up/down move  esc close────────────────────────────────┐                    │
+│                    │help                                                                                            │▓                   │
+│                    └────────────────────────────────────────────────────────────────────────────────────────────────┘▓                   │
+│                    ┌matches─────────────────────────────────────────────────────────────────────────────────────────┐▓            ┌─────┐│
+│                    │> Open help - Show cockpit shortcuts and interaction model                                      │▓            │close││
+│                    │  Toggle provider health - Show or hide provider capability coverage                            │▓            └─────┘│
+│                    │  Toggle watchlist - Show or hide the symbol list panel                                         │▓                   │
+│                    │  Focus provider health - Move keyboard focus to provider health                                │▓                   │
+└────────────────────│  Toggle history - Show or hide the historical price chart                                      │▓                   │
+┌Provider Health [par│  Previous symbol - Move watchlist selection to the previous symbol                             │▓                   │
+│provi stat detail   │  Focus history - Move keyboard focus to historical price chart                                 │▓                   │
+│auto  capa Default r│  Open symbol search - Filter the watchlist and jump to a symbol                                │▓                   │
+│yahoo capa Broadest │  Close focused panel - Hide the focused docked panel and move focus to another open panel      │▓                   │
+│sec-e capa Official │                                                                                                │▓                   │
+│stooq capa Delayed q└────────────────────────────────────────────────────────────────────────────────────────────────┘▓                   │
+│cnbc- capa pre/post e▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓                   │
+│cnbc  capa CNBC quote payload -               ││                                                                                          │
+│robin capa extended-hours quo -               ││                                                                                          │
+└──────────────────────────────────────────────┘│                                                                                          │
+┌Task Log [empty]──────────────────────────────┐│                                                                                          │
+│                                              ││                                                                                          │
+│                                              ││                                                                                          │
+│                                              ││                                                                                          │
+│                                              ││                                                                                          │
+│                                              ││                                                                                          │
+│                                              ││                                                                                          │
+└──────────────────────────────────────────────┘└──────────────────────────────────────────────────────────────────────────────────────────┘
+ Overview | Research | Crypto | Providers  CRDO | mode: command | focus: Watchlist | visible: 5/5 | ready | errors: 0 | type filter

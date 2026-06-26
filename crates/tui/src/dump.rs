@@ -2,6 +2,7 @@ use serde::Serialize;
 
 use crate::hints;
 use crate::model::{InteractionMode, Panel, WorkspaceKind};
+use crate::pane_status::{TuiPaneStatus, pane_health};
 use crate::provider_health::{ProviderHealthReport, ProviderHealthTask};
 use crate::state::AppState;
 
@@ -29,16 +30,6 @@ pub struct TuiPaneDump {
     pub status: TuiPaneStatus,
 }
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum TuiPaneStatus {
-    Fresh,
-    Loading,
-    Partial,
-    Empty,
-    Error,
-}
-
 impl TuiDump {
     pub fn from_state(state: &AppState, partial: bool) -> Self {
         let provider_health = ProviderHealthReport::from_state(state);
@@ -62,65 +53,16 @@ impl TuiDump {
 fn pane_dump(state: &AppState, panel: Panel) -> TuiPaneDump {
     let visible = state.visible_panels().contains(&panel);
     let focused = state.panels.focused() == panel;
-    let (loading, has_data, has_error) = pane_data_state(state, panel);
-    let status = if has_error {
-        TuiPaneStatus::Error
-    } else if loading {
-        TuiPaneStatus::Loading
-    } else if has_data {
-        TuiPaneStatus::Fresh
-    } else if panel == Panel::Evidence && !selected_symbol_is_crypto(state) {
-        TuiPaneStatus::Empty
-    } else {
-        TuiPaneStatus::Partial
-    };
+    let health = pane_health(state, panel);
 
     TuiPaneDump {
         panel,
         title: panel.title(),
         visible,
         focused,
-        loading,
-        has_data,
-        status,
-    }
-}
-
-fn pane_data_state(state: &AppState, panel: Panel) -> (bool, bool, bool) {
-    let selected = state.selected_symbol().unwrap_or_default();
-    match panel {
-        Panel::Watchlist => (false, !state.watchlist.is_empty(), false),
-        Panel::Quote => (
-            state.refresh.loading,
-            state.market_snapshot.is_some(),
-            state
-                .task_failures
-                .has_source(crate::task_failure::TaskFailureSource::Quotes),
-        ),
-        Panel::History => (
-            state.history.loading(),
-            state.history.selected_snapshot(selected).is_some(),
-            state
-                .task_failures
-                .has_source(crate::task_failure::TaskFailureSource::History),
-        ),
-        Panel::Evidence => (
-            state.evidence.loading(),
-            state.evidence.selected_snapshot(selected).is_some(),
-            state
-                .task_failures
-                .has_source(crate::task_failure::TaskFailureSource::CryptoEvidence),
-        ),
-        Panel::Polymarket | Panel::Research => (
-            state.research.loading(),
-            state.research.selected_snapshot(selected).is_some(),
-            false,
-        ),
-        Panel::ProviderHealth => {
-            let report = ProviderHealthReport::from_state(state);
-            (state.refresh.loading, !report.is_empty(), false)
-        }
-        Panel::TaskLog => (false, !state.task_log.is_empty(), false),
+        loading: health.loading,
+        has_data: health.has_data,
+        status: health.status,
     }
 }
 
@@ -136,12 +78,6 @@ fn dump_errors(state: &AppState) -> Vec<String> {
             .map(|failure| failure.error.clone()),
     );
     errors
-}
-
-fn selected_symbol_is_crypto(state: &AppState) -> bool {
-    state
-        .selected_symbol()
-        .is_some_and(agent_finance_market::is_likely_crypto_pair)
 }
 
 #[cfg(test)]

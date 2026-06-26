@@ -621,9 +621,26 @@ impl SymbolSnapshot for ResearchContextSnapshot {
     }
 }
 
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub enum SelectedDataState {
+    Fresh,
+    Stale,
+    Empty,
+}
+
 impl<T: SymbolSnapshot> SelectedSymbolLoad<T> {
     pub fn has_selected_snapshot(&self, selected: &str) -> bool {
         self.selected_snapshot(selected).is_some()
+    }
+
+    pub fn selected_data_state(&self, selected: &str) -> SelectedDataState {
+        if self.selected_snapshot(selected).is_some() {
+            SelectedDataState::Fresh
+        } else if self.snapshot.is_some() {
+            SelectedDataState::Stale
+        } else {
+            SelectedDataState::Empty
+        }
     }
 
     pub fn selected_snapshot(&self, selected: &str) -> Option<&T> {

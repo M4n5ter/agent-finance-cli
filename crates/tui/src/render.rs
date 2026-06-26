@@ -10,6 +10,7 @@ use ratatui::widgets::{Block, Borders, Cell, Clear, List, ListItem, Paragraph, R
 
 use crate::layout::{self, CockpitLayout};
 use crate::model::{Panel, TaskLevel};
+use crate::pane_status::{TuiPaneStatus, pane_health};
 use crate::provider_health::ProviderHealthReport;
 use crate::state::AppState;
 
@@ -362,7 +363,7 @@ fn render_task_log(frame: &mut Frame<'_>, state: &AppState, area: Rect) {
         })
         .collect::<Vec<_>>();
     frame.render_widget(
-        List::new(items).block(simple_block(Panel::TaskLog.title())),
+        List::new(items).block(panel_block(Panel::TaskLog, state)),
         area,
     );
 }
@@ -604,16 +605,26 @@ fn format_volume(value: f64) -> String {
 }
 
 fn panel_block(panel: Panel, state: &AppState) -> Block<'static> {
+    let status = pane_health(state, panel).status;
     let style = if state.panels.focused() == panel {
         Style::default().fg(Color::Cyan)
     } else {
-        Style::default().fg(Color::Gray)
+        Style::default().fg(status_color(status))
     };
-    simple_block(panel.title()).border_style(style)
+    let title = format!("{} [{}]", panel.title(), status.label());
+    Block::default()
+        .title(title)
+        .borders(Borders::ALL)
+        .border_style(style)
 }
 
-fn simple_block(title: &'static str) -> Block<'static> {
-    Block::default().title(title).borders(Borders::ALL)
+fn status_color(status: TuiPaneStatus) -> Color {
+    match status {
+        TuiPaneStatus::Fresh => Color::Green,
+        TuiPaneStatus::Loading => Color::Yellow,
+        TuiPaneStatus::Partial | TuiPaneStatus::Empty | TuiPaneStatus::Stale => Color::Gray,
+        TuiPaneStatus::Error => Color::Red,
+    }
 }
 
 #[cfg(test)]
@@ -622,6 +633,8 @@ mod tests {
     use crate::command::ActionId;
     use crate::config::TuiConfig;
     use crate::model::{FloatingKind, WorkspaceKind};
+    use agent_finance_market::crypto_evidence_snapshot::CryptoQuoteEvidenceSnapshot;
+    use agent_finance_market::history_snapshot::HistorySnapshot;
     use agent_finance_market::research_snapshot::ResearchNewsSnapshot;
     use ratatui::Terminal;
     use ratatui::backend::TestBackend;
@@ -646,6 +659,94 @@ mod tests {
         assert!(narrow.contains("Crypto"));
         assert!(narrow.contains("CRDO"));
         assert!(!narrow.contains("[/] workspace"));
+    }
+
+    #[test]
+    fn overview_workspace_matches_snapshot_at_100x30() {
+        let mut state = snapshot_state();
+        state.reduce(crate::state::Action::Execute(ActionId::SetWorkspace(
+            WorkspaceKind::Overview,
+        )));
+
+        insta::assert_snapshot!(
+            "overview_workspace_100x30",
+            render_to_text_grid(&state, 100, 30)
+        );
+    }
+
+    #[test]
+    fn command_palette_matches_snapshot_at_140x40() {
+        let mut state = snapshot_state();
+        state.reduce(crate::state::Action::Execute(ActionId::OpenFloating(
+            FloatingKind::CommandPalette,
+        )));
+        for character in "help".chars() {
+            state.reduce(crate::state::Action::EditCommandQuery(
+                tui_input::InputRequest::InsertChar(character),
+            ));
+        }
+
+        insta::assert_snapshot!(
+            "command_palette_140x40",
+            render_to_text_grid(&state, 140, 40)
+        );
+    }
+
+    #[test]
+    fn narrow_workspace_matches_snapshot_at_48x20() {
+        let mut state = snapshot_state();
+        state.reduce(crate::state::Action::Execute(ActionId::SetWorkspace(
+            WorkspaceKind::Crypto,
+        )));
+
+        insta::assert_snapshot!(
+            "narrow_workspace_48x20",
+            render_to_text_grid(&state, 48, 20)
+        );
+    }
+
+    #[test]
+    fn panel_badges_follow_observable_load_error_stale_and_empty_states() {
+        let mut state = snapshot_state();
+
+        state.reduce(crate::state::Action::RefreshStarted(1));
+        assert!(render_to_text_grid(&state, 100, 30).contains("Quote / Sessions [loading]"));
+
+        state.reduce(crate::state::Action::RefreshFailed {
+            generation: 1,
+            error: "provider timeout".to_string(),
+        });
+        let overview = render_to_text_grid(&state, 100, 30);
+        assert!(overview.contains("Quote / Sessions [error]"));
+        assert!(overview.contains("Task Log [fresh]"));
+
+        state.reduce(crate::state::Action::Execute(ActionId::SelectSymbolBy(1)));
+        state.reduce(crate::state::Action::HistoryStarted {
+            generation: 2,
+            symbol: "BTCUSDT".to_string(),
+        });
+        state.reduce(crate::state::Action::HistoryLoaded {
+            generation: 2,
+            snapshot: history_snapshot("BTCUSDT"),
+        });
+        state.reduce(crate::state::Action::EvidenceStarted {
+            generation: 3,
+            symbol: "BTCUSDT".to_string(),
+        });
+        state.reduce(crate::state::Action::EvidenceLoaded {
+            generation: 3,
+            snapshot: evidence_snapshot("BTCUSDT"),
+        });
+
+        state.reduce(crate::state::Action::Execute(ActionId::SelectSymbolBy(1)));
+        state.reduce(crate::state::Action::Execute(ActionId::SetWorkspace(
+            WorkspaceKind::Crypto,
+        )));
+        let text = render_to_text_grid(&state, 100, 30);
+
+        assert!(text.contains("History Chart [stale]"));
+        assert!(text.contains("Crypto Evidence [empty]"));
+        assert!(!text.contains("Crypto Evidence [stale]"));
     }
 
     #[test]
@@ -723,6 +824,42 @@ mod tests {
         }
     }
 
+    fn snapshot_state() -> AppState {
+        AppState::from_config(TuiConfig {
+            watchlist: vec!["CRDO".to_string(), "BTCUSDT".to_string()],
+            ..TuiConfig::default()
+        })
+    }
+
+    fn history_snapshot(symbol: &str) -> HistorySnapshot {
+        HistorySnapshot {
+            requested_symbol: symbol.to_string(),
+            symbol: symbol.to_string(),
+            provider: "test".to_string(),
+            interval: "1d".to_string(),
+            fetched_at_local: Some("2026-06-25 09:30:00".to_string()),
+            latest_close: Some(100.0),
+            latest_time: Some("2026-06-25".to_string()),
+            return_pct: Some(1.0),
+            volume: Some(10_000.0),
+            bars: Vec::new(),
+            errors: Vec::new(),
+        }
+    }
+
+    fn evidence_snapshot(symbol: &str) -> CryptoQuoteEvidenceSnapshot {
+        CryptoQuoteEvidenceSnapshot {
+            requested_symbol: symbol.to_string(),
+            symbol: symbol.to_string(),
+            instrument: "spot".to_string(),
+            fetched_at_local: Some("2026-06-25 09:30:00".to_string()),
+            ok_providers: 1,
+            total_providers: 1,
+            providers: Vec::new(),
+            errors: Vec::new(),
+        }
+    }
+
     fn joined_lines(lines: Vec<Line<'static>>) -> String {
         lines
             .into_iter()
@@ -731,6 +868,24 @@ mod tests {
                     .into_iter()
                     .map(|span| span.content.into_owned())
                     .collect::<String>()
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    fn render_to_text_grid(state: &AppState, width: u16, height: u16) -> String {
+        let backend = TestBackend::new(width, height);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal.draw(|frame| render(frame, state)).unwrap();
+        let buffer = terminal.backend().buffer();
+
+        (0..height)
+            .map(|y| {
+                (0..width)
+                    .map(|x| buffer[(x, y)].symbol())
+                    .collect::<String>()
+                    .trim_end()
+                    .to_string()
             })
             .collect::<Vec<_>>()
             .join("\n")

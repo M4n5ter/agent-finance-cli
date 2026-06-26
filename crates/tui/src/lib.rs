@@ -7,6 +7,7 @@ mod input;
 mod keymap;
 mod layout;
 mod model;
+mod pane_status;
 mod provider_health;
 mod render;
 mod scheduler;
