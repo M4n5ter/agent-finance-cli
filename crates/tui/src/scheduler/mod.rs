@@ -479,12 +479,12 @@ async fn fetch_account(runtime: &TradingRuntime, profile_name: String) -> Result
     let mut errors = Vec::new();
 
     for plan in ACCOUNT_READ_PLAN {
-        let kind = plan.kind();
         if plan.live_only() && !profile.provider.environment.is_live() {
-            errors.push(AccountReadError::new(
-                kind,
+            errors.push(AccountReadError::from_plan(
+                &plan,
                 format!(
-                    "{kind} uses Binance live SAPI account data and is skipped for {} profiles",
+                    "{} uses Binance live SAPI account data and is skipped for {} profiles",
+                    plan.kind(),
                     profile.provider.environment
                 ),
             ));
@@ -493,7 +493,7 @@ async fn fetch_account(runtime: &TradingRuntime, profile_name: String) -> Result
 
         match runtime.run_signed_read(&profile, plan.request()).await {
             Ok(snapshot) => reads.push(snapshot),
-            Err(error) => errors.push(AccountReadError::new(kind, error.to_string())),
+            Err(error) => errors.push(AccountReadError::from_plan(&plan, error.to_string())),
         }
     }
 

@@ -35,7 +35,9 @@ mod tests {
     use crate::config::TuiConfig;
     use crate::model::{FloatingKind, WorkspaceKind};
     use crate::theme::{ThemeColor, ThemeConfig};
-    use agent_finance_core::{Environment, Provider, SignedReadSnapshot};
+    use agent_finance_core::{
+        Environment, Market, Provider, SignedReadRequest, SignedReadSnapshot,
+    };
     use agent_finance_market::crypto_evidence_snapshot::CryptoQuoteEvidenceSnapshot;
     use agent_finance_market::history_snapshot::HistorySnapshot;
     use agent_finance_market::research_snapshot::{ResearchContextSnapshot, ResearchNewsSnapshot};
@@ -119,12 +121,76 @@ mod tests {
                 crate::account::ACCOUNT_READ_PLAN
                     .into_iter()
                     .map(|plan| {
+                        let request = plan.request();
+                        let payload = match &request {
+                            SignedReadRequest::OpenOrders {
+                                market: Market::Spot,
+                                ..
+                            } => serde_json::json!([
+                                {
+                                    "symbol": "BTCUSDT",
+                                    "orderId": 1001,
+                                    "clientOrderId": "spot-1",
+                                    "side": "BUY",
+                                    "type": "LIMIT",
+                                    "origQty": "0.10",
+                                    "executedQty": "0.04",
+                                    "price": "64000"
+                                },
+                                {
+                                    "symbol": "ETHUSDT",
+                                    "orderId": 1002,
+                                    "clientOrderId": "spot-2",
+                                    "side": "SELL",
+                                    "type": "LIMIT",
+                                    "origQty": "0.20",
+                                    "executedQty": "0",
+                                    "price": "3200"
+                                },
+                                {
+                                    "symbol": "SOLUSDT",
+                                    "orderId": 1003,
+                                    "clientOrderId": "spot-3",
+                                    "side": "BUY",
+                                    "type": "LIMIT",
+                                    "origQty": "1",
+                                    "executedQty": "0",
+                                    "price": "140"
+                                }
+                            ]),
+                            SignedReadRequest::OpenOrders {
+                                market: Market::UsdsFutures,
+                                ..
+                            } => serde_json::json!([
+                                {
+                                    "symbol": "BNBUSDT",
+                                    "orderId": 2001,
+                                    "clientOrderId": "futures-1",
+                                    "side": "BUY",
+                                    "type": "LIMIT",
+                                    "origQty": "0.30",
+                                    "executedQty": "0.10",
+                                    "price": "600"
+                                },
+                                {
+                                    "symbol": "XRPUSDT",
+                                    "orderId": 2002,
+                                    "clientOrderId": "futures-2",
+                                    "side": "SELL",
+                                    "type": "LIMIT",
+                                    "origQty": "10",
+                                    "executedQty": "0",
+                                    "price": "2"
+                                }
+                            ]),
+                            _ => serde_json::json!({ "ok": true }),
+                        };
                         SignedReadSnapshot::new(
                             "mainnet",
                             Provider::Binance,
                             Environment::Live,
-                            plan.request(),
-                            serde_json::json!({ "ok": true }),
+                            request,
+                            payload,
                         )
                     })
                     .collect(),
@@ -137,7 +203,15 @@ mod tests {
         assert!(text.contains("Account"));
         assert!(text.contains("provider: binance"));
         assert!(text.contains("environment: live"));
-        assert!(text.contains("signed reads: 3 ok / 0 warning"));
+        assert!(text.contains(&format!(
+            "signed reads: {} ok / 0 warning",
+            crate::account::ACCOUNT_READ_PLAN.len()
+        )));
+        assert!(text.contains("spot open orders: ok"));
+        assert!(text.contains("USD-M open orders: ok"));
+        assert!(text.contains("open orders (5)"));
+        assert!(text.contains("spot BUY 0.06 BTCUSDT @ 64000 [spot-1]"));
+        assert!(text.contains("+1 more open orders"));
     }
 
     #[test]

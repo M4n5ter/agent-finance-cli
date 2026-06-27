@@ -20,6 +20,7 @@ toml.workspace = true
 nucleo-matcher.workspace = true
 tui-input.workspace = true
 chrono.workspace = true
+rust_decimal.workspace = true
 
 [dev-dependencies]
 insta = "1.48"

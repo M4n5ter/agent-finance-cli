@@ -101,7 +101,7 @@ fn dump_errors(state: &AppState) -> Vec<String> {
             account
                 .errors
                 .iter()
-                .map(|error| format!("{} account read warning: {}", error.kind, error.error)),
+                .map(|error| format!("{} account read warning: {}", error.label, error.error)),
         );
     }
     errors
@@ -344,9 +344,15 @@ mod tests {
             ..TuiConfig::default()
         });
         let mut snapshot = account_snapshot("testnet");
-        snapshot.reads.pop();
-        snapshot.errors.push(AccountReadError::new(
-            agent_finance_core::SignedReadSnapshotKind::UsdsFuturesPositions,
+        let failed_plan = crate::account::ACCOUNT_READ_PLAN
+            .into_iter()
+            .find(|plan| plan.label() == "USD-M open orders")
+            .expect("USD-M open orders plan");
+        snapshot
+            .reads
+            .retain(|read| read.request != failed_plan.request());
+        snapshot.errors.push(AccountReadError::from_plan(
+            &failed_plan,
             "futures account timeout",
         ));
         state.reduce(Action::AccountStarted {
@@ -366,7 +372,7 @@ mod tests {
                 .expect("errors")
                 .iter()
                 .any(|error| error.as_str().is_some_and(|text| {
-                    text.contains("usds-futures-positions account read warning")
+                    text.contains("USD-M open orders account read warning")
                         && text.contains("futures account timeout")
                 }))
         );

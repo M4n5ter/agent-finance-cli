@@ -268,17 +268,46 @@ fn render_account(frame: &mut Frame<'_>, state: &AppState, area: Rect) {
                 snapshot.errors.len()
             )));
             for plan in ACCOUNT_READ_PLAN {
-                let kind = plan.kind();
-                let label = if snapshot.read(kind).is_some() {
+                let request = plan.request();
+                let label = if snapshot.read_request(&request).is_some() {
                     "ok"
                 } else {
                     "missing"
                 };
-                lines.push(Line::from(format!("{kind}: {label}")));
+                lines.push(Line::from(format!("{}: {label}", plan.label())));
+            }
+            let open_orders = snapshot.open_orders();
+            if !open_orders.is_empty() {
+                lines.push(Line::from(""));
+                lines.push(Line::from(Span::styled(
+                    format!("open orders ({})", open_orders.len()),
+                    state.theme.accent_style().add_modifier(Modifier::BOLD),
+                )));
+            }
+            for order in open_orders.iter().take(4) {
+                lines.push(Line::from(format!(
+                    "{} {} {} {} @ {} [{}]",
+                    order.market,
+                    order.side.as_deref().unwrap_or("-"),
+                    order.remaining_quantity.as_deref().unwrap_or("-"),
+                    order.symbol,
+                    order.price.as_deref().unwrap_or("-"),
+                    order.identifier()
+                )));
+            }
+            if open_orders.len() > 4 {
+                lines.push(Line::from(Span::styled(
+                    format!("+{} more open orders", open_orders.len() - 4),
+                    state.theme.warning_style(),
+                )));
             }
             for error in snapshot.errors.iter().take(2) {
                 lines.push(Line::from(Span::styled(
-                    format!("{} warning: {}", error.kind, compact_text(&error.error, 96)),
+                    format!(
+                        "{} warning: {}",
+                        error.label,
+                        compact_text(&error.error, 96)
+                    ),
                     state.theme.warning_style(),
                 )));
             }

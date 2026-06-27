@@ -271,7 +271,7 @@ impl ProviderHealthBuilder {
             for error in &account.errors {
                 self.task_warning(
                     ProviderHealthSource::Account,
-                    format!("{}: {}", error.kind, error.error),
+                    format!("{}: {}", error.label, error.error),
                 );
             }
         }
