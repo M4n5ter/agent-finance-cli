@@ -77,12 +77,19 @@ pub(super) fn render_floating(
         render_trading_profile(frame, state, area);
         return;
     }
+    if kind == FloatingKind::StagedSubmitConfirmation {
+        render_staged_submit_confirmation(frame, state, area);
+        return;
+    }
 
     let text = match kind {
         FloatingKind::CommandPalette => unreachable!("command palette is rendered separately"),
         FloatingKind::SymbolSearch => unreachable!("symbol search is rendered separately"),
         FloatingKind::WatchlistAdd => unreachable!("watchlist add is rendered separately"),
         FloatingKind::TradingProfile => unreachable!("trading profile is rendered separately"),
+        FloatingKind::StagedSubmitConfirmation => {
+            unreachable!("staged submit confirmation is rendered separately")
+        }
         FloatingKind::Help => vec![
             Line::from("agent-finance cockpit"),
             Line::from("[/]: switch workspace"),
@@ -133,6 +140,54 @@ pub(super) fn render_floating(
     frame.render_widget(
         Paragraph::new(text)
             .block(floating_block(kind.title(), &state.theme))
+            .wrap(Wrap { trim: true }),
+        area,
+    );
+}
+
+fn render_staged_submit_confirmation(frame: &mut Frame<'_>, state: &AppState, area: Rect) {
+    let Some(request) = state.pending_staged_confirmation() else {
+        frame.render_widget(
+            Paragraph::new(vec![
+                Line::from("No staged submit is waiting for confirmation."),
+                Line::from(""),
+                Line::from("Esc: close"),
+            ])
+            .block(floating_block(
+                FloatingKind::StagedSubmitConfirmation.title(),
+                &state.theme,
+            ))
+            .wrap(Wrap { trim: true }),
+            area,
+        );
+        return;
+    };
+
+    let lines = vec![
+        Line::from(Span::styled(
+            "Review the selected staged change before submitting.",
+            state.theme.accent_style().add_modifier(Modifier::BOLD),
+        )),
+        Line::from(""),
+        Line::from(format!("mode: {}", request.mode)),
+        Line::from(format!("kind: {}", request.subject.kind_label())),
+        Line::from(format!("id: {}", request.id)),
+        Line::from(format!("summary: {}", request.subject.summary())),
+        Line::from(""),
+        Line::from("This creates an intent and runs the trading runtime gates."),
+        Line::from(
+            "Live mode still requires profile permissions, risk policy, intent claim lock, and audit logging.",
+        ),
+        Line::from(""),
+        Line::from("Enter: confirm submit"),
+        Line::from("Esc: cancel and return to ready"),
+    ];
+    frame.render_widget(
+        Paragraph::new(lines)
+            .block(floating_block(
+                FloatingKind::StagedSubmitConfirmation.title(),
+                &state.theme,
+            ))
             .wrap(Wrap { trim: true }),
         area,
     );

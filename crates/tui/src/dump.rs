@@ -8,7 +8,7 @@ use crate::model::{InteractionMode, Panel, WorkspaceKind};
 use crate::order_ticket::OrderTicketPreview;
 use crate::pane_status::{TuiPaneStatus, pane_health};
 use crate::provider_health::{ProviderHealthReport, ProviderHealthTask};
-use crate::state::{AppState, StagedChangeView};
+use crate::state::{AppState, StagedChangeView, StagedSubmitRequest};
 use crate::transfer_ticket::TransferTicketPreview;
 
 #[derive(Debug, Clone, Serialize)]
@@ -32,6 +32,7 @@ pub struct TuiDump {
     pub transfer_ticket: TransferTicketPreview,
     pub futures_state_ticket: FuturesStateTicketPreview,
     pub staged_changes: Vec<StagedChangeView>,
+    pub pending_staged_confirmation: Option<StagedSubmitRequest>,
     pub errors: Vec<String>,
     pub key_hints: Vec<String>,
 }
@@ -51,7 +52,7 @@ impl TuiDump {
     pub fn from_state(state: &AppState, partial: bool) -> Self {
         let provider_health = ProviderHealthReport::from_state(state);
         Self {
-            schema_version: 9,
+            schema_version: 10,
             workspace: state.workspace,
             mode: state.interaction_mode(),
             selected_symbol: state.selected_symbol().map(ToString::to_string),
@@ -72,6 +73,7 @@ impl TuiDump {
             transfer_ticket: state.transfer_ticket_preview(),
             futures_state_ticket: state.futures_state_ticket_preview(),
             staged_changes: state.staged_change_views(),
+            pending_staged_confirmation: state.pending_staged_confirmation().cloned(),
             errors: dump_errors(state),
             provider_health,
             key_hints: hints::mode_key_hints(state),
@@ -233,12 +235,13 @@ mod tests {
 
         let value = serde_json::to_value(TuiDump::from_state(&state, true)).expect("serialize");
 
-        assert_eq!(value["schema_version"], 9);
+        assert_eq!(value["schema_version"], 10);
         assert_eq!(value["default_submit_mode"], "live");
         assert_eq!(value["live_writes_enabled"], false);
         assert_eq!(value["effective_submit_mode"], "dry-run");
         assert_eq!(value["staged_changes"][0]["intent_kind"], "order");
         assert_eq!(value["staged_changes"][0]["selected"], true);
+        assert!(value["pending_staged_confirmation"].is_null());
         assert_eq!(value["staged_changes"][0]["stage"], "ready");
         assert_eq!(value["staged_changes"][0]["mode"], "dry-run");
         assert!(value["staged_changes"][0]["intent_status"].is_null());
@@ -283,6 +286,53 @@ mod tests {
         assert_eq!(value["staged_changes"][0]["mode"], "dry-run");
         assert_eq!(value["staged_changes"][0]["intent_id"], "intent-1");
         assert!(value["staged_changes"][0]["intent_status"].is_null());
+    }
+
+    #[test]
+    fn dump_exposes_pending_staged_submit_confirmation() {
+        let mut state = AppState::from_config(TuiConfig {
+            watchlist: vec!["CRDO".to_string()],
+            workspace: WorkspaceConfig {
+                current: WorkspaceKind::Trade,
+            },
+            trading: crate::config::TradingConfig {
+                default_profile: Some("mainnet".to_string()),
+            },
+            ..TuiConfig::default()
+        });
+        state
+            .order_ticket
+            .set_quantity_text(Some("0.05".to_string()));
+        state.order_ticket.set_price_text(Some("204".to_string()));
+        state.reduce(Action::StageOrderTicket);
+        let staged_change_id = state.staged_change_views()[0].id.clone();
+
+        state.reduce(Action::SubmitStagedChange);
+
+        let value = serde_json::to_value(TuiDump::from_state(&state, true)).expect("serialize");
+        assert_eq!(value["schema_version"], 10);
+        assert_eq!(
+            value["pending_staged_confirmation"]["id"],
+            staged_change_id.as_str()
+        );
+        assert_eq!(value["pending_staged_confirmation"]["mode"], "dry-run");
+        assert_eq!(value["staged_changes"][0]["stage"], "ready");
+        assert_eq!(
+            value["pending_staged_confirmation"]["subject"]["type"],
+            "order-ticket"
+        );
+        assert_eq!(
+            value["pending_staged_confirmation"]["subject"]["symbol"],
+            "CRDO"
+        );
+        assert_eq!(
+            value["pending_staged_confirmation"]["subject"]["quantity"],
+            "0.05"
+        );
+        assert_eq!(
+            value["pending_staged_confirmation"]["subject"]["price"],
+            "204"
+        );
     }
 
     #[test]

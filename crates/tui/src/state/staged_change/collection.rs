@@ -34,22 +34,35 @@ impl StagedChanges {
         self.changes.len()
     }
 
-    pub(crate) fn queue_selected_submit(&mut self) -> QueueSubmitResult {
+    pub(crate) fn selected_submit_request(&mut self) -> QueueSubmitResult {
         self.normalize_selection();
-        let Some(change) = self.changes.get_mut(self.selected) else {
+        let Some(change) = self.changes.get(self.selected) else {
             return QueueSubmitResult::Missing;
         };
-        if change.state.stage() != StagedChangeStage::Ready {
+        submit_request_for(change)
+    }
+
+    pub(crate) fn queue_submit_request(
+        &mut self,
+        expected: &StagedSubmitRequest,
+    ) -> QueueSubmitResult {
+        let Some(change) = self
+            .changes
+            .iter_mut()
+            .find(|change| change.id == expected.id)
+        else {
+            return QueueSubmitResult::Missing;
+        };
+        let QueueSubmitResult::Queued(request) = submit_request_for(change) else {
+            return QueueSubmitResult::Rejected {
+                current: format!("{:?}", change.state),
+            };
+        };
+        if &request != expected {
             return QueueSubmitResult::Rejected {
                 current: format!("{:?}", change.state),
             };
         }
-        let Some(request) = change
-            .subject
-            .submit_request(change.id.clone(), change.state.mode(change.default_mode))
-        else {
-            return QueueSubmitResult::Missing;
-        };
         if change.apply(StagedChangeEvent::SubmitQueued) {
             QueueSubmitResult::Queued(request)
         } else {
@@ -219,4 +232,16 @@ fn shift_index(index: usize, len: usize, direction: isize) -> usize {
     }
     let len = len as isize;
     (index as isize + direction).rem_euclid(len) as usize
+}
+
+fn submit_request_for(change: &StagedChange) -> QueueSubmitResult {
+    if change.state.stage() != StagedChangeStage::Ready {
+        return QueueSubmitResult::Rejected {
+            current: format!("{:?}", change.state),
+        };
+    }
+    change
+        .subject
+        .submit_request(change.id.clone(), change.state.mode(change.default_mode))
+        .map_or(QueueSubmitResult::Missing, QueueSubmitResult::Queued)
 }

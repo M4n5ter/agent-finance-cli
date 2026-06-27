@@ -284,7 +284,7 @@ pub const ACTION_REGISTRY: [ActionSpec; 52] = [
         "submit-staged-change",
         ActionId::SubmitStagedChange,
         "Submit staged change",
-        "Create an intent for the selected ready staged change and submit it through the trading runtime"
+        "Review the selected ready staged change in a confirmation modal before trading runtime submit"
     ),
     action!(
         "open-trading-profile-editor",

@@ -243,26 +243,6 @@ fn staged_change_events_allow_abandoning_before_intent_creation() {
 }
 
 #[test]
-fn confirmation_can_return_to_ready_before_intent_creation() {
-    let mut change = StagedChange::from_request(request("change-1"), SubmitMode::DryRun);
-    apply_all(
-        &mut change,
-        [
-            StagedChangeEvent::ValidationStarted,
-            StagedChangeEvent::ValidationReady,
-            StagedChangeEvent::SubmitQueued,
-            StagedChangeEvent::ReturnedToReady,
-        ],
-    );
-
-    assert_eq!(change.state(), &StagedChangeState::Ready);
-    assert!(change.apply(StagedChangeEvent::SubmitQueued));
-    assert!(change.apply(StagedChangeEvent::IntentCreated {
-        intent_id: "intent-1".to_string(),
-    }));
-}
-
-#[test]
 fn staged_changes_do_not_replace_active_changes() {
     let mut changes = StagedChanges::default();
 
@@ -318,10 +298,14 @@ fn selection_follows_new_changes_and_drives_submission() {
     assert!(!views[0].selected);
     assert!(views[1].selected);
 
-    let QueueSubmitResult::Queued(request) = changes.queue_selected_submit() else {
-        panic!("selected ready change should queue");
+    let QueueSubmitResult::Queued(request) = changes.selected_submit_request() else {
+        panic!("selected ready change should preview");
     };
     assert_eq!(request.id, "second");
+    assert!(matches!(
+        changes.queue_submit_request(&request),
+        QueueSubmitResult::Queued(_)
+    ));
 }
 
 #[test]
@@ -337,14 +321,10 @@ fn selection_can_move_before_submitting_or_closing() {
     );
     changes.move_selection(-1);
 
-    let QueueSubmitResult::Queued(request) = changes.queue_selected_submit() else {
-        panic!("moved selection should queue");
+    let QueueSubmitResult::Queued(request) = changes.selected_submit_request() else {
+        panic!("moved selection should preview");
     };
     assert_eq!(request.id, "first");
-    assert_eq!(
-        changes.apply("first", StagedChangeEvent::ReturnedToReady),
-        TransitionResult::Applied
-    );
     assert_eq!(changes.close_selected(), CloseStagedChangeResult::Closed);
 
     let views = changes.views();
@@ -376,10 +356,14 @@ fn selection_never_targets_hidden_review_changes() {
         format!("change-{}", VISIBLE_REVIEW_LIMIT - 1)
     );
 
-    let QueueSubmitResult::Queued(request) = changes.queue_selected_submit() else {
-        panic!("selected visible change should queue");
+    let QueueSubmitResult::Queued(request) = changes.selected_submit_request() else {
+        panic!("selected visible change should preview");
     };
     assert_eq!(request.id, format!("change-{}", VISIBLE_REVIEW_LIMIT - 1));
+    assert!(matches!(
+        changes.queue_submit_request(&request),
+        QueueSubmitResult::Queued(_)
+    ));
 }
 
 #[test]
@@ -400,10 +384,14 @@ fn selection_movement_wraps_inside_visible_review_window() {
         .find(|view| view.selected)
         .unwrap();
     assert_eq!(selected.id, "change-0");
-    let QueueSubmitResult::Queued(request) = changes.queue_selected_submit() else {
-        panic!("selected visible change should queue");
+    let QueueSubmitResult::Queued(request) = changes.selected_submit_request() else {
+        panic!("selected visible change should preview");
     };
     assert_eq!(request.id, selected.id);
+    assert!(matches!(
+        changes.queue_submit_request(&request),
+        QueueSubmitResult::Queued(_)
+    ));
 }
 
 #[test]
@@ -413,8 +401,11 @@ fn intent_created_changes_cannot_close_while_worker_may_still_report_progress() 
         changes.open_ready(request("change-1"), SubmitMode::Live),
         OpenStagedChangeResult::Opened
     );
+    let QueueSubmitResult::Queued(request) = changes.selected_submit_request() else {
+        panic!("selected ready change should preview");
+    };
     assert!(matches!(
-        changes.queue_selected_submit(),
+        changes.queue_submit_request(&request),
         QueueSubmitResult::Queued(_)
     ));
     assert_eq!(

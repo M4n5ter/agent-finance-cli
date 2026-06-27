@@ -55,9 +55,11 @@ impl AppState {
         match self.floating.last().map(|pane| pane.kind) {
             Some(FloatingKind::CommandPalette) => InteractionMode::Command,
             Some(FloatingKind::Help) => InteractionMode::Help,
-            Some(FloatingKind::LiveWritesConfirmation | FloatingKind::ProviderDetails) => {
-                InteractionMode::Inspect
-            }
+            Some(
+                FloatingKind::LiveWritesConfirmation
+                | FloatingKind::StagedSubmitConfirmation
+                | FloatingKind::ProviderDetails,
+            ) => InteractionMode::Inspect,
             Some(
                 FloatingKind::SymbolSearch
                 | FloatingKind::WatchlistAdd
@@ -169,6 +171,7 @@ impl AppState {
             }
             FloatingKind::Help
             | FloatingKind::LiveWritesConfirmation
+            | FloatingKind::StagedSubmitConfirmation
             | FloatingKind::ProviderDetails => {}
         }
     }

@@ -20,6 +20,29 @@ fn toggle_panel_action(panel: Panel) -> ActionId {
     ActionId::TogglePanel(panel)
 }
 
+fn request_and_confirm_selected_staged_submit(state: &mut AppState) -> StagedSubmitRequest {
+    state.reduce(Action::SubmitStagedChange);
+    assert!(state.take_pending_staged_submit().is_none());
+    assert!(state.pending_staged_confirmation().is_some());
+    assert_eq!(
+        state.floating.last().map(|pane| pane.kind),
+        Some(FloatingKind::StagedSubmitConfirmation)
+    );
+
+    state.reduce(Action::ConfirmStagedSubmit);
+
+    assert!(state.pending_staged_confirmation().is_none());
+    assert!(
+        !state
+            .floating
+            .iter()
+            .any(|pane| pane.kind == FloatingKind::StagedSubmitConfirmation)
+    );
+    state
+        .take_pending_staged_submit()
+        .expect("pending staged submit")
+}
+
 #[test]
 fn reducer_wraps_symbol_focus_across_watchlist_boundaries() {
     let mut state = AppState::from_config(TuiConfig {
@@ -138,11 +161,7 @@ fn submitting_ready_order_change_queues_submit_request() {
     state.order_ticket.set_price_text(Some("204".to_string()));
     state.reduce(Action::StageOrderTicket);
 
-    state.reduce(Action::SubmitStagedChange);
-
-    let request = state
-        .take_pending_staged_submit()
-        .expect("pending staged submit");
+    let request = request_and_confirm_selected_staged_submit(&mut state);
     let crate::state::StagedChangeSubject::OrderTicket(review) = &request.subject else {
         panic!("expected order submit");
     };
@@ -151,6 +170,47 @@ fn submitting_ready_order_change_queues_submit_request() {
     assert!(state.take_pending_staged_submit().is_none());
     let change = state.staged_change_views().pop().unwrap();
     assert_eq!(change.stage, StagedChangeStage::SubmitQueued);
+}
+
+#[test]
+fn cancelling_staged_submit_confirmation_returns_change_to_ready() {
+    let mut state = AppState::from_config(TuiConfig {
+        watchlist: vec!["CRDO".to_string()],
+        workspace: WorkspaceConfig {
+            current: WorkspaceKind::Trade,
+        },
+        trading: crate::config::TradingConfig {
+            default_profile: Some("mainnet".to_string()),
+        },
+        ..TuiConfig::default()
+    });
+    state
+        .order_ticket
+        .set_quantity_text(Some("0.05".to_string()));
+    state.order_ticket.set_price_text(Some("204".to_string()));
+    state.reduce(Action::StageOrderTicket);
+
+    state.reduce(Action::SubmitStagedChange);
+    assert!(state.pending_staged_confirmation().is_some());
+    assert_eq!(
+        state.staged_change_views()[0].stage,
+        StagedChangeStage::Ready
+    );
+
+    state.reduce(Action::CancelStagedSubmitConfirmation);
+
+    assert!(state.pending_staged_confirmation().is_none());
+    assert!(state.take_pending_staged_submit().is_none());
+    assert_eq!(
+        state.staged_change_views()[0].stage,
+        StagedChangeStage::Ready
+    );
+    assert!(
+        !state
+            .floating
+            .iter()
+            .any(|pane| pane.kind == FloatingKind::StagedSubmitConfirmation)
+    );
 }
 
 #[test]
@@ -174,11 +234,7 @@ fn intent_review_submission_uses_selected_staged_change() {
     state.reduce(Action::StageOrderTicket);
     state.reduce(Action::MoveStagedChangeSelection(-1));
 
-    state.reduce(Action::SubmitStagedChange);
-
-    let request = state
-        .take_pending_staged_submit()
-        .expect("pending staged submit");
+    let request = request_and_confirm_selected_staged_submit(&mut state);
     let StagedChangeSubject::OrderTicket(review) = &request.subject else {
         panic!("expected order submit");
     };
@@ -274,11 +330,7 @@ fn submitting_ready_transfer_change_queues_transfer_submit_request() {
     state.transfer_ticket.set_amount_text(Some("5".to_string()));
     state.reduce(Action::StageTransferTicket);
 
-    state.reduce(Action::SubmitStagedChange);
-
-    let request = state
-        .take_pending_staged_submit()
-        .expect("pending staged submit");
+    let request = request_and_confirm_selected_staged_submit(&mut state);
     let StagedChangeSubject::Transfer(review) = &request.subject else {
         panic!("expected transfer submit");
     };
@@ -404,11 +456,7 @@ fn submitting_ready_futures_state_change_queues_futures_state_submit_request() {
     state.futures_state_ticket.set_leverage(Some(2));
     state.reduce(Action::StageFuturesStateTicket);
 
-    state.reduce(Action::SubmitStagedChange);
-
-    let request = state
-        .take_pending_staged_submit()
-        .expect("pending staged submit");
+    let request = request_and_confirm_selected_staged_submit(&mut state);
     let StagedChangeSubject::FuturesState(review) = &request.subject else {
         panic!("expected futures state submit");
     };
@@ -440,11 +488,8 @@ fn selected_open_order_can_be_staged_as_cancel_request() {
     state.reduce(Action::MoveOpenOrderSelection(1));
 
     state.reduce(Action::StageSelectedOpenOrderCancel);
-    state.reduce(Action::SubmitStagedChange);
 
-    let request = state
-        .take_pending_staged_submit()
-        .expect("pending staged submit");
+    let request = request_and_confirm_selected_staged_submit(&mut state);
     let crate::state::StagedChangeSubject::Cancel(review) = &request.subject else {
         panic!("expected cancel submit");
     };
@@ -477,11 +522,8 @@ fn selected_open_order_cancel_preserves_exchange_order_id_target() {
     });
 
     state.reduce(Action::StageSelectedOpenOrderCancel);
-    state.reduce(Action::SubmitStagedChange);
 
-    let request = state
-        .take_pending_staged_submit()
-        .expect("pending staged submit");
+    let request = request_and_confirm_selected_staged_submit(&mut state);
     let crate::state::StagedChangeSubject::Cancel(review) = &request.subject else {
         panic!("expected cancel submit");
     };
@@ -556,6 +598,7 @@ fn cancel_stage_id_separates_dry_run_and_live_for_same_open_order() {
     });
     state.reduce(Action::StageSelectedOpenOrderCancel);
     state.reduce(Action::SubmitStagedChange);
+    state.reduce(Action::ConfirmStagedSubmit);
     let dry_run_id = state.staged_change_views()[0].id.clone();
     for event in [
         StagedChangeEvent::IntentCreated {

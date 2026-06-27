@@ -78,6 +78,7 @@ pub struct AppState {
     pub transfer_ticket: TransferTicket,
     pub futures_state_ticket: FuturesStateTicket,
     staged_changes: StagedChanges,
+    pending_staged_confirmation: Option<StagedSubmitRequest>,
     pending_staged_submit: Option<StagedSubmitRequest>,
     pending_config_save: bool,
 }
@@ -126,6 +127,7 @@ impl AppState {
             transfer_ticket: TransferTicket::default(),
             futures_state_ticket: FuturesStateTicket::default(),
             staged_changes: StagedChanges::default(),
+            pending_staged_confirmation: None,
             pending_staged_submit: None,
             pending_config_save: false,
         };
@@ -181,6 +183,10 @@ impl AppState {
 
     pub fn staged_change_count(&self) -> usize {
         self.staged_changes.len()
+    }
+
+    pub fn pending_staged_confirmation(&self) -> Option<&StagedSubmitRequest> {
+        self.pending_staged_confirmation.as_ref()
     }
 
     pub fn take_pending_staged_submit(&mut self) -> Option<StagedSubmitRequest> {
@@ -596,7 +602,9 @@ impl AppState {
             Action::MoveStagedChangeSelection(direction) => {
                 self.staged_changes.move_selection(direction);
             }
-            Action::SubmitStagedChange => self.submit_next_staged_change(),
+            Action::SubmitStagedChange => self.request_staged_submit_confirmation(),
+            Action::ConfirmStagedSubmit => self.confirm_staged_submit(),
+            Action::CancelStagedSubmitConfirmation => self.cancel_staged_submit_confirmation(),
             Action::RequestConfigSave => self.request_config_save(),
             Action::ConfigSaved => self.config_saved(),
             Action::ConfigSaveFailed(error) => self.config_save_failed(error),
@@ -626,7 +634,15 @@ impl AppState {
                 }
             }
             Action::CloseFocusedFloating => {
-                self.close_top_floating();
+                if self
+                    .floating
+                    .last()
+                    .is_some_and(|pane| pane.kind == FloatingKind::StagedSubmitConfirmation)
+                {
+                    self.cancel_staged_submit_confirmation();
+                } else {
+                    self.close_top_floating();
+                }
             }
             Action::FocusFloating(kind) => self.focus_floating(kind),
             Action::ResizeFloating { kind, size } => self.resize_floating(kind, size),
@@ -715,6 +731,7 @@ impl AppState {
                     "live writes disabled for this TUI session".to_string()
                 });
                 if !enabled {
+                    self.cancel_staged_submit_confirmation();
                     let abandoned = self.staged_changes.disable_live();
                     if abandoned > 0 {
                         self.task_log.warning_event(format!(
@@ -769,8 +786,39 @@ impl AppState {
         }
     }
 
-    fn submit_next_staged_change(&mut self) {
-        match self.staged_changes.queue_selected_submit() {
+    fn request_staged_submit_confirmation(&mut self) {
+        if self.pending_staged_confirmation.is_some() {
+            self.open_floating(FloatingKind::StagedSubmitConfirmation);
+            return;
+        }
+        match self.staged_changes.selected_submit_request() {
+            QueueSubmitResult::Queued(request) => {
+                self.task_log.info(format!(
+                    "staged {} change {} awaiting submit confirmation as {}",
+                    request.subject.summary(),
+                    request.id,
+                    request.mode
+                ));
+                self.pending_staged_confirmation = Some(request);
+                self.open_floating(FloatingKind::StagedSubmitConfirmation);
+            }
+            QueueSubmitResult::Missing => self
+                .task_log
+                .warning_event("no selected staged change to submit".to_string()),
+            QueueSubmitResult::Rejected { current } => self.task_log.warning_event(format!(
+                "selected staged change cannot submit from current state {current}"
+            )),
+        }
+    }
+
+    fn confirm_staged_submit(&mut self) {
+        let Some(request) = self.pending_staged_confirmation.take() else {
+            self.task_log
+                .warning_event("no staged submit confirmation is pending".to_string());
+            self.close_floating(FloatingKind::StagedSubmitConfirmation);
+            return;
+        };
+        match self.staged_changes.queue_submit_request(&request) {
             QueueSubmitResult::Queued(request) => {
                 self.task_log.info(format!(
                     "submitting staged {} change {} as {}",
@@ -782,11 +830,24 @@ impl AppState {
             }
             QueueSubmitResult::Missing => self
                 .task_log
-                .warning_event("no selected staged change to submit".to_string()),
+                .warning_event("pending staged submit confirmation disappeared".to_string()),
             QueueSubmitResult::Rejected { current } => self.task_log.warning_event(format!(
-                "selected staged change cannot submit from current state {current}"
+                "pending staged submit confirmation cannot submit from {current}"
             )),
         }
+        self.close_floating(FloatingKind::StagedSubmitConfirmation);
+    }
+
+    fn cancel_staged_submit_confirmation(&mut self) {
+        let Some(request) = self.pending_staged_confirmation.take() else {
+            self.close_floating(FloatingKind::StagedSubmitConfirmation);
+            return;
+        };
+        self.task_log.info(format!(
+            "cancelled staged submit confirmation for {}",
+            request.id
+        ));
+        self.close_floating(FloatingKind::StagedSubmitConfirmation);
     }
 }
 
@@ -926,6 +987,8 @@ pub enum Action {
     StageSelectedOpenOrderCancel,
     MoveStagedChangeSelection(isize),
     SubmitStagedChange,
+    ConfirmStagedSubmit,
+    CancelStagedSubmitConfirmation,
     RequestConfigSave,
     ConfigSaved,
     ConfigSaveFailed(String),

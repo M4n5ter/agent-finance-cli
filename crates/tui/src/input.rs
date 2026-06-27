@@ -35,6 +35,9 @@ pub fn key_action(state: &AppState, key: KeyEvent) -> Option<Action> {
     if live_writes_confirmation_is_top(state) {
         return live_writes_confirmation_key_action(key);
     }
+    if staged_submit_confirmation_is_top(state) {
+        return staged_submit_confirmation_key_action(key);
+    }
     if state.panels.focused() == Panel::Watchlist
         && let Some(action) = watchlist_key_action(key)
     {
@@ -63,7 +66,7 @@ pub fn should_quit(state: &AppState, key: KeyEvent) -> bool {
     if matches!(key.code, KeyCode::Char('c')) && key.modifiers.contains(KeyModifiers::CONTROL) {
         return true;
     }
-    if live_writes_confirmation_is_top(state) {
+    if live_writes_confirmation_is_top(state) || staged_submit_confirmation_is_top(state) {
         return false;
     }
     matches!(key.code, KeyCode::Char('q')) && !text_input_floating_is_top(state)
@@ -77,7 +80,7 @@ pub fn handle_mouse_event(
 ) {
     match mouse.kind {
         MouseEventKind::Down(MouseButton::Left) => {
-            if live_writes_confirmation_is_top(state) {
+            if live_writes_confirmation_is_top(state) || staged_submit_confirmation_is_top(state) {
                 return;
             }
             let layout = layout::build(
@@ -183,6 +186,14 @@ fn live_writes_confirmation_key_action(key: KeyEvent) -> Option<Action> {
     }
 }
 
+fn staged_submit_confirmation_key_action(key: KeyEvent) -> Option<Action> {
+    match key.code {
+        KeyCode::Enter => Some(Action::ConfirmStagedSubmit),
+        KeyCode::Esc => Some(Action::CancelStagedSubmitConfirmation),
+        _ => None,
+    }
+}
+
 fn watchlist_key_action(key: KeyEvent) -> Option<Action> {
     if key.modifiers.contains(KeyModifiers::CONTROL)
         || key.modifiers.contains(KeyModifiers::ALT)
@@ -261,6 +272,13 @@ fn live_writes_confirmation_is_top(state: &AppState) -> bool {
         .floating
         .last()
         .is_some_and(|pane| pane.kind == FloatingKind::LiveWritesConfirmation)
+}
+
+fn staged_submit_confirmation_is_top(state: &AppState) -> bool {
+    state
+        .floating
+        .last()
+        .is_some_and(|pane| pane.kind == FloatingKind::StagedSubmitConfirmation)
 }
 
 fn symbol_search_is_top(state: &AppState) -> bool {
@@ -559,6 +577,26 @@ mod tests {
     }
 
     #[test]
+    fn staged_submit_confirmation_blocks_normal_keys_until_confirmed_or_cancelled() {
+        let state = staged_submit_confirmation_state();
+
+        assert!(!should_quit(&state, KeyEvent::from(KeyCode::Char('q'))));
+        assert!(should_quit(
+            &state,
+            KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL)
+        ));
+        assert_eq!(
+            key_action(&state, KeyEvent::from(KeyCode::Enter)),
+            Some(Action::ConfirmStagedSubmit)
+        );
+        assert_eq!(
+            key_action(&state, KeyEvent::from(KeyCode::Esc)),
+            Some(Action::CancelStagedSubmitConfirmation)
+        );
+        assert_eq!(key_action(&state, KeyEvent::from(KeyCode::Char('j'))), None);
+    }
+
+    #[test]
     fn live_writes_confirmation_blocks_mouse_focus_behind_the_modal() {
         let mut state = AppState::from_config(crate::config::TuiConfig::default());
         state.reduce(Action::Execute(ActionId::OpenFloating(FloatingKind::Help)));
@@ -580,6 +618,29 @@ mod tests {
         assert_eq!(
             state.floating.last().map(|pane| pane.kind),
             Some(FloatingKind::LiveWritesConfirmation)
+        );
+    }
+
+    #[test]
+    fn staged_submit_confirmation_blocks_mouse_focus_behind_the_modal() {
+        let mut state = staged_submit_confirmation_state();
+        let mut drag = MouseDrag::default();
+
+        handle_mouse_event(
+            Rect::new(0, 0, 120, 40),
+            &mut state,
+            &mut drag,
+            MouseEvent {
+                kind: MouseEventKind::Down(MouseButton::Left),
+                column: 1,
+                row: 1,
+                modifiers: KeyModifiers::empty(),
+            },
+        );
+
+        assert_eq!(
+            state.floating.last().map(|pane| pane.kind),
+            Some(FloatingKind::StagedSubmitConfirmation)
         );
     }
 
@@ -787,5 +848,26 @@ mod tests {
             row,
             modifiers: KeyModifiers::empty(),
         }
+    }
+
+    fn staged_submit_confirmation_state() -> AppState {
+        let mut state = AppState::from_config(crate::config::TuiConfig {
+            watchlist: vec!["CRDO".to_string()],
+            workspace: crate::config::WorkspaceConfig {
+                current: WorkspaceKind::Trade,
+            },
+            trading: crate::config::TradingConfig {
+                default_profile: Some("mainnet".to_string()),
+            },
+            ..crate::config::TuiConfig::default()
+        });
+        state.reduce(Action::Execute(ActionId::OpenFloating(FloatingKind::Help)));
+        state
+            .order_ticket
+            .set_quantity_text(Some("0.05".to_string()));
+        state.order_ticket.set_price_text(Some("204".to_string()));
+        state.reduce(Action::StageOrderTicket);
+        state.reduce(Action::SubmitStagedChange);
+        state
     }
 }

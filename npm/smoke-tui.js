@@ -159,6 +159,7 @@ function smokeDumpState() {
     "transfer_ticket",
     "futures_state_ticket",
     "staged_changes",
+    "pending_staged_confirmation",
   ];
   for (const key of requiredKeys) {
     if (!Object.prototype.hasOwnProperty.call(dump, key)) {
@@ -168,7 +169,7 @@ function smokeDumpState() {
   if (dump.workspace !== "crypto") {
     fail(`dump-state workspace mismatch: ${dump.workspace}`);
   }
-  if (dump.schema_version !== 9) {
+  if (dump.schema_version !== 10) {
     fail(`dump-state schema_version mismatch: ${dump.schema_version}`);
   }
   if (Object.prototype.hasOwnProperty.call(dump, "write_sessions")) {
@@ -176,6 +177,9 @@ function smokeDumpState() {
   }
   if (!Array.isArray(dump.staged_changes)) {
     fail("dump-state JSON staged_changes is not an array");
+  }
+  if (dump.pending_staged_confirmation !== null) {
+    fail("dump-state JSON should not have a pending staged confirmation by default");
   }
   if (!dump.transfer_ticket || dump.transfer_ticket.asset !== "USDT" || dump.transfer_ticket.direction !== "spot-to-usds-futures") {
     fail("dump-state JSON is missing the default transfer_ticket contract");

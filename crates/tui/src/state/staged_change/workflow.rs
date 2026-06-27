@@ -68,14 +68,6 @@ pub enum StagedChangeEvent {
     ValidationStarted,
     ValidationReady,
     SubmitQueued,
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "confirmation backtracking is reserved for the first write panel binding"
-        )
-    )]
-    ReturnedToReady,
     IntentCreated {
         intent_id: String,
     },
@@ -143,7 +135,6 @@ impl StagedChangeState {
             (Self::Ready, StagedChangeEvent::SubmitQueued) => Some(Self::SubmitQueued),
             (Self::Ready, StagedChangeEvent::FailedBeforeIntent) => Some(Self::FailedBeforeIntent),
             (Self::Ready, StagedChangeEvent::Abandoned) => Some(Self::Abandoned),
-            (Self::SubmitQueued, StagedChangeEvent::ReturnedToReady) => Some(Self::Ready),
             (Self::SubmitQueued, StagedChangeEvent::FailedBeforeIntent) => {
                 Some(Self::FailedBeforeIntent)
             }
