@@ -12,6 +12,7 @@
 
 ```bash
 npm install -g agent-finance-cli
+npx skills add https://github.com/M4n5ter/agent-finance
 agent-finance skills get core
 ```
 
