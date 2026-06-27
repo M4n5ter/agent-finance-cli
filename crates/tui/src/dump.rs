@@ -51,7 +51,7 @@ impl TuiDump {
     pub fn from_state(state: &AppState, partial: bool) -> Self {
         let provider_health = ProviderHealthReport::from_state(state);
         Self {
-            schema_version: 7,
+            schema_version: 8,
             workspace: state.workspace,
             mode: state.interaction_mode(),
             selected_symbol: state.selected_symbol().map(ToString::to_string),
@@ -233,7 +233,7 @@ mod tests {
 
         let value = serde_json::to_value(TuiDump::from_state(&state, true)).expect("serialize");
 
-        assert_eq!(value["schema_version"], 7);
+        assert_eq!(value["schema_version"], 8);
         assert_eq!(value["default_submit_mode"], "live");
         assert_eq!(value["live_writes_enabled"], false);
         assert_eq!(value["effective_submit_mode"], "dry-run");
@@ -446,6 +446,13 @@ mod tests {
         assert_eq!(
             value["account"]["profile_config"]["risk"]["allowed_symbols"]["btcusdt"]["max_order_notional_usdt"],
             "50"
+        );
+        assert_eq!(
+            value["account"]["profile_config"]["missing_permissions"]
+                .as_array()
+                .expect("missing permissions")
+                .len(),
+            0
         );
         assert_eq!(value["account"]["reads"][0]["kind"], "api-permissions");
     }

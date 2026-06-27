@@ -168,7 +168,7 @@ function smokeDumpState() {
   if (dump.workspace !== "crypto") {
     fail(`dump-state workspace mismatch: ${dump.workspace}`);
   }
-  if (dump.schema_version !== 7) {
+  if (dump.schema_version !== 8) {
     fail(`dump-state schema_version mismatch: ${dump.schema_version}`);
   }
   if (Object.prototype.hasOwnProperty.call(dump, "write_sessions")) {

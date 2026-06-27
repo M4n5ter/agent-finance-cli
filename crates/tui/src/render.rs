@@ -113,13 +113,16 @@ mod tests {
             generation: 1,
             profile: "mainnet".to_string(),
         });
+        let mut profile_snapshot = crate::profile_snapshot::test_trading_profile_snapshot();
+        profile_snapshot.declared_permissions.clear();
+        profile_snapshot.missing_permissions = profile_snapshot.required_permissions.clone();
         state.reduce(crate::state::Action::AccountLoaded {
             generation: 1,
             snapshot: crate::AccountSnapshot::new(
                 "mainnet".to_string(),
                 Provider::Binance,
                 Environment::Live,
-                crate::profile_snapshot::test_trading_profile_snapshot(),
+                profile_snapshot,
                 crate::account::ACCOUNT_READ_PLAN
                     .into_iter()
                     .map(|plan| {
@@ -229,6 +232,7 @@ mod tests {
         assert!(text.contains("environment: live"));
         assert!(text.contains("risk: live:allowed"));
         assert!(text.contains("allowed symbols: btcusdt spot limit <= 50"));
+        assert!(text.contains("missing profile permissions: spot_trading"));
         assert!(text.contains(&format!(
             "signed reads: {} ok / 0 warning",
             crate::account::ACCOUNT_READ_PLAN.len()

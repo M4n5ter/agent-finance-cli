@@ -5,17 +5,31 @@ use serde::Serialize;
 pub struct TradingProfileSnapshot {
     pub declared_permissions: Vec<ProfilePermission>,
     pub required_permissions: Vec<ProfilePermission>,
+    pub missing_permissions: Vec<ProfilePermission>,
     pub risk: RiskPolicy,
 }
 
 impl From<&Profile> for TradingProfileSnapshot {
     fn from(profile: &Profile) -> Self {
+        let declared_permissions = ProfilePermission::ALL
+            .into_iter()
+            .filter(|permission| profile.permissions.allows(*permission))
+            .collect::<Vec<_>>();
+        let required_permissions = profile
+            .risk
+            .required_profile_permissions()
+            .iter()
+            .collect::<Vec<_>>();
+        let missing_permissions = required_permissions
+            .iter()
+            .copied()
+            .filter(|permission| !declared_permissions.contains(permission))
+            .collect();
+
         Self {
-            declared_permissions: ProfilePermission::ALL
-                .into_iter()
-                .filter(|permission| profile.permissions.allows(*permission))
-                .collect(),
-            required_permissions: profile.risk.required_profile_permissions().iter().collect(),
+            declared_permissions,
+            required_permissions,
+            missing_permissions,
             risk: profile.risk.clone(),
         }
     }
@@ -90,5 +104,18 @@ mod tests {
         assert!(snapshot.risk.allow_live);
         assert!(snapshot.risk.allowed_symbols.contains_key("btcusdt"));
         assert!(!snapshot.risk.allowed_symbols.contains_key("BTCUSDT"));
+    }
+
+    #[test]
+    fn profile_snapshot_reports_missing_permissions() {
+        let mut profile = test_profile();
+        profile.permissions.spot_trading = false;
+
+        let snapshot = TradingProfileSnapshot::from(&profile);
+
+        assert_eq!(
+            snapshot.missing_permissions,
+            vec![ProfilePermission::SpotTrading]
+        );
     }
 }

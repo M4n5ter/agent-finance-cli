@@ -90,6 +90,15 @@ fn profile_risk_lines(state: &AppState, snapshot: &crate::AccountSnapshot) -> Ve
             permission_list_or_none(&profile.required_permissions)
         )),
     ];
+    if !profile.missing_permissions.is_empty() {
+        lines.push(Line::from(Span::styled(
+            format!(
+                "missing profile permissions: {}",
+                permission_list_or_none(&profile.missing_permissions)
+            ),
+            state.theme.warning_style(),
+        )));
+    }
 
     if profile.risk.allowed_symbols.is_empty() {
         lines.push(Line::from(Span::styled(
