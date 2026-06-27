@@ -8,7 +8,6 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Cell, List, ListItem, Paragraph, Row, Table, Wrap};
 
-use crate::account::ACCOUNT_READ_PLAN;
 use crate::layout::CockpitLayout;
 use crate::model::Panel;
 use crate::provider_health::ProviderHealthReport;
@@ -16,6 +15,7 @@ use crate::state::{AppState, StagedChangeSubject};
 use crate::task_log::TaskStatus;
 use crate::theme::ThemeConfig;
 
+use super::account::render_account;
 use super::history;
 use super::provider_health;
 use super::widgets::{compact_text, format_price, format_volume, panel_block};
@@ -246,122 +246,6 @@ fn ticket_field_line(
         Span::styled(format!("{label}: "), style),
         Span::styled(value, style),
     ])
-}
-
-fn render_account(frame: &mut Frame<'_>, state: &AppState, area: Rect) {
-    let mut lines = Vec::new();
-    if let Some(profile) = state.trading_profile.as_deref() {
-        lines.push(Line::from(vec![
-            Span::styled(
-                profile.to_string(),
-                state.theme.accent_style().add_modifier(Modifier::BOLD),
-            ),
-            Span::raw(if state.account_loading() {
-                " account loading..."
-            } else {
-                " account"
-            }),
-        ]));
-    } else {
-        lines.push(Line::from("No trading profile selected."));
-    }
-
-    match state.account_snapshot.as_ref() {
-        Some(snapshot) => {
-            lines.push(Line::from(format!(
-                "provider: {}  environment: {}",
-                snapshot.provider, snapshot.environment
-            )));
-            lines.push(Line::from(format!(
-                "signed reads: {} ok / {} warning",
-                snapshot.reads.len(),
-                snapshot.errors.len()
-            )));
-            for plan in ACCOUNT_READ_PLAN {
-                let request = plan.request();
-                let label = if snapshot.read_request(&request).is_some() {
-                    "ok"
-                } else {
-                    "missing"
-                };
-                lines.push(Line::from(format!("{}: {label}", plan.label())));
-            }
-            let open_orders = snapshot.open_orders();
-            if !open_orders.is_empty() {
-                lines.push(Line::from(""));
-                lines.push(Line::from(Span::styled(
-                    format!("open orders ({})", open_orders.len()),
-                    state.theme.accent_style().add_modifier(Modifier::BOLD),
-                )));
-            }
-            let visible_order_limit = 4;
-            let selected = state
-                .selected_open_order
-                .min(open_orders.len().saturating_sub(1));
-            let start = selected
-                .saturating_add(1)
-                .saturating_sub(visible_order_limit);
-            if start > 0 {
-                lines.push(Line::from(Span::styled(
-                    format!("+{start} earlier open orders"),
-                    state.theme.warning_style(),
-                )));
-            }
-            for (index, order) in open_orders
-                .iter()
-                .enumerate()
-                .skip(start)
-                .take(visible_order_limit)
-            {
-                let marker = if index == state.selected_open_order {
-                    ">"
-                } else {
-                    " "
-                };
-                lines.push(Line::from(format!(
-                    "{marker} {} {} {} {} @ {} [{}]",
-                    order.market,
-                    order.side.as_deref().unwrap_or("-"),
-                    order.remaining_quantity.as_deref().unwrap_or("-"),
-                    order.symbol,
-                    order.price.as_deref().unwrap_or("-"),
-                    order.identifier()
-                )));
-            }
-            let hidden_after = open_orders
-                .len()
-                .saturating_sub(start.saturating_add(visible_order_limit));
-            if hidden_after > 0 {
-                lines.push(Line::from(Span::styled(
-                    format!("+{hidden_after} more open orders"),
-                    state.theme.warning_style(),
-                )));
-            }
-            for error in snapshot.errors.iter().take(2) {
-                lines.push(Line::from(Span::styled(
-                    format!(
-                        "{} warning: {}",
-                        error.label,
-                        compact_text(&error.error, 96)
-                    ),
-                    state.theme.warning_style(),
-                )));
-            }
-        }
-        None if state.trading_profile.is_some() => lines.push(Line::from(
-            "No account snapshot loaded yet. Waiting for signed read.",
-        )),
-        None => lines.push(Line::from(
-            "Start the TUI with --profile <name> to enable signed account reads.",
-        )),
-    }
-
-    frame.render_widget(
-        Paragraph::new(lines)
-            .block(panel_block(Panel::Account, state))
-            .wrap(Wrap { trim: true }),
-        area,
-    );
 }
 
 fn render_watchlist(frame: &mut Frame<'_>, state: &AppState, area: Rect) {

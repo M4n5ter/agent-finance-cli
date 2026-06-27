@@ -4,6 +4,7 @@ use ratatui::widgets::Clear;
 use crate::layout;
 use crate::state::AppState;
 
+mod account;
 mod chrome;
 mod history;
 mod panels;
@@ -183,6 +184,28 @@ mod tests {
                                     "price": "2"
                                 }
                             ]),
+                            SignedReadRequest::TransferHistory { direction, .. } => {
+                                let (asset, amount, status, id) = match direction {
+                                    agent_finance_core::TransferDirection::SpotToUsdsFutures => {
+                                        ("USDT", "12.5", "CONFIRMED", "spot-futures-1")
+                                    }
+                                    agent_finance_core::TransferDirection::UsdsFuturesToSpot => {
+                                        ("USDC", "3", "CONFIRMED", "futures-spot-1")
+                                    }
+                                };
+                                serde_json::json!({
+                                    "total": 1,
+                                    "rows": [
+                                        {
+                                            "asset": asset,
+                                            "amount": amount,
+                                            "status": status,
+                                            "clientTranId": id,
+                                            "timestamp": 1720000000000_u64
+                                        }
+                                    ]
+                                })
+                            }
                             _ => serde_json::json!({ "ok": true }),
                         };
                         SignedReadSnapshot::new(
@@ -209,9 +232,14 @@ mod tests {
         )));
         assert!(text.contains("spot open orders: ok"));
         assert!(text.contains("USD-M open orders: ok"));
+        assert!(text.contains("spot -> USD-M transfers: ok"));
+        assert!(text.contains("USD-M -> spot transfers: ok"));
         assert!(text.contains("open orders (5)"));
         assert!(text.contains("> spot BUY 0.06 BTCUSDT @ 64000 [spot-1]"));
         assert!(text.contains("+1 more open orders"));
+        assert!(text.contains("transfer history (2)"));
+        assert!(text.contains("spot-to-usds-futures 12.5 USDT CONFIRMED [spot-futures-1]"));
+        assert!(text.contains("usds-futures-to-spot 3 USDC CONFIRMED [futures-spot-1]"));
 
         state.selected_open_order = 4;
         let text = render_to_text_grid(&state, 180, 40);

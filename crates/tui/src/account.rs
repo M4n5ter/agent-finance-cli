@@ -1,12 +1,15 @@
 use agent_finance_core::{
     Environment, Market, OrderIdentifier, Provider, SignedReadRequest, SignedReadSnapshot,
-    SignedReadSnapshotKind,
+    SignedReadSnapshotKind, TransferDirection,
 };
 use rust_decimal::Decimal;
 use serde::Serialize;
+use std::cmp::Reverse;
 use std::str::FromStr;
 
-pub const ACCOUNT_READ_PLAN: [AccountReadPlan; 5] = [
+pub const ACCOUNT_TRANSFER_HISTORY_PAGE_SIZE: usize = 10;
+
+pub const ACCOUNT_READ_PLAN: [AccountReadPlan; 7] = [
     AccountReadPlan::new("permissions", SignedReadRequest::ApiPermissions, true),
     AccountReadPlan::new("spot balances", SignedReadRequest::SpotBalances, false),
     AccountReadPlan::new(
@@ -29,6 +32,24 @@ pub const ACCOUNT_READ_PLAN: [AccountReadPlan; 5] = [
             symbol: None,
         },
         false,
+    ),
+    AccountReadPlan::new(
+        "spot -> USD-M transfers",
+        SignedReadRequest::TransferHistory {
+            direction: TransferDirection::SpotToUsdsFutures,
+            current: 1,
+            size: ACCOUNT_TRANSFER_HISTORY_PAGE_SIZE,
+        },
+        true,
+    ),
+    AccountReadPlan::new(
+        "USD-M -> spot transfers",
+        SignedReadRequest::TransferHistory {
+            direction: TransferDirection::UsdsFuturesToSpot,
+            current: 1,
+            size: ACCOUNT_TRANSFER_HISTORY_PAGE_SIZE,
+        },
+        true,
     ),
 ];
 
@@ -110,6 +131,20 @@ impl AccountSnapshot {
             .collect()
     }
 
+    pub fn transfer_history(&self) -> Vec<TransferHistorySummary> {
+        let mut transfers = self
+            .reads
+            .iter()
+            .filter_map(|read| match read.request {
+                SignedReadRequest::TransferHistory { direction, .. } => Some((direction, read)),
+                _ => None,
+            })
+            .flat_map(|(direction, read)| transfer_history_payload_items(&read.payload, direction))
+            .collect::<Vec<_>>();
+        transfers.sort_by_key(|transfer| Reverse(transfer.timestamp_ms));
+        transfers
+    }
+
     pub fn has_data(&self) -> bool {
         !self.reads.is_empty()
     }
@@ -150,6 +185,27 @@ pub struct OpenOrderSummary {
     pub executed_quantity: Option<String>,
     pub remaining_quantity: Option<String>,
     pub price: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct TransferHistorySummary {
+    pub direction: TransferDirection,
+    pub asset: Option<String>,
+    pub amount: Option<String>,
+    pub status: Option<String>,
+    pub timestamp: Option<String>,
+    pub timestamp_ms: Option<u64>,
+    pub transfer_id: Option<String>,
+    pub client_transfer_id: Option<String>,
+}
+
+impl TransferHistorySummary {
+    pub fn identifier(&self) -> String {
+        self.client_transfer_id
+            .clone()
+            .or_else(|| self.transfer_id.clone())
+            .unwrap_or_else(|| "-".to_string())
+    }
 }
 
 impl OpenOrderSummary {
@@ -196,6 +252,42 @@ fn open_order_item(item: &serde_json::Value, market: Market) -> Option<OpenOrder
         remaining_quantity: remaining_quantity(item),
         price: string_field(item, "price"),
     })
+}
+
+fn transfer_history_payload_items(
+    payload: &serde_json::Value,
+    direction: TransferDirection,
+) -> impl Iterator<Item = TransferHistorySummary> + '_ {
+    payload
+        .get("rows")
+        .and_then(serde_json::Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(move |item| transfer_history_item(item, direction))
+}
+
+fn transfer_history_item(
+    item: &serde_json::Value,
+    direction: TransferDirection,
+) -> Option<TransferHistorySummary> {
+    Some(TransferHistorySummary {
+        direction,
+        asset: string_field(item, "asset"),
+        amount: string_field(item, "amount"),
+        status: string_field(item, "status"),
+        timestamp: string_field(item, "timestamp"),
+        timestamp_ms: u64_field(item, "timestamp"),
+        transfer_id: string_field(item, "tranId"),
+        client_transfer_id: string_field(item, "clientTranId"),
+    })
+}
+
+fn u64_field(value: &serde_json::Value, key: &str) -> Option<u64> {
+    let field = value.get(key)?;
+    field
+        .as_u64()
+        .or_else(|| field.as_i64().and_then(|number| number.try_into().ok()))
+        .or_else(|| field.as_str().and_then(|text| text.parse().ok()))
 }
 
 fn string_field(value: &serde_json::Value, key: &str) -> Option<String> {
@@ -289,5 +381,153 @@ mod tests {
         assert_eq!(orders[1].symbol, "ETHUSDT");
         assert_eq!(orders[1].order_id.as_deref(), Some("67890"));
         assert_eq!(orders[1].remaining_quantity.as_deref(), Some("0.2"));
+    }
+
+    #[test]
+    fn account_snapshot_extracts_transfer_history_rows_by_direction() {
+        let snapshot = AccountSnapshot::new(
+            "mainnet".to_string(),
+            Provider::Binance,
+            Environment::Live,
+            vec![
+                SignedReadSnapshot::new(
+                    "mainnet",
+                    Provider::Binance,
+                    Environment::Live,
+                    SignedReadRequest::transfer_history(
+                        TransferDirection::SpotToUsdsFutures,
+                        1,
+                        10,
+                    ),
+                    json!({
+                        "total": 1,
+                        "rows": [
+                            {
+                                "asset": "USDT",
+                                "amount": "25.5",
+                                "type": "MAIN_UMFUTURE",
+                                "status": "CONFIRMED",
+                                "timestamp": 1720000000000_u64,
+                                "tranId": 98765,
+                                "clientTranId": "af-transfer-1"
+                            }
+                        ]
+                    }),
+                ),
+                SignedReadSnapshot::new(
+                    "mainnet",
+                    Provider::Binance,
+                    Environment::Live,
+                    SignedReadRequest::transfer_history(
+                        TransferDirection::UsdsFuturesToSpot,
+                        1,
+                        10,
+                    ),
+                    json!({
+                        "rows": [
+                            {
+                                "asset": "USDC",
+                                "amount": "3",
+                                "status": "CONFIRMED",
+                                "tranId": "98766"
+                            }
+                        ]
+                    }),
+                ),
+            ],
+            Vec::new(),
+        );
+
+        let transfers = snapshot.transfer_history();
+
+        assert_eq!(transfers.len(), 2);
+        assert_eq!(transfers[0].direction, TransferDirection::SpotToUsdsFutures);
+        assert_eq!(transfers[0].amount.as_deref(), Some("25.5"));
+        assert_eq!(transfers[0].asset.as_deref(), Some("USDT"));
+        assert_eq!(transfers[0].status.as_deref(), Some("CONFIRMED"));
+        assert_eq!(transfers[0].identifier(), "af-transfer-1");
+        assert_eq!(transfers[1].direction, TransferDirection::UsdsFuturesToSpot);
+        assert_eq!(transfers[1].identifier(), "98766");
+    }
+
+    #[test]
+    fn transfer_history_is_sorted_by_timestamp_across_directions() {
+        let snapshot = AccountSnapshot::new(
+            "mainnet".to_string(),
+            Provider::Binance,
+            Environment::Live,
+            vec![
+                SignedReadSnapshot::new(
+                    "mainnet",
+                    Provider::Binance,
+                    Environment::Live,
+                    SignedReadRequest::transfer_history(
+                        TransferDirection::SpotToUsdsFutures,
+                        1,
+                        10,
+                    ),
+                    json!({
+                        "rows": [
+                            {
+                                "asset": "USDT",
+                                "amount": "1",
+                                "status": "CONFIRMED",
+                                "timestamp": 1000,
+                                "clientTranId": "old-1"
+                            },
+                            {
+                                "asset": "USDT",
+                                "amount": "2",
+                                "status": "CONFIRMED",
+                                "timestamp": 2000,
+                                "clientTranId": "old-2"
+                            },
+                            {
+                                "asset": "USDT",
+                                "amount": "3",
+                                "status": "CONFIRMED",
+                                "timestamp": 3000,
+                                "clientTranId": "old-3"
+                            },
+                            {
+                                "asset": "USDT",
+                                "amount": "4",
+                                "status": "CONFIRMED",
+                                "timestamp": 4000,
+                                "clientTranId": "old-4"
+                            }
+                        ]
+                    }),
+                ),
+                SignedReadSnapshot::new(
+                    "mainnet",
+                    Provider::Binance,
+                    Environment::Live,
+                    SignedReadRequest::transfer_history(
+                        TransferDirection::UsdsFuturesToSpot,
+                        1,
+                        10,
+                    ),
+                    json!({
+                        "rows": [
+                            {
+                                "asset": "USDT",
+                                "amount": "5",
+                                "status": "CONFIRMED",
+                                "timestamp": 9000,
+                                "clientTranId": "newest"
+                            }
+                        ]
+                    }),
+                ),
+            ],
+            Vec::new(),
+        );
+
+        let transfers = snapshot.transfer_history();
+
+        assert_eq!(transfers[0].identifier(), "newest");
+        assert_eq!(transfers[1].identifier(), "old-4");
+        assert_eq!(transfers[4].identifier(), "old-1");
     }
 }
