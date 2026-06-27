@@ -157,7 +157,7 @@ macro_rules! action {
     };
 }
 
-pub const ACTION_REGISTRY: [ActionSpec; 37] = [
+pub const ACTION_REGISTRY: [ActionSpec; 39] = [
     action!(
         "select-next-symbol",
         ActionId::SelectSymbolBy(1),
@@ -291,6 +291,12 @@ pub const ACTION_REGISTRY: [ActionSpec; 37] = [
         "Move keyboard focus to quote and session summary"
     ),
     action!(
+        "focus-order-ticket",
+        ActionId::FocusPanel(Panel::OrderTicket),
+        "Focus order ticket",
+        "Move keyboard focus to the staged order ticket"
+    ),
+    action!(
         "focus-history",
         ActionId::FocusPanel(Panel::History),
         "Focus history",
@@ -337,6 +343,12 @@ pub const ACTION_REGISTRY: [ActionSpec; 37] = [
         ActionId::TogglePanel(Panel::Quote),
         "Toggle quote",
         "Show or hide quote and session summary"
+    ),
+    action!(
+        "toggle-order-ticket",
+        ActionId::TogglePanel(Panel::OrderTicket),
+        "Toggle order ticket",
+        "Show or hide the staged order ticket"
     ),
     action!(
         "toggle-history",

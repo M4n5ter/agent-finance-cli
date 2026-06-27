@@ -29,6 +29,11 @@ pub fn key_action(state: &AppState, key: KeyEvent) -> Option<Action> {
     if live_writes_confirmation_is_top(state) {
         return live_writes_confirmation_key_action(key);
     }
+    if state.panels.focused() == crate::model::Panel::OrderTicket
+        && let Some(action) = order_ticket_key_action(key)
+    {
+        return Some(action);
+    }
 
     state.keymap.normal_action(key).map(Action::Execute)
 }
@@ -141,6 +146,16 @@ fn live_writes_confirmation_key_action(key: KeyEvent) -> Option<Action> {
     }
 }
 
+fn order_ticket_key_action(key: KeyEvent) -> Option<Action> {
+    match key.code {
+        KeyCode::Up => Some(Action::MoveOrderTicketField(-1)),
+        KeyCode::Down => Some(Action::MoveOrderTicketField(1)),
+        KeyCode::Left => Some(Action::AdjustOrderTicketField(-1)),
+        KeyCode::Right | KeyCode::Enter => Some(Action::AdjustOrderTicketField(1)),
+        _ => None,
+    }
+}
+
 fn command_palette_is_top(state: &AppState) -> bool {
     state
         .floating
@@ -170,7 +185,7 @@ fn text_input_floating_is_top(state: &AppState) -> bool {
 mod tests {
     use super::*;
     use crate::command::ActionId;
-    use crate::model::Panel;
+    use crate::model::{Panel, WorkspaceKind};
     use crossterm::event::KeyEvent;
 
     #[test]
@@ -263,6 +278,28 @@ mod tests {
             key_action(&state, KeyEvent::from(KeyCode::Char('a'))),
             Some(Action::EditSymbolSearchQuery(_))
         ));
+    }
+
+    #[test]
+    fn order_ticket_focus_routes_field_navigation_before_global_keys() {
+        let mut state = AppState::from_config(crate::config::TuiConfig::default());
+        state.reduce(Action::Execute(ActionId::SetWorkspace(
+            WorkspaceKind::Trade,
+        )));
+        state.reduce(Action::Execute(ActionId::FocusPanel(Panel::OrderTicket)));
+
+        assert_eq!(
+            key_action(&state, KeyEvent::from(KeyCode::Down)),
+            Some(Action::MoveOrderTicketField(1))
+        );
+        assert_eq!(
+            key_action(&state, KeyEvent::from(KeyCode::Right)),
+            Some(Action::AdjustOrderTicketField(1))
+        );
+        assert_eq!(
+            key_action(&state, KeyEvent::from(KeyCode::Char('j'))),
+            Some(Action::Execute(ActionId::SelectSymbolBy(1)))
+        );
     }
 
     #[test]

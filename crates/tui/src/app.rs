@@ -275,7 +275,11 @@ fn dump_is_ready(state: &AppState) -> bool {
         Panel::Evidence => !state.evidence.loading(),
         Panel::Polymarket | Panel::Research => !state.research.loading(),
         Panel::Account => !state.account_loading(),
-        Panel::Watchlist | Panel::Quote | Panel::ProviderHealth | Panel::TaskLog => true,
+        Panel::Watchlist
+        | Panel::Quote
+        | Panel::OrderTicket
+        | Panel::ProviderHealth
+        | Panel::TaskLog => true,
     })
 }
 

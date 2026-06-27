@@ -282,14 +282,20 @@ impl PanelConfig {
     }
 }
 
+const PANELS_ADDED_AFTER_LEGACY_DEFAULT: [Panel; 2] = [Panel::Account, Panel::OrderTicket];
+
 fn add_new_panels_to_legacy_default(open: &mut Vec<Panel>) {
     let legacy_default = Panel::ALL
         .iter()
         .copied()
-        .filter(|panel| *panel != Panel::Account)
+        .filter(|panel| !PANELS_ADDED_AFTER_LEGACY_DEFAULT.contains(panel))
         .all(|panel| open.contains(&panel));
-    if legacy_default && !open.contains(&Panel::Account) {
-        open.push(Panel::Account);
+    if legacy_default {
+        for panel in PANELS_ADDED_AFTER_LEGACY_DEFAULT {
+            if !open.contains(&panel) {
+                open.push(panel);
+            }
+        }
     }
 }
 
@@ -694,12 +700,12 @@ mod tests {
     }
 
     #[test]
-    fn legacy_default_panel_config_gains_new_account_panel() {
+    fn legacy_default_panel_config_gains_new_panels() {
         let mut config = TuiConfig {
             panels: PanelConfig {
                 open: Panel::ALL
                     .into_iter()
-                    .filter(|panel| *panel != Panel::Account)
+                    .filter(|panel| !PANELS_ADDED_AFTER_LEGACY_DEFAULT.contains(panel))
                     .collect(),
                 focused: Panel::Watchlist,
             },
@@ -709,6 +715,7 @@ mod tests {
         config.normalize();
 
         assert!(config.panels.open.contains(&Panel::Account));
+        assert!(config.panels.open.contains(&Panel::OrderTicket));
     }
 
     #[test]

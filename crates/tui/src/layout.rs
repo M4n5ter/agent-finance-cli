@@ -9,6 +9,26 @@ use crate::model::{FloatingKind, FloatingPane, FloatingSize, Panel};
 const MIN_PANEL_WIDTH: u16 = 18;
 const MIN_PANEL_HEIGHT: u16 = 4;
 const STATUS_HEIGHT: u16 = 1;
+const MIDDLE_COLUMN_SPECS: [ColumnSpec; 3] = [
+    ColumnSpec::new(
+        &[Panel::OrderTicket],
+        &[
+            (Panel::OrderTicket, 42),
+            (Panel::Account, 28),
+            (Panel::Quote, 18),
+            (Panel::History, 12),
+        ],
+    ),
+    ColumnSpec::new(
+        &[Panel::Account],
+        &[
+            (Panel::Account, 55),
+            (Panel::Quote, 20),
+            (Panel::History, 25),
+        ],
+    ),
+    ColumnSpec::new(&[], &[(Panel::Quote, 1), (Panel::History, 1)]),
+];
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct CockpitLayout {
@@ -242,7 +262,12 @@ fn active_docked_groups(config: &LayoutConfig, open_panels: &[Panel]) -> Vec<(Do
         (
             DockedGroup::Middle,
             config.main_ratio,
-            &[Panel::Account, Panel::Quote, Panel::History][..],
+            &[
+                Panel::OrderTicket,
+                Panel::Account,
+                Panel::Quote,
+                Panel::History,
+            ][..],
         ),
         (
             DockedGroup::Right,
@@ -385,17 +410,12 @@ impl PanelRects {
 }
 
 fn assign_middle_column(rects: &mut PanelRects, area: Rect, open_panels: &[Panel]) {
-    if open_panels.contains(&Panel::Account) {
-        assign_weighted_column(
-            rects,
-            area,
-            &[
-                (Panel::Account, 55),
-                (Panel::Quote, 20),
-                (Panel::History, 25),
-            ],
-            open_panels,
-        );
+    let spec = MIDDLE_COLUMN_SPECS
+        .iter()
+        .find(|spec| spec.matches(open_panels))
+        .expect("fallback middle column spec is always available");
+    if !spec.anchor_panels.is_empty() {
+        assign_weighted_column(rects, area, spec.panels, open_panels);
         return;
     }
 
@@ -414,6 +434,27 @@ fn assign_middle_column(rects: &mut PanelRects, area: Rect, open_panels: &[Panel
         (true, false) => rects.set(Panel::Quote, area),
         (false, true) => rects.set(Panel::History, area),
         (false, false) => {}
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct ColumnSpec {
+    anchor_panels: &'static [Panel],
+    panels: &'static [(Panel, u32)],
+}
+
+impl ColumnSpec {
+    const fn new(anchor_panels: &'static [Panel], panels: &'static [(Panel, u32)]) -> Self {
+        Self {
+            anchor_panels,
+            panels,
+        }
+    }
+
+    fn matches(self, open_panels: &[Panel]) -> bool {
+        self.anchor_panels
+            .iter()
+            .all(|panel| open_panels.contains(panel))
     }
 }
 
@@ -683,8 +724,9 @@ mod tests {
         let layout = build(area, &config, &[], &Panel::ALL);
 
         assert_eq!(layout.panel_at(2, 2), Some(Panel::Watchlist));
-        assert_eq!(layout.panel_at(80, 2), Some(Panel::Account));
-        assert_eq!(layout.panel_at(80, 30), Some(Panel::Quote));
+        assert_eq!(layout.panel_at(80, 2), Some(Panel::OrderTicket));
+        assert_eq!(layout.panel_at(80, 22), Some(Panel::Account));
+        assert_eq!(layout.panel_at(80, 35), Some(Panel::Quote));
         assert_eq!(layout.panel_at(150, 36), Some(Panel::Research));
         assert_eq!(layout.panel_at(150, 22), Some(Panel::Polymarket));
 

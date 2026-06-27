@@ -11,6 +11,7 @@ use crate::command::{ActionId, CommandPaletteState};
 use crate::config::{FloatingConfig, LayoutConfig, PanelConfig, TuiConfig, WorkspaceConfig};
 use crate::keymap::KeymapConfig;
 use crate::model::{DockedPanels, FloatingKind, FloatingPane, FloatingSize, Panel, WorkspaceKind};
+use crate::order_ticket::{OrderTicket, OrderTicketPreview};
 use crate::search::SymbolSearchState;
 use crate::task_failure::TaskFailures;
 use crate::task_log::TaskLog;
@@ -56,6 +57,7 @@ pub struct AppState {
     pub default_submit_mode: SubmitMode,
     pub live_writes_enabled: bool,
     pub trading_profile: Option<String>,
+    pub order_ticket: OrderTicket,
     write_sessions: WriteSessions,
 }
 
@@ -87,6 +89,7 @@ impl AppState {
             default_submit_mode: SubmitMode::DryRun,
             live_writes_enabled: false,
             trading_profile: config.trading.default_profile,
+            order_ticket: OrderTicket::default(),
             write_sessions: WriteSessions::default(),
         };
         state.ensure_visible_focus();
@@ -139,6 +142,16 @@ impl AppState {
         }
     }
 
+    pub fn order_ticket_preview(&self) -> OrderTicketPreview {
+        self.order_ticket.preview(
+            self.selected_symbol(),
+            self.trading_profile.as_deref(),
+            self.live_writes_enabled,
+            self.effective_submit_mode(),
+            self.selected_quote_price(),
+        )
+    }
+
     pub fn reduce(&mut self, action: Action) {
         match action {
             Action::Focus(panel) => {
@@ -161,6 +174,13 @@ impl AppState {
                     self.selected_symbol = index;
                     self.close_floating(FloatingKind::SymbolSearch);
                 }
+            }
+            Action::MoveOrderTicketField(direction) => {
+                self.order_ticket.move_field(direction);
+            }
+            Action::AdjustOrderTicketField(direction) => {
+                self.order_ticket
+                    .adjust_selected_field(direction, self.selected_quote_price());
             }
             Action::Execute(action) => self.execute(action),
             Action::CloseFocusedPanel => {
@@ -325,6 +345,8 @@ pub enum Action {
     MoveSymbolSearchSelection(isize),
     EditSymbolSearchQuery(tui_input::InputRequest),
     AcceptSymbolSearch,
+    MoveOrderTicketField(isize),
+    AdjustOrderTicketField(isize),
     Execute(ActionId),
     FocusPanelBy(isize),
     ToggleFocusedZoom,

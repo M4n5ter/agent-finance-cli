@@ -9,6 +9,16 @@ impl AppState {
         self.watchlist.get(self.selected_symbol).map(String::as_str)
     }
 
+    pub(super) fn selected_quote_price(&self) -> Option<f64> {
+        self.market_snapshot
+            .as_ref()
+            .and_then(|snapshot| {
+                self.selected_symbol()
+                    .and_then(|symbol| snapshot.quote_for(symbol))
+            })
+            .and_then(|quote| quote.price)
+    }
+
     pub fn visible_panels(&self) -> Vec<Panel> {
         self.layout_panels()
     }

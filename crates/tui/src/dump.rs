@@ -4,6 +4,7 @@ use serde::Serialize;
 use crate::account::AccountSnapshot;
 use crate::hints;
 use crate::model::{InteractionMode, Panel, WorkspaceKind};
+use crate::order_ticket::OrderTicketPreview;
 use crate::pane_status::{TuiPaneStatus, pane_health};
 use crate::provider_health::{ProviderHealthReport, ProviderHealthTask};
 use crate::state::{AppState, WriteSessionView};
@@ -22,6 +23,7 @@ pub struct TuiDump {
     pub effective_submit_mode: SubmitMode,
     pub trading_profile: Option<String>,
     pub account: Option<AccountSnapshot>,
+    pub order_ticket: OrderTicketPreview,
     pub write_sessions: Vec<WriteSessionView>,
     pub errors: Vec<String>,
     pub key_hints: Vec<String>,
@@ -56,6 +58,7 @@ impl TuiDump {
             effective_submit_mode: state.effective_submit_mode(),
             trading_profile: state.trading_profile.clone(),
             account: state.account_snapshot.clone(),
+            order_ticket: state.order_ticket_preview(),
             write_sessions: state.write_session_views(),
             errors: dump_errors(state),
             provider_health,
@@ -271,6 +274,39 @@ mod tests {
         assert_eq!(value["write_sessions"][0]["mode"], "dry-run");
         assert_eq!(value["write_sessions"][0]["intent_id"], "intent-1");
         assert!(value["write_sessions"][0]["intent_status"].is_null());
+    }
+
+    #[test]
+    fn dump_exposes_order_ticket_readiness_for_agents() {
+        let mut state = AppState::from_config(TuiConfig {
+            watchlist: vec!["CRDO".to_string()],
+            workspace: WorkspaceConfig {
+                current: WorkspaceKind::Trade,
+            },
+            trading: crate::config::TradingConfig {
+                default_profile: Some("mainnet".to_string()),
+            },
+            ..TuiConfig::default()
+        });
+        state
+            .order_ticket
+            .set_quantity_text(Some("0.05".to_string()));
+        state.order_ticket.set_price_text(Some("204".to_string()));
+
+        let value = serde_json::to_value(TuiDump::from_state(&state, true)).expect("serialize");
+
+        assert_eq!(value["order_ticket"]["symbol"], "CRDO");
+        assert_eq!(value["order_ticket"]["profile"], "mainnet");
+        assert_eq!(value["order_ticket"]["quantity"], "0.05");
+        assert_eq!(value["order_ticket"]["price"], "204");
+        assert_eq!(value["order_ticket"]["ready"], true);
+        assert!(
+            value["panes"]
+                .as_array()
+                .expect("panes")
+                .iter()
+                .any(|pane| pane["panel"] == "order-ticket" && pane["visible"] == true)
+        );
     }
 
     #[test]

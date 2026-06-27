@@ -28,6 +28,7 @@ pub(super) fn render_docked(frame: &mut Frame<'_>, state: &AppState, layout: &Co
         match panel {
             Panel::Watchlist => render_watchlist(frame, state, area),
             Panel::Quote => render_quote(frame, state, area),
+            Panel::OrderTicket => render_order_ticket(frame, state, area),
             Panel::Account => render_account(frame, state, area),
             Panel::History => render_history(frame, state, area),
             Panel::Evidence => render_evidence(frame, state, area),
@@ -37,6 +38,117 @@ pub(super) fn render_docked(frame: &mut Frame<'_>, state: &AppState, layout: &Co
             Panel::TaskLog => render_task_log(frame, state, area),
         }
     }
+}
+
+fn render_order_ticket(frame: &mut Frame<'_>, state: &AppState, area: Rect) {
+    let ticket = &state.order_ticket;
+    let preview = state.order_ticket_preview();
+    let mut lines = vec![
+        Line::from(vec![
+            Span::styled(
+                "staged order",
+                state.theme.accent_style().add_modifier(Modifier::BOLD),
+            ),
+            Span::raw(format!(
+                "  {} / {}",
+                if preview.live_writes_enabled {
+                    "live:on"
+                } else {
+                    "live:off"
+                },
+                preview.effective_mode
+            )),
+        ]),
+        Line::from(format!(
+            "symbol: {}  profile: {}",
+            preview.symbol.as_deref().unwrap_or("-"),
+            preview.profile.as_deref().unwrap_or("-")
+        )),
+        ticket_field_line(
+            state,
+            "market",
+            ticket.market().to_string(),
+            ticket.selected_field_label(),
+        ),
+        ticket_field_line(
+            state,
+            "side",
+            ticket.side().to_string(),
+            ticket.selected_field_label(),
+        ),
+        ticket_field_line(
+            state,
+            "kind",
+            ticket.kind().to_string(),
+            ticket.selected_field_label(),
+        ),
+        ticket_field_line(
+            state,
+            "quantity",
+            preview.quantity.as_deref().unwrap_or("-").to_string(),
+            ticket.selected_field_label(),
+        ),
+        ticket_field_line(
+            state,
+            "price",
+            preview.price.as_deref().unwrap_or("-").to_string(),
+            ticket.selected_field_label(),
+        ),
+        ticket_field_line(
+            state,
+            "time in force",
+            ticket.time_in_force().to_string(),
+            ticket.selected_field_label(),
+        ),
+        ticket_field_line(
+            state,
+            "reduce only",
+            ticket.reduce_only().to_string(),
+            ticket.selected_field_label(),
+        ),
+    ];
+
+    if preview.ready {
+        lines.push(Line::from(Span::styled(
+            "ready for intent review",
+            state.theme.accent_style(),
+        )));
+    } else {
+        for blocker in preview.blockers.iter().take(3) {
+            lines.push(Line::from(Span::styled(
+                format!("blocked: {blocker}"),
+                state.theme.warning_style(),
+            )));
+        }
+    }
+    lines.push(Line::from("up/down field  left/right adjust  enter apply"));
+
+    frame.render_widget(
+        Paragraph::new(lines)
+            .block(panel_block(Panel::OrderTicket, state))
+            .wrap(Wrap { trim: true }),
+        area,
+    );
+}
+
+fn ticket_field_line(
+    state: &AppState,
+    label: &'static str,
+    value: String,
+    selected: &'static str,
+) -> Line<'static> {
+    let marker = if label == selected { ">" } else { " " };
+    let style = if label == selected {
+        state.theme.selected_style().add_modifier(Modifier::BOLD)
+    } else {
+        state.theme.text_style()
+    };
+    Line::from(vec![
+        Span::styled(marker, style),
+        Span::raw(" "),
+        Span::styled(format!("{label}: "), style),
+        Span::styled(value, style),
+    ])
 }
 
 fn render_account(frame: &mut Frame<'_>, state: &AppState, area: Rect) {

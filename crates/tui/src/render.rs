@@ -141,6 +141,28 @@ mod tests {
     }
 
     #[test]
+    fn trade_workspace_renders_order_ticket_as_first_write_surface() {
+        let state = AppState::from_config(TuiConfig {
+            watchlist: vec!["CRDO".to_string()],
+            trading: crate::config::TradingConfig {
+                default_profile: Some("mainnet".to_string()),
+            },
+            workspace: crate::config::WorkspaceConfig {
+                current: WorkspaceKind::Trade,
+            },
+            ..TuiConfig::default()
+        });
+
+        let text = render_to_text_grid(&state, 140, 36);
+
+        assert!(text.contains("Order Ticket"));
+        assert!(text.contains("staged order"));
+        assert!(text.contains("symbol: CRDO"));
+        assert!(text.contains("profile: mainnet"));
+        assert!(text.contains("blocked: quantity is required"));
+    }
+
+    #[test]
     fn overview_workspace_matches_snapshot_at_100x30() {
         let mut state = snapshot_state();
         state.reduce(crate::state::Action::Execute(ActionId::SetWorkspace(

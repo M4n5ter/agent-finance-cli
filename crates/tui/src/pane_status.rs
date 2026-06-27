@@ -110,6 +110,7 @@ fn pane_data_state(state: &AppState, panel: Panel) -> PaneDataState {
             },
             state.task_failures.has_source(TaskFailureSource::Quotes),
         ),
+        Panel::OrderTicket => PaneDataState::new(false, SelectedDataState::Fresh, false),
         Panel::Account => PaneDataState::new(
             state.account_loading(),
             match state.account_snapshot.as_ref() {

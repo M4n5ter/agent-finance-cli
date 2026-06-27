@@ -47,7 +47,7 @@ impl WorkspaceKind {
             Self::Trade => &[
                 Panel::Watchlist,
                 Panel::Quote,
-                Panel::Account,
+                Panel::OrderTicket,
                 Panel::TaskLog,
                 Panel::ProviderHealth,
             ],
@@ -167,6 +167,7 @@ impl InteractionMode {
 pub enum Panel {
     Watchlist,
     Quote,
+    OrderTicket,
     Account,
     History,
     Evidence,
@@ -177,9 +178,10 @@ pub enum Panel {
 }
 
 impl Panel {
-    pub const ALL: [Self; 9] = [
+    pub const ALL: [Self; 10] = [
         Self::Watchlist,
         Self::Quote,
+        Self::OrderTicket,
         Self::Account,
         Self::History,
         Self::Evidence,
@@ -193,6 +195,7 @@ impl Panel {
         match self {
             Self::Watchlist => "Watchlist",
             Self::Quote => "Quote / Sessions",
+            Self::OrderTicket => "Order Ticket",
             Self::Account => "Account",
             Self::History => "History Chart",
             Self::Evidence => "Crypto Evidence",
@@ -207,13 +210,14 @@ impl Panel {
         match self {
             Self::Watchlist => 0,
             Self::Quote => 1,
-            Self::Account => 2,
-            Self::History => 3,
-            Self::Evidence => 4,
-            Self::Polymarket => 5,
-            Self::Research => 6,
-            Self::ProviderHealth => 7,
-            Self::TaskLog => 8,
+            Self::OrderTicket => 2,
+            Self::Account => 3,
+            Self::History => 4,
+            Self::Evidence => 5,
+            Self::Polymarket => 6,
+            Self::Research => 7,
+            Self::ProviderHealth => 8,
+            Self::TaskLog => 9,
         }
     }
 }
