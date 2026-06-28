@@ -115,6 +115,8 @@ fn pane_data_state(state: &AppState, panel: Panel) -> PaneDataState {
         Panel::OpenOrders => open_orders_data_state(state),
         Panel::IntentReview => PaneDataState::new(false, SelectedDataState::Fresh, false),
         Panel::RiskAudit => risk_audit_data_state(state),
+        Panel::TransferTicket => ticket_data_state(state.transfer_ticket_preview().ready),
+        Panel::FuturesState => ticket_data_state(state.futures_state_ticket_preview().ready),
         Panel::Account => PaneDataState::new(
             state.account_loading(),
             match state.account_snapshot.as_ref() {
@@ -203,6 +205,18 @@ fn risk_audit_data_state(state: &AppState) -> PaneDataState {
             PaneDataState::new(false, SelectedDataState::Empty, true)
         }
     }
+}
+
+fn ticket_data_state(ready: bool) -> PaneDataState {
+    PaneDataState::new(
+        false,
+        if ready {
+            SelectedDataState::Fresh
+        } else {
+            SelectedDataState::Stale
+        },
+        false,
+    )
 }
 
 fn selected_symbol_is_crypto(state: &AppState) -> bool {

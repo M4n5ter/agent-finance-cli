@@ -38,6 +38,12 @@ pub fn mode_key_hints(state: &AppState) -> Vec<String> {
         InteractionMode::Normal if state.panels.focused() == Panel::Account => {
             crate::account_controls::account_key_hints()
         }
+        InteractionMode::Normal if state.panels.focused() == Panel::TransferTicket => {
+            crate::transfer_ticket_controls::transfer_ticket_key_hints()
+        }
+        InteractionMode::Normal if state.panels.focused() == Panel::FuturesState => {
+            crate::futures_state_controls::futures_state_key_hints()
+        }
         InteractionMode::Normal if state.panels.focused() == Panel::Settings => {
             crate::settings_controls::settings_key_hints()
         }
@@ -293,7 +299,7 @@ mod tests {
     }
 
     #[test]
-    fn account_focus_shows_write_operation_hints() {
+    fn account_focus_shows_open_order_hints() {
         let mut state = AppState::from_config(TuiConfig::default());
         state.reduce(Action::Execute(ActionId::SetWorkspace(
             crate::model::WorkspaceKind::Account,
@@ -304,12 +310,44 @@ mod tests {
 
         assert_eq!(
             mode_key_hints(&state),
+            vec!["up/down open order", "c stage cancel", "q quit"]
+        );
+    }
+
+    #[test]
+    fn transfer_ticket_focus_shows_transfer_hints() {
+        let mut state = AppState::from_config(TuiConfig::default());
+        state.reduce(Action::Execute(ActionId::SetWorkspace(
+            crate::model::WorkspaceKind::Account,
+        )));
+        state.reduce(Action::Execute(ActionId::FocusPanel(
+            crate::model::Panel::TransferTicket,
+        )));
+
+        assert_eq!(
+            mode_key_hints(&state),
             vec![
-                "up/down open order",
-                "c stage cancel",
                 "[/] transfer field",
                 "left/right transfer",
                 "t stage transfer",
+                "q quit",
+            ]
+        );
+    }
+
+    #[test]
+    fn futures_state_focus_shows_futures_state_hints() {
+        let mut state = AppState::from_config(TuiConfig::default());
+        state.reduce(Action::Execute(ActionId::SetWorkspace(
+            crate::model::WorkspaceKind::Account,
+        )));
+        state.reduce(Action::Execute(ActionId::FocusPanel(
+            crate::model::Panel::FuturesState,
+        )));
+
+        assert_eq!(
+            mode_key_hints(&state),
+            vec![
                 "u futures field",
                 "i futures adjust",
                 "f stage state",

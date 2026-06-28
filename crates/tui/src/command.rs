@@ -1,3 +1,6 @@
+use std::borrow::Cow;
+use std::sync::LazyLock;
+
 use tui_input::InputRequest;
 
 use crate::model::{FloatingKind, Panel, WorkspaceKind};
@@ -115,23 +118,20 @@ pub enum ActionId {
     CloseCommandPalette,
 }
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct ActionSpec {
-    pub id: &'static str,
+    pub id: Cow<'static, str>,
     pub action: ActionId,
     command: Option<CommandPresentation>,
 }
 
 impl ActionSpec {
-    pub const fn command(self) -> Option<CommandSpec> {
-        match self.command {
-            Some(command) => Some(CommandSpec {
-                title: command.title,
-                description: command.description,
-                action: self.action,
-            }),
-            None => None,
-        }
+    pub fn command(&self) -> Option<CommandSpec> {
+        self.command.map(|command| CommandSpec {
+            title: command.title,
+            description: command.description,
+            action: self.action,
+        })
     }
 }
 
@@ -152,13 +152,13 @@ pub fn action_id(action: ActionId) -> Option<&'static str> {
     ACTION_REGISTRY
         .iter()
         .find(|spec| spec.action == action)
-        .map(|spec| spec.id)
+        .map(|spec| spec.id.as_ref())
 }
 
 macro_rules! action {
     ($id:expr, $action:expr, $title:expr, $description:expr) => {
         ActionSpec {
-            id: $id,
+            id: Cow::Borrowed($id),
             action: $action,
             command: Some(CommandPresentation {
                 title: $title,
@@ -168,380 +168,258 @@ macro_rules! action {
     };
 }
 
-pub const ACTION_REGISTRY: [ActionSpec; 62] = [
-    action!(
-        "select-next-symbol",
-        ActionId::SelectSymbolBy(1),
-        "Next symbol",
-        "Move watchlist selection to the next symbol"
-    ),
-    action!(
-        "select-previous-symbol",
-        ActionId::SelectSymbolBy(-1),
-        "Previous symbol",
-        "Move watchlist selection to the previous symbol"
-    ),
-    action!(
-        "open-help",
-        ActionId::OpenFloating(FloatingKind::Help),
-        "Open help",
-        "Show cockpit shortcuts and interaction model"
-    ),
-    action!(
-        "open-provider-details",
-        ActionId::OpenFloating(FloatingKind::ProviderDetails),
-        "Open provider details",
-        "Inspect provider capability coverage"
-    ),
-    action!(
-        "open-command-palette",
-        ActionId::OpenFloating(FloatingKind::CommandPalette),
-        "Open command palette",
-        "Search and execute cockpit actions"
-    ),
-    action!(
-        "open-symbol-search",
-        ActionId::OpenFloating(FloatingKind::SymbolSearch),
-        "Open symbol search",
-        "Filter the watchlist and jump to a symbol"
-    ),
-    action!(
-        "open-watchlist-add",
-        ActionId::OpenFloating(FloatingKind::WatchlistAdd),
-        "Add symbols",
-        "Add comma-separated symbols to the watchlist"
-    ),
-    action!(
-        "close-floating",
-        ActionId::CloseFocusedFloating,
-        "Close overlay",
-        "Close the top floating overlay"
-    ),
-    action!(
-        "reset-layout",
-        ActionId::ResetLayout,
-        "Reset layout",
-        "Restore default docked columns and close overlays"
-    ),
-    action!(
-        "close-focused-panel",
-        ActionId::CloseFocusedPanel,
-        "Close focused panel",
-        "Hide the focused docked panel and move focus to another open panel"
-    ),
-    action!(
-        "restore-panels",
-        ActionId::RestorePanels,
-        "Restore all panels",
-        "Reopen every docked panel without changing the current symbol"
-    ),
-    action!(
-        "next-pane",
-        ActionId::FocusPanelBy(1),
-        "Next pane",
-        "Move focus to the next workspace pane"
-    ),
-    action!(
-        "previous-pane",
-        ActionId::FocusPanelBy(-1),
-        "Previous pane",
-        "Move focus to the previous workspace pane"
-    ),
-    action!(
-        "toggle-pane-zoom",
-        ActionId::ToggleFocusedZoom,
-        "Toggle pane zoom",
-        "Expand the focused docked pane or restore the workspace layout"
-    ),
-    action!(
-        "toggle-live-writes",
-        ActionId::ToggleLiveWrites,
-        "Toggle live writes",
-        "Enable live writes after confirmation or disable them for this session"
-    ),
-    action!(
-        "stage-order-ticket",
-        ActionId::StageOrderTicket,
-        "Stage order ticket",
-        "Move the current valid order ticket into intent review"
-    ),
-    action!(
-        "stage-transfer-ticket",
-        ActionId::StageTransferTicket,
-        "Stage transfer ticket",
-        "Move the current valid transfer ticket into intent review"
-    ),
-    action!(
-        "stage-futures-state-ticket",
-        ActionId::StageFuturesStateTicket,
-        "Stage futures state ticket",
-        "Move the current valid USD-M futures state ticket into intent review"
-    ),
-    action!(
-        "stage-selected-open-order-cancel",
-        ActionId::StageSelectedOpenOrderCancel,
-        "Stage selected cancel",
-        "Move the selected open order into intent review as a cancel"
-    ),
-    action!(
-        "execute-staged-change",
-        ActionId::ExecuteStagedChange,
-        "Execute staged change",
-        "Review the selected ready staged change before provider submit or local profile commit"
-    ),
-    action!(
-        "open-trading-profile-editor",
-        ActionId::OpenFloating(FloatingKind::TradingProfile),
-        "Set trading profile",
-        "Edit the default trading profile used by order, cancel, transfer, and futures state tickets"
-    ),
-    action!(
-        "revalidate-trading-profile",
-        ActionId::RevalidateTradingProfile,
-        "Revalidate trading profile",
-        "Reload and validate the selected trading profile from disk"
-    ),
-    action!(
-        "stage-profile-live-toggle",
-        ActionId::StageProfileLiveToggle,
-        "Stage profile live toggle",
-        "Review a risk.allow_live change for the selected trading profile"
-    ),
-    action!(
-        "save-config",
-        ActionId::SaveConfig,
-        "Save config",
-        "Persist pending local TUI configuration changes"
-    ),
-    action!(
-        "undo-config-change",
-        ActionId::UndoConfigChange,
-        "Undo config change",
-        "Revert the latest local TUI configuration edit"
-    ),
-    action!(
-        "delete-selected-watchlist-symbol",
-        ActionId::DeleteSelectedWatchlistSymbol,
-        "Delete selected symbol",
-        "Remove the selected symbol from the persisted watchlist"
-    ),
-    action!(
-        "move-selected-watchlist-symbol-up",
-        ActionId::MoveSelectedWatchlistSymbol(-1),
-        "Move selected symbol up",
-        "Reorder the selected watchlist symbol upward"
-    ),
-    action!(
-        "move-selected-watchlist-symbol-down",
-        ActionId::MoveSelectedWatchlistSymbol(1),
-        "Move selected symbol down",
-        "Reorder the selected watchlist symbol downward"
-    ),
-    action!(
-        "next-workspace",
-        ActionId::ShiftWorkspace(1),
-        "Next workspace",
-        "Move to the next workspace tab"
-    ),
-    action!(
-        "previous-workspace",
-        ActionId::ShiftWorkspace(-1),
-        "Previous workspace",
-        "Move to the previous workspace tab"
-    ),
-    action!(
-        WorkspaceKind::Market.command_id(),
-        ActionId::SetWorkspace(WorkspaceKind::Market),
-        WorkspaceKind::Market.command_title(),
-        WorkspaceKind::Market.command_description()
-    ),
-    action!(
-        WorkspaceKind::Trade.command_id(),
-        ActionId::SetWorkspace(WorkspaceKind::Trade),
-        WorkspaceKind::Trade.command_title(),
-        WorkspaceKind::Trade.command_description()
-    ),
-    action!(
-        WorkspaceKind::Account.command_id(),
-        ActionId::SetWorkspace(WorkspaceKind::Account),
-        WorkspaceKind::Account.command_title(),
-        WorkspaceKind::Account.command_description()
-    ),
-    action!(
-        WorkspaceKind::Research.command_id(),
-        ActionId::SetWorkspace(WorkspaceKind::Research),
-        WorkspaceKind::Research.command_title(),
-        WorkspaceKind::Research.command_description()
-    ),
-    action!(
-        WorkspaceKind::Settings.command_id(),
-        ActionId::SetWorkspace(WorkspaceKind::Settings),
-        WorkspaceKind::Settings.command_title(),
-        WorkspaceKind::Settings.command_description()
-    ),
-    action!(
-        "focus-watchlist",
-        ActionId::FocusPanel(Panel::Watchlist),
-        "Focus watchlist",
-        "Move keyboard focus to the symbol list"
-    ),
-    action!(
-        "focus-quote",
-        ActionId::FocusPanel(Panel::Quote),
-        "Focus quote",
-        "Move keyboard focus to quote and session summary"
-    ),
-    action!(
-        "focus-order-ticket",
-        ActionId::FocusPanel(Panel::OrderTicket),
-        "Focus order ticket",
-        "Move keyboard focus to the staged order ticket"
-    ),
-    action!(
-        "focus-open-orders",
-        ActionId::FocusPanel(Panel::OpenOrders),
-        "Focus open orders",
-        "Move keyboard focus to active exchange orders"
-    ),
-    action!(
-        "focus-intent-review",
-        ActionId::FocusPanel(Panel::IntentReview),
-        "Focus intent review",
-        "Move keyboard focus to staged changes"
-    ),
-    action!(
-        "focus-risk-audit",
-        ActionId::FocusPanel(Panel::RiskAudit),
-        "Focus risk audit",
-        "Move keyboard focus to trading risk and audit summary"
-    ),
-    action!(
-        "focus-history",
-        ActionId::FocusPanel(Panel::History),
-        "Focus history",
-        "Move keyboard focus to historical price chart"
-    ),
-    action!(
-        "focus-crypto-evidence",
-        ActionId::FocusPanel(Panel::Evidence),
-        "Focus crypto evidence",
-        "Move keyboard focus to crypto provider evidence"
-    ),
-    action!(
-        "focus-polymarket",
-        ActionId::FocusPanel(Panel::Polymarket),
-        "Focus Polymarket",
-        "Move keyboard focus to prediction market signals"
-    ),
-    action!(
-        "focus-research",
-        ActionId::FocusPanel(Panel::Research),
-        "Focus research",
-        "Move keyboard focus to news and research highlights"
-    ),
-    action!(
-        "focus-provider-health",
-        ActionId::FocusPanel(Panel::ProviderHealth),
-        "Focus provider health",
-        "Move keyboard focus to provider health"
-    ),
-    action!(
-        "focus-task-log",
-        ActionId::FocusPanel(Panel::TaskLog),
-        "Focus task log",
-        "Move keyboard focus to runtime task log"
-    ),
-    action!(
-        "focus-settings",
-        ActionId::FocusPanel(Panel::Settings),
-        "Focus settings",
-        "Move keyboard focus to configuration maintenance"
-    ),
-    action!(
-        "toggle-watchlist",
-        ActionId::TogglePanel(Panel::Watchlist),
-        "Toggle watchlist",
-        "Show or hide the symbol list panel"
-    ),
-    action!(
-        "toggle-quote",
-        ActionId::TogglePanel(Panel::Quote),
-        "Toggle quote",
-        "Show or hide quote and session summary"
-    ),
-    action!(
-        "toggle-order-ticket",
-        ActionId::TogglePanel(Panel::OrderTicket),
-        "Toggle order ticket",
-        "Show or hide the staged order ticket"
-    ),
-    action!(
-        "toggle-open-orders",
-        ActionId::TogglePanel(Panel::OpenOrders),
-        "Toggle open orders",
-        "Show or hide active exchange orders"
-    ),
-    action!(
-        "toggle-intent-review",
-        ActionId::TogglePanel(Panel::IntentReview),
-        "Toggle intent review",
-        "Show or hide staged changes"
-    ),
-    action!(
-        "toggle-risk-audit",
-        ActionId::TogglePanel(Panel::RiskAudit),
-        "Toggle risk audit",
-        "Show or hide trading risk and audit summary"
-    ),
-    action!(
-        "toggle-history",
-        ActionId::TogglePanel(Panel::History),
-        "Toggle history",
-        "Show or hide the historical price chart"
-    ),
-    action!(
-        "toggle-crypto-evidence",
-        ActionId::TogglePanel(Panel::Evidence),
-        "Toggle crypto evidence",
-        "Show or hide crypto provider evidence"
-    ),
-    action!(
-        "toggle-polymarket",
-        ActionId::TogglePanel(Panel::Polymarket),
-        "Toggle Polymarket",
-        "Show or hide prediction market signals"
-    ),
-    action!(
-        "toggle-research",
-        ActionId::TogglePanel(Panel::Research),
-        "Toggle research",
-        "Show or hide news and research highlights"
-    ),
-    action!(
-        "toggle-provider-health",
-        ActionId::TogglePanel(Panel::ProviderHealth),
-        "Toggle provider health",
-        "Show or hide provider capability coverage"
-    ),
-    action!(
-        "toggle-task-log",
-        ActionId::TogglePanel(Panel::TaskLog),
-        "Toggle task log",
-        "Show or hide the runtime task log"
-    ),
-    action!(
-        "toggle-settings",
-        ActionId::TogglePanel(Panel::Settings),
-        "Toggle settings",
-        "Show or hide configuration maintenance"
-    ),
-    action!(
+pub static ACTION_REGISTRY: LazyLock<Vec<ActionSpec>> = LazyLock::new(|| {
+    let mut actions = vec![
+        action!(
+            "select-next-symbol",
+            ActionId::SelectSymbolBy(1),
+            "Next symbol",
+            "Move watchlist selection to the next symbol"
+        ),
+        action!(
+            "select-previous-symbol",
+            ActionId::SelectSymbolBy(-1),
+            "Previous symbol",
+            "Move watchlist selection to the previous symbol"
+        ),
+        action!(
+            "open-help",
+            ActionId::OpenFloating(FloatingKind::Help),
+            "Open help",
+            "Show cockpit shortcuts and interaction model"
+        ),
+        action!(
+            "open-provider-details",
+            ActionId::OpenFloating(FloatingKind::ProviderDetails),
+            "Open provider details",
+            "Inspect provider capability coverage"
+        ),
+        action!(
+            "open-command-palette",
+            ActionId::OpenFloating(FloatingKind::CommandPalette),
+            "Open command palette",
+            "Search and execute cockpit actions"
+        ),
+        action!(
+            "open-symbol-search",
+            ActionId::OpenFloating(FloatingKind::SymbolSearch),
+            "Open symbol search",
+            "Filter the watchlist and jump to a symbol"
+        ),
+        action!(
+            "open-watchlist-add",
+            ActionId::OpenFloating(FloatingKind::WatchlistAdd),
+            "Add symbols",
+            "Add comma-separated symbols to the watchlist"
+        ),
+        action!(
+            "close-floating",
+            ActionId::CloseFocusedFloating,
+            "Close overlay",
+            "Close the top floating overlay"
+        ),
+        action!(
+            "reset-layout",
+            ActionId::ResetLayout,
+            "Reset layout",
+            "Restore default docked columns and close overlays"
+        ),
+        action!(
+            "close-focused-panel",
+            ActionId::CloseFocusedPanel,
+            "Close focused panel",
+            "Hide the focused docked panel and move focus to another open panel"
+        ),
+        action!(
+            "restore-panels",
+            ActionId::RestorePanels,
+            "Restore all panels",
+            "Reopen every docked panel without changing the current symbol"
+        ),
+        action!(
+            "next-pane",
+            ActionId::FocusPanelBy(1),
+            "Next pane",
+            "Move focus to the next workspace pane"
+        ),
+        action!(
+            "previous-pane",
+            ActionId::FocusPanelBy(-1),
+            "Previous pane",
+            "Move focus to the previous workspace pane"
+        ),
+        action!(
+            "toggle-pane-zoom",
+            ActionId::ToggleFocusedZoom,
+            "Toggle pane zoom",
+            "Expand the focused docked pane or restore the workspace layout"
+        ),
+        action!(
+            "toggle-live-writes",
+            ActionId::ToggleLiveWrites,
+            "Toggle live writes",
+            "Enable live writes after confirmation or disable them for this session"
+        ),
+        action!(
+            "stage-order-ticket",
+            ActionId::StageOrderTicket,
+            "Stage order ticket",
+            "Move the current valid order ticket into intent review"
+        ),
+        action!(
+            "stage-transfer-ticket",
+            ActionId::StageTransferTicket,
+            "Stage transfer ticket",
+            "Move the current valid transfer ticket into intent review"
+        ),
+        action!(
+            "stage-futures-state-ticket",
+            ActionId::StageFuturesStateTicket,
+            "Stage futures state ticket",
+            "Move the current valid USD-M futures state ticket into intent review"
+        ),
+        action!(
+            "stage-selected-open-order-cancel",
+            ActionId::StageSelectedOpenOrderCancel,
+            "Stage selected cancel",
+            "Move the selected open order into intent review as a cancel"
+        ),
+        action!(
+            "execute-staged-change",
+            ActionId::ExecuteStagedChange,
+            "Execute staged change",
+            "Review the selected ready staged change before provider submit or local profile commit"
+        ),
+        action!(
+            "open-trading-profile-editor",
+            ActionId::OpenFloating(FloatingKind::TradingProfile),
+            "Set trading profile",
+            "Edit the default trading profile used by order, cancel, transfer, and futures state tickets"
+        ),
+        action!(
+            "revalidate-trading-profile",
+            ActionId::RevalidateTradingProfile,
+            "Revalidate trading profile",
+            "Reload and validate the selected trading profile from disk"
+        ),
+        action!(
+            "stage-profile-live-toggle",
+            ActionId::StageProfileLiveToggle,
+            "Stage profile live toggle",
+            "Review a risk.allow_live change for the selected trading profile"
+        ),
+        action!(
+            "save-config",
+            ActionId::SaveConfig,
+            "Save config",
+            "Persist pending local TUI configuration changes"
+        ),
+        action!(
+            "undo-config-change",
+            ActionId::UndoConfigChange,
+            "Undo config change",
+            "Revert the latest local TUI configuration edit"
+        ),
+        action!(
+            "delete-selected-watchlist-symbol",
+            ActionId::DeleteSelectedWatchlistSymbol,
+            "Delete selected symbol",
+            "Remove the selected symbol from the persisted watchlist"
+        ),
+        action!(
+            "move-selected-watchlist-symbol-up",
+            ActionId::MoveSelectedWatchlistSymbol(-1),
+            "Move selected symbol up",
+            "Reorder the selected watchlist symbol upward"
+        ),
+        action!(
+            "move-selected-watchlist-symbol-down",
+            ActionId::MoveSelectedWatchlistSymbol(1),
+            "Move selected symbol down",
+            "Reorder the selected watchlist symbol downward"
+        ),
+        action!(
+            "next-workspace",
+            ActionId::ShiftWorkspace(1),
+            "Next workspace",
+            "Move to the next workspace tab"
+        ),
+        action!(
+            "previous-workspace",
+            ActionId::ShiftWorkspace(-1),
+            "Previous workspace",
+            "Move to the previous workspace tab"
+        ),
+        action!(
+            WorkspaceKind::Market.command_id(),
+            ActionId::SetWorkspace(WorkspaceKind::Market),
+            WorkspaceKind::Market.command_title(),
+            WorkspaceKind::Market.command_description()
+        ),
+        action!(
+            WorkspaceKind::Trade.command_id(),
+            ActionId::SetWorkspace(WorkspaceKind::Trade),
+            WorkspaceKind::Trade.command_title(),
+            WorkspaceKind::Trade.command_description()
+        ),
+        action!(
+            WorkspaceKind::Account.command_id(),
+            ActionId::SetWorkspace(WorkspaceKind::Account),
+            WorkspaceKind::Account.command_title(),
+            WorkspaceKind::Account.command_description()
+        ),
+        action!(
+            WorkspaceKind::Research.command_id(),
+            ActionId::SetWorkspace(WorkspaceKind::Research),
+            WorkspaceKind::Research.command_title(),
+            WorkspaceKind::Research.command_description()
+        ),
+        action!(
+            WorkspaceKind::Settings.command_id(),
+            ActionId::SetWorkspace(WorkspaceKind::Settings),
+            WorkspaceKind::Settings.command_title(),
+            WorkspaceKind::Settings.command_description()
+        ),
+    ];
+    actions.extend(panel_action_specs());
+    actions.push(action!(
         "close-command-palette",
         ActionId::CloseCommandPalette,
         "Close command palette",
         "Dismiss this command palette without changing docked panels"
-    ),
-];
+    ));
+    actions
+});
+
+fn panel_action_specs() -> Vec<ActionSpec> {
+    Panel::ALL
+        .into_iter()
+        .flat_map(|panel| {
+            [
+                ActionSpec {
+                    id: panel_command_id("focus", panel),
+                    action: ActionId::FocusPanel(panel),
+                    command: Some(CommandPresentation {
+                        title: panel.focus_command_title(),
+                        description: panel.focus_command_description(),
+                    }),
+                },
+                ActionSpec {
+                    id: panel_command_id("toggle", panel),
+                    action: ActionId::TogglePanel(panel),
+                    command: Some(CommandPresentation {
+                        title: panel.toggle_command_title(),
+                        description: panel.toggle_command_description(),
+                    }),
+                },
+            ]
+        })
+        .collect()
+}
+
+fn panel_command_id(prefix: &'static str, panel: Panel) -> Cow<'static, str> {
+    Cow::Owned(format!("{}-{}", prefix, panel.command_slug()))
+}
 
 #[cfg(test)]
 mod tests {
@@ -673,7 +551,7 @@ mod tests {
     fn action_registry_keeps_stable_unique_ids_for_palette_actions() {
         let mut ids = ACTION_REGISTRY
             .iter()
-            .map(|spec| spec.id)
+            .map(|spec| spec.id.as_ref())
             .collect::<Vec<_>>();
         ids.sort_unstable();
         ids.dedup();

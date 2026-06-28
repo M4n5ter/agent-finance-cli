@@ -137,6 +137,27 @@ try {
 }
 
 function smokeDumpState() {
+  const dump = dumpStateForWorkspace("market");
+  assertCoreDumpShape(dump);
+  if (dump.workspace !== "market") {
+    fail(`dump-state workspace mismatch: ${dump.workspace}`);
+  }
+  if (!dump.panes.some((pane) => pane.panel === "history" && pane.visible)) {
+    fail("market dump-state JSON is missing a visible history pane");
+  }
+  const accountDump = dumpStateForWorkspace("account");
+  assertCoreDumpShape(accountDump);
+  const visibleAccountPanels = accountDump.panes
+    .filter((pane) => pane.visible)
+    .map((pane) => pane.panel);
+  for (const panel of ["account", "transfer-ticket", "futures-state"]) {
+    if (!visibleAccountPanels.includes(panel)) {
+      fail(`account dump-state is missing visible ${panel} panel`);
+    }
+  }
+}
+
+function dumpStateForWorkspace(workspace) {
   const command = commandWithArgs([
     "--config",
     configPath,
@@ -145,7 +166,7 @@ function smokeDumpState() {
     "--symbols",
     "AAPL,BTCUSDT",
     "--workspace",
-    "market",
+    workspace,
     "--dump-state",
     "--wait-seconds",
     "3",
@@ -172,7 +193,10 @@ function smokeDumpState() {
   } catch (error) {
     fail(`dump-state did not emit valid JSON: ${error.message}\n${result.stdout}`);
   }
+  return dump;
+}
 
+function assertCoreDumpShape(dump) {
   const requiredKeys = [
     "schema_version",
     "workspace",
@@ -197,10 +221,7 @@ function smokeDumpState() {
       fail(`dump-state JSON is missing ${key}`);
     }
   }
-  if (dump.workspace !== "market") {
-    fail(`dump-state workspace mismatch: ${dump.workspace}`);
-  }
-  if (dump.schema_version !== 22) {
+  if (dump.schema_version !== 23) {
     fail(`dump-state schema_version mismatch: ${dump.schema_version}`);
   }
   if (
@@ -256,8 +277,8 @@ function smokeDumpState() {
   if (!Array.isArray(dump.config_changes) || dump.config_changes.length !== 0 || dump.watchlist_add_query !== "") {
     fail("dump-state JSON is missing the default watchlist edit contract");
   }
-  if (!Array.isArray(dump.panes) || !dump.panes.some((pane) => pane.panel === "history" && pane.visible)) {
-    fail("dump-state JSON is missing a visible history pane");
+  if (!Array.isArray(dump.panes)) {
+    fail("dump-state JSON panes is not an array");
   }
 }
 

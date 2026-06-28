@@ -338,8 +338,10 @@ const PANELS_IN_LEGACY_DEFAULT: [Panel; 8] = [
     Panel::TaskLog,
 ];
 
-const PANELS_ADDED_AFTER_LEGACY_DEFAULT: [Panel; 6] = [
+const PANELS_ADDED_AFTER_LEGACY_DEFAULT: [Panel; 8] = [
     Panel::Account,
+    Panel::TransferTicket,
+    Panel::FuturesState,
     Panel::OrderTicket,
     Panel::OpenOrders,
     Panel::IntentReview,
@@ -842,6 +844,8 @@ mod tests {
         config.normalize();
 
         assert!(config.panels.open.contains(&Panel::Account));
+        assert!(config.panels.open.contains(&Panel::TransferTicket));
+        assert!(config.panels.open.contains(&Panel::FuturesState));
         assert!(config.panels.open.contains(&Panel::OrderTicket));
         assert!(config.panels.open.contains(&Panel::OpenOrders));
         assert!(config.panels.open.contains(&Panel::IntentReview));

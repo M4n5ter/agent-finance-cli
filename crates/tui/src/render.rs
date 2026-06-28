@@ -6,13 +6,17 @@ use crate::state::AppState;
 
 mod account;
 mod chrome;
+mod futures_state;
 mod history;
 mod intent_review;
 mod open_orders;
+mod order_ticket;
 mod panels;
 mod provider_health;
 mod risk_audit;
 mod settings;
+mod ticket_panel;
+mod transfer_ticket;
 mod widgets;
 
 use chrome::{render_floating, render_status};
@@ -255,15 +259,16 @@ mod tests {
         assert!(text.contains("blocked: USD-M futures symbol is required"));
         assert!(text.contains("open orders (5)"));
         assert!(text.contains("> spot BUY 0.06 BTCUSDT @ 64000 [spot-1]"));
-        assert!(text.contains("+1 more open orders"));
-        assert!(text.contains("transfer history (2)"));
-        assert!(text.contains("spot-to-usds-futures 12.5 USDT CONFIRMED [spot-futures-1]"));
-        assert!(text.contains("usds-futures-to-spot 3 USDC CONFIRMED [futures-spot-1]"));
 
+        state.reduce(crate::state::Action::Focus(crate::model::Panel::Account));
+        state.reduce(crate::state::Action::ToggleFocusedZoom);
         state.selected_open_order = 4;
         let text = render_to_text_grid(&state, 180, 52);
         assert!(text.contains("+1 earlier open orders"));
         assert!(text.contains("> usds-futures SELL 10 XRPUSDT @ 2 [futures-2]"));
+        assert!(text.contains("transfer history (2)"));
+        assert!(text.contains("spot-to-usds-futures 12.5 USDT CONFIRMED [spot-futures-1]"));
+        assert!(text.contains("usds-futures-to-spot 3 USDC CONFIRMED [futures-spot-1]"));
     }
 
     #[test]

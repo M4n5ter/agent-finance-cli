@@ -6,6 +6,7 @@ mod command;
 mod config;
 mod dump;
 mod floating_input;
+mod futures_state_controls;
 mod futures_state_ticket;
 mod hints;
 mod input;
@@ -31,6 +32,7 @@ mod task_failure;
 mod task_log;
 mod theme;
 mod transfer_ticket;
+mod transfer_ticket_controls;
 mod watchlist_editor;
 
 pub use account::{AccountReadError, AccountSnapshot};

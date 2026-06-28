@@ -355,6 +355,25 @@ mod tests {
         );
         assert_eq!(
             key_action(&state, KeyEvent::from(KeyCode::Char(']'))),
+            Some(Action::Execute(ActionId::ShiftWorkspace(1)))
+        );
+        assert_eq!(key_action(&state, KeyEvent::from(KeyCode::Right)), None);
+        assert_eq!(key_action(&state, KeyEvent::from(KeyCode::Char('t'))), None);
+        assert_eq!(key_action(&state, KeyEvent::from(KeyCode::Char('u'))), None);
+        assert_eq!(key_action(&state, KeyEvent::from(KeyCode::Char('i'))), None);
+        assert_eq!(key_action(&state, KeyEvent::from(KeyCode::Char('f'))), None);
+    }
+
+    #[test]
+    fn transfer_ticket_focus_routes_transfer_staging_keys() {
+        let mut state = AppState::from_config(crate::config::TuiConfig::default());
+        state.reduce(Action::Execute(ActionId::SetWorkspace(
+            WorkspaceKind::Account,
+        )));
+        state.reduce(Action::Execute(ActionId::FocusPanel(Panel::TransferTicket)));
+
+        assert_eq!(
+            key_action(&state, KeyEvent::from(KeyCode::Char(']'))),
             Some(Action::MoveTransferTicketField(1))
         );
         assert_eq!(
@@ -365,6 +384,18 @@ mod tests {
             key_action(&state, KeyEvent::from(KeyCode::Char('t'))),
             Some(Action::StageTransferTicket)
         );
+        assert_eq!(key_action(&state, KeyEvent::from(KeyCode::Char('c'))), None);
+        assert_eq!(key_action(&state, KeyEvent::from(KeyCode::Char('f'))), None);
+    }
+
+    #[test]
+    fn futures_state_focus_routes_futures_state_staging_keys() {
+        let mut state = AppState::from_config(crate::config::TuiConfig::default());
+        state.reduce(Action::Execute(ActionId::SetWorkspace(
+            WorkspaceKind::Account,
+        )));
+        state.reduce(Action::Execute(ActionId::FocusPanel(Panel::FuturesState)));
+
         assert_eq!(
             key_action(&state, KeyEvent::from(KeyCode::Char('u'))),
             Some(Action::MoveFuturesStateTicketField(1))
@@ -377,6 +408,8 @@ mod tests {
             key_action(&state, KeyEvent::from(KeyCode::Char('f'))),
             Some(Action::StageFuturesStateTicket)
         );
+        assert_eq!(key_action(&state, KeyEvent::from(KeyCode::Char('c'))), None);
+        assert_eq!(key_action(&state, KeyEvent::from(KeyCode::Char('t'))), None);
     }
 
     #[test]

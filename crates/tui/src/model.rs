@@ -52,10 +52,11 @@ impl WorkspaceKind {
             ],
             Self::Account => &[
                 Panel::Account,
+                Panel::TransferTicket,
+                Panel::FuturesState,
                 Panel::ProviderHealth,
                 Panel::TaskLog,
                 Panel::Watchlist,
-                Panel::Quote,
             ],
             Self::Research => &[
                 Panel::Watchlist,
@@ -204,6 +205,8 @@ pub enum Panel {
     IntentReview,
     RiskAudit,
     Account,
+    TransferTicket,
+    FuturesState,
     History,
     Evidence,
     Polymarket,
@@ -214,7 +217,7 @@ pub enum Panel {
 }
 
 impl Panel {
-    pub const ALL: [Self; 14] = [
+    pub const ALL: [Self; 16] = [
         Self::Watchlist,
         Self::Quote,
         Self::OrderTicket,
@@ -222,6 +225,8 @@ impl Panel {
         Self::IntentReview,
         Self::RiskAudit,
         Self::Account,
+        Self::TransferTicket,
+        Self::FuturesState,
         Self::History,
         Self::Evidence,
         Self::Polymarket,
@@ -240,6 +245,8 @@ impl Panel {
             Self::IntentReview => "Intent Review",
             Self::RiskAudit => "Risk / Audit",
             Self::Account => "Account",
+            Self::TransferTicket => "Transfer Ticket",
+            Self::FuturesState => "Futures State",
             Self::History => "History Chart",
             Self::Evidence => "Crypto Evidence",
             Self::Polymarket => "Polymarket",
@@ -247,6 +254,111 @@ impl Panel {
             Self::ProviderHealth => "Provider Health",
             Self::TaskLog => "Task Log",
             Self::Settings => "Settings",
+        }
+    }
+
+    pub const fn command_slug(self) -> &'static str {
+        match self {
+            Self::Watchlist => "watchlist",
+            Self::Quote => "quote",
+            Self::OrderTicket => "order-ticket",
+            Self::OpenOrders => "open-orders",
+            Self::IntentReview => "intent-review",
+            Self::RiskAudit => "risk-audit",
+            Self::Account => "account",
+            Self::TransferTicket => "transfer-ticket",
+            Self::FuturesState => "futures-state",
+            Self::History => "history",
+            Self::Evidence => "crypto-evidence",
+            Self::Polymarket => "polymarket",
+            Self::Research => "research",
+            Self::ProviderHealth => "provider-health",
+            Self::TaskLog => "task-log",
+            Self::Settings => "settings",
+        }
+    }
+
+    pub const fn focus_command_title(self) -> &'static str {
+        match self {
+            Self::Watchlist => "Focus watchlist",
+            Self::Quote => "Focus quote",
+            Self::OrderTicket => "Focus order ticket",
+            Self::OpenOrders => "Focus open orders",
+            Self::IntentReview => "Focus intent review",
+            Self::RiskAudit => "Focus risk audit",
+            Self::Account => "Focus account",
+            Self::TransferTicket => "Focus transfer ticket",
+            Self::FuturesState => "Focus futures state",
+            Self::History => "Focus history",
+            Self::Evidence => "Focus crypto evidence",
+            Self::Polymarket => "Focus Polymarket",
+            Self::Research => "Focus research",
+            Self::ProviderHealth => "Focus provider health",
+            Self::TaskLog => "Focus task log",
+            Self::Settings => "Focus settings",
+        }
+    }
+
+    pub const fn focus_command_description(self) -> &'static str {
+        match self {
+            Self::Watchlist => "Move keyboard focus to the symbol list",
+            Self::Quote => "Move keyboard focus to quote and session summary",
+            Self::OrderTicket => "Move keyboard focus to the staged order ticket",
+            Self::OpenOrders => "Move keyboard focus to active exchange orders",
+            Self::IntentReview => "Move keyboard focus to staged changes",
+            Self::RiskAudit => "Move keyboard focus to trading risk and audit summary",
+            Self::Account => "Move keyboard focus to signed account state",
+            Self::TransferTicket => "Move keyboard focus to transfer staging",
+            Self::FuturesState => "Move keyboard focus to USD-M futures state staging",
+            Self::History => "Move keyboard focus to historical price chart",
+            Self::Evidence => "Move keyboard focus to crypto provider evidence",
+            Self::Polymarket => "Move keyboard focus to prediction market signals",
+            Self::Research => "Move keyboard focus to news and research highlights",
+            Self::ProviderHealth => "Move keyboard focus to provider health",
+            Self::TaskLog => "Move keyboard focus to runtime task log",
+            Self::Settings => "Move keyboard focus to configuration maintenance",
+        }
+    }
+
+    pub const fn toggle_command_title(self) -> &'static str {
+        match self {
+            Self::Watchlist => "Toggle watchlist",
+            Self::Quote => "Toggle quote",
+            Self::OrderTicket => "Toggle order ticket",
+            Self::OpenOrders => "Toggle open orders",
+            Self::IntentReview => "Toggle intent review",
+            Self::RiskAudit => "Toggle risk audit",
+            Self::Account => "Toggle account",
+            Self::TransferTicket => "Toggle transfer ticket",
+            Self::FuturesState => "Toggle futures state",
+            Self::History => "Toggle history",
+            Self::Evidence => "Toggle crypto evidence",
+            Self::Polymarket => "Toggle Polymarket",
+            Self::Research => "Toggle research",
+            Self::ProviderHealth => "Toggle provider health",
+            Self::TaskLog => "Toggle task log",
+            Self::Settings => "Toggle settings",
+        }
+    }
+
+    pub const fn toggle_command_description(self) -> &'static str {
+        match self {
+            Self::Watchlist => "Show or hide the symbol list panel",
+            Self::Quote => "Show or hide quote and session summary",
+            Self::OrderTicket => "Show or hide the staged order ticket",
+            Self::OpenOrders => "Show or hide active exchange orders",
+            Self::IntentReview => "Show or hide staged changes",
+            Self::RiskAudit => "Show or hide trading risk and audit summary",
+            Self::Account => "Show or hide signed account state",
+            Self::TransferTicket => "Show or hide transfer staging",
+            Self::FuturesState => "Show or hide USD-M futures state staging",
+            Self::History => "Show or hide the historical price chart",
+            Self::Evidence => "Show or hide crypto provider evidence",
+            Self::Polymarket => "Show or hide prediction market signals",
+            Self::Research => "Show or hide news and research highlights",
+            Self::ProviderHealth => "Show or hide provider capability coverage",
+            Self::TaskLog => "Show or hide the runtime task log",
+            Self::Settings => "Show or hide configuration maintenance",
         }
     }
 
@@ -259,13 +371,15 @@ impl Panel {
             Self::IntentReview => 4,
             Self::RiskAudit => 5,
             Self::Account => 6,
-            Self::History => 7,
-            Self::Evidence => 8,
-            Self::Polymarket => 9,
-            Self::Research => 10,
-            Self::ProviderHealth => 11,
-            Self::TaskLog => 12,
-            Self::Settings => 13,
+            Self::TransferTicket => 7,
+            Self::FuturesState => 8,
+            Self::History => 9,
+            Self::Evidence => 10,
+            Self::Polymarket => 11,
+            Self::Research => 12,
+            Self::ProviderHealth => 13,
+            Self::TaskLog => 14,
+            Self::Settings => 15,
         }
     }
 }

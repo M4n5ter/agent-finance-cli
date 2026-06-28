@@ -16,12 +16,15 @@ use crate::task_log::TaskStatus;
 use crate::theme::ThemeConfig;
 
 use super::account::render_account;
+use super::futures_state::render_futures_state;
 use super::history;
 use super::intent_review::render_intent_review;
 use super::open_orders::render_open_orders;
+use super::order_ticket::render_order_ticket;
 use super::provider_health;
 use super::risk_audit::render_risk_audit;
 use super::settings::render_settings;
+use super::transfer_ticket::render_transfer_ticket;
 use super::widgets::{compact_text, format_price, format_volume, panel_block};
 
 pub(super) fn render_docked(frame: &mut Frame<'_>, state: &AppState, layout: &CockpitLayout) {
@@ -37,6 +40,8 @@ pub(super) fn render_docked(frame: &mut Frame<'_>, state: &AppState, layout: &Co
             Panel::IntentReview => render_intent_review(frame, state, area),
             Panel::RiskAudit => render_risk_audit(frame, state, area),
             Panel::Account => render_account(frame, state, area),
+            Panel::TransferTicket => render_transfer_ticket(frame, state, area),
+            Panel::FuturesState => render_futures_state(frame, state, area),
             Panel::History => render_history(frame, state, area),
             Panel::Evidence => render_evidence(frame, state, area),
             Panel::Polymarket => render_polymarket(frame, state, area),
@@ -46,119 +51,6 @@ pub(super) fn render_docked(frame: &mut Frame<'_>, state: &AppState, layout: &Co
             Panel::Settings => render_settings(frame, state, area),
         }
     }
-}
-
-fn render_order_ticket(frame: &mut Frame<'_>, state: &AppState, area: Rect) {
-    let ticket = &state.order_ticket;
-    let preview = state.order_ticket_preview();
-    let mut lines = vec![
-        Line::from(vec![
-            Span::styled(
-                "staged order",
-                state.theme.accent_style().add_modifier(Modifier::BOLD),
-            ),
-            Span::raw(format!(
-                "  {} / {}",
-                if preview.live_writes_enabled {
-                    "live:on"
-                } else {
-                    "live:off"
-                },
-                preview.effective_mode
-            )),
-        ]),
-        Line::from(format!(
-            "symbol: {}  profile: {}",
-            preview.symbol.as_deref().unwrap_or("-"),
-            preview.profile.as_deref().unwrap_or("-")
-        )),
-        ticket_field_line(
-            state,
-            "market",
-            ticket.market().to_string(),
-            ticket.selected_field_label(),
-        ),
-        ticket_field_line(
-            state,
-            "side",
-            ticket.side().to_string(),
-            ticket.selected_field_label(),
-        ),
-        ticket_field_line(
-            state,
-            "kind",
-            ticket.kind().to_string(),
-            ticket.selected_field_label(),
-        ),
-        ticket_field_line(
-            state,
-            "quantity",
-            preview.quantity.as_deref().unwrap_or("-").to_string(),
-            ticket.selected_field_label(),
-        ),
-        ticket_field_line(
-            state,
-            "price",
-            preview.price.as_deref().unwrap_or("-").to_string(),
-            ticket.selected_field_label(),
-        ),
-        ticket_field_line(
-            state,
-            "time in force",
-            ticket.time_in_force().to_string(),
-            ticket.selected_field_label(),
-        ),
-        ticket_field_line(
-            state,
-            "reduce only",
-            ticket.reduce_only().to_string(),
-            ticket.selected_field_label(),
-        ),
-    ];
-
-    if preview.ready {
-        lines.push(Line::from(Span::styled(
-            "ready for intent review",
-            state.theme.accent_style(),
-        )));
-    } else {
-        for blocker in preview.blockers.iter().take(3) {
-            lines.push(Line::from(Span::styled(
-                format!("blocked: {blocker}"),
-                state.theme.warning_style(),
-            )));
-        }
-    }
-    lines.push(Line::from(
-        crate::order_ticket_controls::order_ticket_panel_hint(),
-    ));
-
-    frame.render_widget(
-        Paragraph::new(lines)
-            .block(panel_block(Panel::OrderTicket, state))
-            .wrap(Wrap { trim: true }),
-        area,
-    );
-}
-
-fn ticket_field_line(
-    state: &AppState,
-    label: &'static str,
-    value: String,
-    selected: &'static str,
-) -> Line<'static> {
-    let marker = if label == selected { ">" } else { " " };
-    let style = if label == selected {
-        state.theme.selected_style().add_modifier(Modifier::BOLD)
-    } else {
-        state.theme.text_style()
-    };
-    Line::from(vec![
-        Span::styled(marker, style),
-        Span::raw(" "),
-        Span::styled(format!("{label}: "), style),
-        Span::styled(value, style),
-    ])
 }
 
 fn render_watchlist(frame: &mut Frame<'_>, state: &AppState, area: Rect) {
