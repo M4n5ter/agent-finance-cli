@@ -35,6 +35,7 @@ mod state;
 mod task_failure;
 mod task_log;
 mod theme;
+mod ticket_panel_view;
 mod transfer_ticket;
 mod transfer_ticket_controls;
 mod watchlist_editor;

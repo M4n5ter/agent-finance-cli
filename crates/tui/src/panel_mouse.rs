@@ -1,7 +1,11 @@
 use ratatui::layout::Rect;
 
+use crate::futures_state_ticket::FuturesStateTicketField;
 use crate::model::Panel;
+use crate::order_ticket::OrderTicketField;
 use crate::state::{Action, AppState};
+use crate::ticket_panel_view::{TicketPanelClick, TicketPanelRows};
+use crate::transfer_ticket::TransferTicketField;
 
 pub(crate) fn click_action(
     state: &AppState,
@@ -14,10 +18,25 @@ pub(crate) fn click_action(
         Panel::Watchlist => watchlist_click_action(state, area, row),
         Panel::OpenOrders => open_order_click_action(state, area, row),
         Panel::IntentReview => staged_change_click_action(state, area, row),
+        Panel::OrderTicket => ticket_click_action(
+            content_row(area, row)?,
+            order_ticket_rows(state),
+            Action::SelectOrderTicketField,
+            Action::StageOrderTicket,
+        ),
+        Panel::TransferTicket => ticket_click_action(
+            content_row(area, row)?,
+            transfer_ticket_rows(state),
+            Action::SelectTransferTicketField,
+            Action::StageTransferTicket,
+        ),
+        Panel::FuturesState => ticket_click_action(
+            content_row(area, row)?,
+            futures_state_ticket_rows(state),
+            Action::SelectFuturesStateTicketField,
+            Action::StageFuturesStateTicket,
+        ),
         Panel::Account
-        | Panel::OrderTicket
-        | Panel::TransferTicket
-        | Panel::FuturesState
         | Panel::Settings
         | Panel::ProfileRisk
         | Panel::Quote
@@ -53,6 +72,48 @@ fn staged_change_click_action(state: &AppState, area: Rect, row: u16) -> Option<
         content_row(area, row)?,
     )?;
     Some(Action::SelectStagedChange(index))
+}
+
+fn ticket_click_action(
+    content_row: usize,
+    rows: TicketPanelRows,
+    select_field: impl FnOnce(usize) -> Action,
+    stage: Action,
+) -> Option<Action> {
+    match rows.click_at(content_row)? {
+        TicketPanelClick::Field(index) => Some(select_field(index)),
+        TicketPanelClick::ReadyAction => Some(stage),
+    }
+}
+
+fn order_ticket_rows(state: &AppState) -> TicketPanelRows {
+    let preview = state.order_ticket_preview();
+    TicketPanelRows {
+        detail_count: 1,
+        field_count: OrderTicketField::COUNT,
+        ready: preview.ready,
+        blocker_count: preview.blockers.len(),
+    }
+}
+
+fn transfer_ticket_rows(state: &AppState) -> TicketPanelRows {
+    let preview = state.transfer_ticket_preview();
+    TicketPanelRows {
+        detail_count: 0,
+        field_count: TransferTicketField::COUNT,
+        ready: preview.ready,
+        blocker_count: preview.blockers.len(),
+    }
+}
+
+fn futures_state_ticket_rows(state: &AppState) -> TicketPanelRows {
+    let preview = state.futures_state_ticket_preview();
+    TicketPanelRows {
+        detail_count: 0,
+        field_count: FuturesStateTicketField::MAX_COUNT,
+        ready: preview.ready,
+        blocker_count: preview.blockers.len(),
+    }
 }
 
 fn content_row(area: Rect, row: u16) -> Option<usize> {

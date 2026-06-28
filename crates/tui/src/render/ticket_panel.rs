@@ -2,10 +2,11 @@ use ratatui::Frame;
 use ratatui::layout::Rect;
 use ratatui::style::Modifier;
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Paragraph, Wrap};
+use ratatui::widgets::{List, ListItem};
 
 use crate::model::Panel;
 use crate::state::AppState;
+use crate::ticket_panel_view::{TicketPanelRow, TicketPanelRows};
 
 use super::widgets::panel_block;
 
@@ -44,62 +45,58 @@ pub(super) fn render_ticket_panel(
     area: Rect,
     ticket: TicketPanel,
 ) {
-    let mut lines = vec![Line::from(vec![
-        Span::styled(
-            ticket.heading,
-            state.theme.accent_style().add_modifier(Modifier::BOLD),
-        ),
-        Span::raw(format!(
-            "  {} / {}",
-            if ticket.live_writes_enabled {
-                "live:on"
-            } else {
-                "live:off"
-            },
-            ticket.effective_mode
-        )),
-    ])];
-    lines.extend(ticket.detail_lines.iter().cloned().map(Line::from));
-    let readiness = readiness_lines(state, &ticket);
-    lines.extend(
-        ticket
-            .fields
-            .into_iter()
-            .map(|field| Line::from(vec![ticket_field_span(state, field)])),
-    );
-    lines.extend(readiness);
-    lines.push(Line::from(ticket.hint));
+    let rows = TicketPanelRows {
+        detail_count: ticket.detail_lines.len(),
+        field_count: ticket.fields.len(),
+        ready: ticket.ready,
+        blocker_count: ticket.blockers.len(),
+    };
+    let lines = rows
+        .rows()
+        .into_iter()
+        .map(|row| ticket_line(state, &ticket, row))
+        .collect::<Vec<_>>();
 
     frame.render_widget(
-        Paragraph::new(lines)
-            .block(panel_block(ticket.panel, state))
-            .wrap(Wrap { trim: true }),
+        List::new(lines.into_iter().map(ListItem::new)).block(panel_block(ticket.panel, state)),
         area,
     );
 }
 
-fn readiness_lines(state: &AppState, ticket: &TicketPanel) -> Vec<Line<'static>> {
-    if ticket.ready {
-        return vec![Line::from(Span::styled(
-            ticket.ready_label,
-            state.theme.accent_style(),
-        ))];
+fn ticket_line(state: &AppState, ticket: &TicketPanel, row: TicketPanelRow) -> Line<'static> {
+    match row {
+        TicketPanelRow::Header => Line::from(vec![
+            Span::styled(
+                ticket.heading,
+                state.theme.accent_style().add_modifier(Modifier::BOLD),
+            ),
+            Span::raw(format!(
+                "  {} / {}",
+                if ticket.live_writes_enabled {
+                    "live:on"
+                } else {
+                    "live:off"
+                },
+                ticket.effective_mode
+            )),
+        ]),
+        TicketPanelRow::Detail(index) => Line::from(ticket.detail_lines[index].clone()),
+        TicketPanelRow::Field(index) => {
+            Line::from(vec![ticket_field_span(state, &ticket.fields[index])])
+        }
+        TicketPanelRow::ReadyAction => Line::from(Span::styled(
+            format!("[stage] {}", ticket.ready_label),
+            state.theme.accent_style().add_modifier(Modifier::BOLD),
+        )),
+        TicketPanelRow::Blocker(index) => Line::from(Span::styled(
+            format!("blocked: {}", ticket.blockers[index]),
+            state.theme.warning_style(),
+        )),
+        TicketPanelRow::Hint => Line::from(ticket.hint.clone()),
     }
-
-    ticket
-        .blockers
-        .iter()
-        .take(3)
-        .map(|blocker| {
-            Line::from(Span::styled(
-                format!("blocked: {blocker}"),
-                state.theme.warning_style(),
-            ))
-        })
-        .collect()
 }
 
-fn ticket_field_span(state: &AppState, field: TicketField) -> Span<'static> {
+fn ticket_field_span(state: &AppState, field: &TicketField) -> Span<'static> {
     let marker = if field.selected { ">" } else { " " };
     let style = if field.selected {
         state.theme.selected_style().add_modifier(Modifier::BOLD)

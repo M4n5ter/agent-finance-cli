@@ -715,6 +715,7 @@ impl AppState {
             Action::MoveOrderTicketField(direction) => {
                 self.order_ticket.move_field(direction);
             }
+            Action::SelectOrderTicketField(index) => self.order_ticket.select_field(index),
             Action::AdjustOrderTicketField(direction) => {
                 self.order_ticket
                     .adjust_selected_field(direction, self.selected_quote_price());
@@ -722,11 +723,15 @@ impl AppState {
             Action::MoveTransferTicketField(direction) => {
                 self.transfer_ticket.move_field(direction);
             }
+            Action::SelectTransferTicketField(index) => self.transfer_ticket.select_field(index),
             Action::AdjustTransferTicketField(direction) => {
                 self.transfer_ticket.adjust_selected_field(direction);
             }
             Action::MoveFuturesStateTicketField(direction) => {
                 self.futures_state_ticket.move_field(direction);
+            }
+            Action::SelectFuturesStateTicketField(index) => {
+                self.futures_state_ticket.select_field(index);
             }
             Action::AdjustFuturesStateTicketField(direction) => {
                 let symbol = self.selected_symbol().map(ToString::to_string);
@@ -1169,10 +1174,13 @@ pub enum Action {
     DeleteSelectedWatchlistSymbol,
     MoveSelectedWatchlistSymbol(isize),
     MoveOrderTicketField(isize),
+    SelectOrderTicketField(usize),
     AdjustOrderTicketField(isize),
     MoveTransferTicketField(isize),
+    SelectTransferTicketField(usize),
     AdjustTransferTicketField(isize),
     MoveFuturesStateTicketField(isize),
+    SelectFuturesStateTicketField(usize),
     AdjustFuturesStateTicketField(isize),
     MoveOpenOrderSelection(isize),
     SelectOpenOrder(usize),

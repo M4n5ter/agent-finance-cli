@@ -72,6 +72,12 @@ impl OrderTicket {
         self.selected_field = self.selected_field.shift(direction);
     }
 
+    pub fn select_field(&mut self, index: usize) {
+        if let Some(field) = OrderTicketField::ALL.get(index) {
+            self.selected_field = *field;
+        }
+    }
+
     pub fn adjust_selected_field(&mut self, direction: isize, reference_price: Option<f64>) {
         match self.selected_field {
             OrderTicketField::Market => {
@@ -223,6 +229,8 @@ pub enum OrderTicketField {
 }
 
 impl OrderTicketField {
+    pub const COUNT: usize = Self::ALL.len();
+
     const ALL: [Self; 7] = [
         Self::Market,
         Self::Side,

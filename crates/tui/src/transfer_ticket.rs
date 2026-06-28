@@ -32,6 +32,12 @@ impl TransferTicket {
         self.selected_field = self.selected_field.shift(direction);
     }
 
+    pub fn select_field(&mut self, index: usize) {
+        if let Some(field) = TransferTicketField::ALL.get(index) {
+            self.selected_field = *field;
+        }
+    }
+
     pub fn adjust_selected_field(&mut self, direction: isize) {
         match self.selected_field {
             TransferTicketField::Direction => {
@@ -102,6 +108,8 @@ pub enum TransferTicketField {
 }
 
 impl TransferTicketField {
+    pub const COUNT: usize = Self::ALL.len();
+
     const ALL: [Self; 3] = [Self::Direction, Self::Asset, Self::Amount];
 
     pub const fn label(self) -> &'static str {

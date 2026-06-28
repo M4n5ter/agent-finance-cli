@@ -284,6 +284,121 @@ fn mouse_click_on_account_panel_does_not_guess_open_order_rows() {
 }
 
 #[test]
+fn mouse_click_on_order_ticket_field_selects_that_field() {
+    let area = Rect::new(0, 0, 160, 48);
+    let mut state = AppState::from_config(crate::config::TuiConfig {
+        workspace: crate::config::WorkspaceConfig {
+            current: WorkspaceKind::Trade,
+        },
+        ..crate::config::TuiConfig::default()
+    });
+    let mut drag = MouseDrag::default();
+    let panel = layout::build(
+        area,
+        &state.layout,
+        &state.floating,
+        &state.visible_panels(),
+    )
+    .panel_rect(Panel::OrderTicket)
+    .expect("order ticket panel is visible");
+
+    handle_mouse_event(area, &mut state, &mut drag, panel_click(panel, 6));
+
+    assert_eq!(state.order_ticket.selected_field_label(), "price");
+    assert_eq!(state.panels.focused(), Panel::OrderTicket);
+    assert_eq!(drag, MouseDrag::default());
+}
+
+#[test]
+fn mouse_click_on_ready_order_ticket_stages_review() {
+    let area = Rect::new(0, 0, 160, 48);
+    let mut state = AppState::from_config(crate::config::TuiConfig {
+        watchlist: vec!["CRDO".to_string()],
+        workspace: crate::config::WorkspaceConfig {
+            current: WorkspaceKind::Trade,
+        },
+        trading: crate::config::TradingConfig {
+            default_profile: Some("mainnet".to_string()),
+        },
+        ..crate::config::TuiConfig::default()
+    });
+    state
+        .order_ticket
+        .set_quantity_text(Some("0.05".to_string()));
+    state.order_ticket.set_price_text(Some("204".to_string()));
+    let mut drag = MouseDrag::default();
+    let panel = layout::build(
+        area,
+        &state.layout,
+        &state.floating,
+        &state.visible_panels(),
+    )
+    .panel_rect(Panel::OrderTicket)
+    .expect("order ticket panel is visible");
+
+    handle_mouse_event(area, &mut state, &mut drag, panel_click(panel, 9));
+
+    assert_eq!(state.staged_change_views().len(), 1);
+    assert_eq!(state.panels.focused(), Panel::IntentReview);
+    assert_eq!(drag, MouseDrag::default());
+}
+
+#[test]
+fn mouse_click_on_transfer_ticket_field_selects_that_field() {
+    let area = Rect::new(0, 0, 160, 48);
+    let mut state = AppState::from_config(crate::config::TuiConfig {
+        workspace: crate::config::WorkspaceConfig {
+            current: WorkspaceKind::Account,
+        },
+        ..crate::config::TuiConfig::default()
+    });
+    let mut drag = MouseDrag::default();
+    let panel = layout::build(
+        area,
+        &state.layout,
+        &state.floating,
+        &state.visible_panels(),
+    )
+    .panel_rect(Panel::TransferTicket)
+    .expect("transfer ticket panel is visible");
+
+    handle_mouse_event(area, &mut state, &mut drag, panel_click(panel, 3));
+
+    assert_eq!(state.transfer_ticket.selected_field_label(), "amount");
+    assert_eq!(state.panels.focused(), Panel::TransferTicket);
+    assert_eq!(drag, MouseDrag::default());
+}
+
+#[test]
+fn mouse_click_on_inactive_futures_scope_field_does_not_select_value() {
+    let area = Rect::new(0, 0, 160, 48);
+    let mut state = AppState::from_config(crate::config::TuiConfig {
+        workspace: crate::config::WorkspaceConfig {
+            current: WorkspaceKind::Account,
+        },
+        ..crate::config::TuiConfig::default()
+    });
+    state
+        .futures_state_ticket
+        .adjust_selected_field(-1, Some("BTCUSDT"));
+    let mut drag = MouseDrag::default();
+    let panel = layout::build(
+        area,
+        &state.layout,
+        &state.floating,
+        &state.visible_panels(),
+    )
+    .panel_rect(Panel::FuturesState)
+    .expect("futures state panel is visible");
+
+    handle_mouse_event(area, &mut state, &mut drag, panel_click(panel, 2));
+
+    assert_eq!(state.futures_state_ticket.selected_field_label(), "kind");
+    assert_eq!(state.panels.focused(), Panel::FuturesState);
+    assert_eq!(drag, MouseDrag::default());
+}
+
+#[test]
 fn mouse_wheel_moves_focused_panel_and_search_selection() {
     let area = Rect::new(0, 0, 120, 32);
     let mut state = AppState::from_config(crate::config::TuiConfig {
@@ -479,4 +594,12 @@ fn mouse_event(kind: MouseEventKind, column: u16, row: u16) -> MouseEvent {
         row,
         modifiers: KeyModifiers::empty(),
     }
+}
+
+fn panel_click(panel: Rect, content_row: u16) -> MouseEvent {
+    mouse_event(
+        MouseEventKind::Down(MouseButton::Left),
+        panel.x + 2,
+        panel.y + content_row + 1,
+    )
 }

@@ -36,6 +36,14 @@ impl FuturesStateTicket {
         self.selected_field = self.selected_field.shift(self.kind, direction);
     }
 
+    pub fn select_field(&mut self, index: usize) {
+        if let Some(field) = FuturesStateTicketField::ALL.get(index)
+            && field.active_for(self.kind)
+        {
+            self.selected_field = *field;
+        }
+    }
+
     pub fn adjust_selected_field(&mut self, direction: isize, symbol_context: Option<&str>) {
         match self.selected_field {
             FuturesStateTicketField::Kind => {
@@ -176,6 +184,8 @@ pub enum FuturesStateTicketField {
 }
 
 impl FuturesStateTicketField {
+    pub const MAX_COUNT: usize = Self::ALL.len();
+
     const ALL: [Self; 3] = [Self::Kind, Self::Symbol, Self::Value];
 
     pub const fn label(self) -> &'static str {
