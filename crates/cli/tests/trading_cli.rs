@@ -116,6 +116,8 @@ fn profile_permissions_are_live_policy_not_just_doctor_metadata() {
 
 #[test]
 fn profile_doctor_json_exposes_typed_diagnostic_contract() {
+    use std::collections::BTreeSet;
+
     let env = default_env("profile-doctor-contract");
     let doctor = env.json(command(&[
         "profile",
@@ -128,6 +130,16 @@ fn profile_doctor_json_exposes_typed_diagnostic_contract() {
     assert!(
         checks.iter().all(|check| check["required"].is_boolean()),
         "every profile doctor check should expose a boolean required field: {doctor}"
+    );
+    let names = checks
+        .iter()
+        .map(|check| check["name"].as_str().expect("check name"))
+        .collect::<Vec<_>>();
+    let unique_names = names.iter().copied().collect::<BTreeSet<_>>();
+    assert_eq!(
+        names.len(),
+        unique_names.len(),
+        "profile doctor checks should have unique names: {doctor}"
     );
     assert_check_required(checks, "profile-parse", false);
     assert_check_required(checks, "api-key-env", true);

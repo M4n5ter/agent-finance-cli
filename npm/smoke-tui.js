@@ -306,7 +306,7 @@ function stageAndCloseDryRunOrder() {
   );
   if (
     !waitForScreen(
-      ["staged intents", "ready", "dry-run", "order", "buy 0.001", "spot", "[smoke]"],
+      ["staged intents", "ready", "dry-run", "order", "buy 0.001", "market", "spot", "[smoke]"],
       4_000,
     )
   ) {
@@ -319,9 +319,13 @@ function stageAndCloseDryRunOrder() {
 }
 
 function fillMinimalOrderTicket() {
-  runTmux(["send-keys", "-t", session, "Down", "Down", "Down", "Right"]);
-  if (!waitForScreen(["quantity: 0.001"], 4_000)) {
-    fail("TUI did not set the default order quantity before staging");
+  runTmux(["send-keys", "-t", session, "Down", "Down", "Left", "Left"]);
+  if (!waitForScreen(["kind: market"], 4_000)) {
+    fail("TUI did not set the order kind to market before staging");
+  }
+  runTmux(["send-keys", "-t", session, "Down", "Right"]);
+  if (!waitForScreen(["quantity: 0.001", "ready for intent review"], 4_000)) {
+    fail("TUI did not set a ready market order quantity before staging");
   }
 }
 

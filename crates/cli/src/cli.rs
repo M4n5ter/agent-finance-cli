@@ -271,6 +271,28 @@ mod tests {
         assert_eq!(args.profile.as_deref(), Some("smoke"));
         assert!(args.no_account_load);
     }
+
+    #[test]
+    fn profile_validate_is_a_no_network_profile_gate() {
+        let cli = Cli::try_parse_from([
+            "agent-finance",
+            "profile",
+            "validate",
+            "--profile",
+            "smoke",
+            "--json",
+        ])
+        .expect("profile validate should parse");
+
+        let Command::Profile(args) = cli.command else {
+            panic!("expected profile command");
+        };
+        let ProfileCommand::Validate(args) = args.command else {
+            panic!("expected validate command");
+        };
+        assert_eq!(args.profile, "smoke");
+        assert!(args.json);
+    }
 }
 
 #[derive(Parser, Debug)]

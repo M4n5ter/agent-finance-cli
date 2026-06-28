@@ -20,6 +20,8 @@ pub enum ProfileCommand {
     Template(ProfileNameArgs),
     /// Explain one configured profile without reading secrets.
     Explain(ProfileNameArgs),
+    /// Validate local profile shape and risk-policy permissions without reading secrets.
+    Validate(ProfileNameArgs),
     /// Check profile shape, env vars, and Binance signed permissions when possible.
     Doctor(ProfileNameArgs),
 }
