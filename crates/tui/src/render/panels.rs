@@ -21,6 +21,7 @@ use super::history;
 use super::intent_review::render_intent_review;
 use super::open_orders::render_open_orders;
 use super::order_ticket::render_order_ticket;
+use super::profile_risk::render_profile_risk;
 use super::provider_health;
 use super::risk_audit::render_risk_audit;
 use super::settings::render_settings;
@@ -49,6 +50,7 @@ pub(super) fn render_docked(frame: &mut Frame<'_>, state: &AppState, layout: &Co
             Panel::ProviderHealth => render_provider_health(frame, state, area),
             Panel::TaskLog => render_task_log(frame, state, area),
             Panel::Settings => render_settings(frame, state, area),
+            Panel::ProfileRisk => render_profile_risk(frame, state, area),
         }
     }
 }

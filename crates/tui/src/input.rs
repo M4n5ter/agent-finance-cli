@@ -433,6 +433,30 @@ mod tests {
     }
 
     #[test]
+    fn profile_risk_focus_routes_profile_risk_actions() {
+        let mut state = AppState::from_config(crate::config::TuiConfig::default());
+        state.reduce(Action::Execute(ActionId::SetWorkspace(
+            WorkspaceKind::Settings,
+        )));
+        state.reduce(Action::Execute(ActionId::FocusPanel(Panel::ProfileRisk)));
+
+        assert_eq!(
+            key_action(&state, KeyEvent::from(KeyCode::Char('e'))),
+            Some(Action::Execute(ActionId::OpenFloating(
+                FloatingKind::TradingProfile
+            )))
+        );
+        assert_eq!(
+            key_action(&state, KeyEvent::from(KeyCode::Char('v'))),
+            Some(Action::Execute(ActionId::RevalidateTradingProfile))
+        );
+        assert_eq!(
+            key_action(&state, KeyEvent::from(KeyCode::Char('t'))),
+            Some(Action::Execute(ActionId::StageProfileLiveToggle))
+        );
+    }
+
+    #[test]
     fn account_local_keys_do_not_shadow_modified_global_keymap() {
         let mut state = AppState::from_config(crate::config::TuiConfig {
             keymap: KeymapConfig::from_overrides(vec![KeyBinding {
@@ -795,20 +819,9 @@ mod tests {
             key_action(&state, KeyEvent::from(KeyCode::Char('u'))),
             Some(Action::UndoConfigChange)
         );
-        assert_eq!(
-            key_action(&state, KeyEvent::from(KeyCode::Char('e'))),
-            Some(Action::Execute(ActionId::OpenFloating(
-                FloatingKind::TradingProfile
-            )))
-        );
-        assert_eq!(
-            key_action(&state, KeyEvent::from(KeyCode::Char('v'))),
-            Some(Action::Execute(ActionId::RevalidateTradingProfile))
-        );
-        assert_eq!(
-            key_action(&state, KeyEvent::from(KeyCode::Char('t'))),
-            Some(Action::Execute(ActionId::StageProfileLiveToggle))
-        );
+        assert_eq!(key_action(&state, KeyEvent::from(KeyCode::Char('e'))), None);
+        assert_eq!(key_action(&state, KeyEvent::from(KeyCode::Char('v'))), None);
+        assert_eq!(key_action(&state, KeyEvent::from(KeyCode::Char('t'))), None);
     }
 
     #[test]
@@ -831,16 +844,13 @@ mod tests {
     }
 
     #[test]
-    fn settings_plain_local_keys_take_precedence_over_global_keymap() {
+    fn settings_local_controls_do_not_keep_profile_risk_shortcuts() {
         let mut state = AppState::from_config(crate::config::TuiConfig::default());
         state.reduce(Action::Execute(ActionId::SetWorkspace(
             WorkspaceKind::Settings,
         )));
         state.reduce(Action::Execute(ActionId::FocusPanel(Panel::Settings)));
 
-        assert_eq!(
-            key_action(&state, KeyEvent::from(KeyCode::Char('t'))),
-            Some(Action::Execute(ActionId::StageProfileLiveToggle))
-        );
+        assert_eq!(key_action(&state, KeyEvent::from(KeyCode::Char('t'))), None);
     }
 }

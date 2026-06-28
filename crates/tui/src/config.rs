@@ -338,7 +338,7 @@ const PANELS_IN_LEGACY_DEFAULT: [Panel; 8] = [
     Panel::TaskLog,
 ];
 
-const PANELS_ADDED_AFTER_LEGACY_DEFAULT: [Panel; 8] = [
+const PANELS_ADDED_AFTER_LEGACY_DEFAULT: [Panel; 9] = [
     Panel::Account,
     Panel::TransferTicket,
     Panel::FuturesState,
@@ -347,6 +347,7 @@ const PANELS_ADDED_AFTER_LEGACY_DEFAULT: [Panel; 8] = [
     Panel::IntentReview,
     Panel::RiskAudit,
     Panel::Settings,
+    Panel::ProfileRisk,
 ];
 
 fn add_new_panels_to_legacy_default(open: &mut Vec<Panel>) {
@@ -851,6 +852,7 @@ mod tests {
         assert!(config.panels.open.contains(&Panel::IntentReview));
         assert!(config.panels.open.contains(&Panel::RiskAudit));
         assert!(config.panels.open.contains(&Panel::Settings));
+        assert!(config.panels.open.contains(&Panel::ProfileRisk));
     }
 
     #[test]

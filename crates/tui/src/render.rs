@@ -12,6 +12,8 @@ mod intent_review;
 mod open_orders;
 mod order_ticket;
 mod panels;
+mod profile_policy;
+mod profile_risk;
 mod provider_health;
 mod risk_audit;
 mod settings;
@@ -101,7 +103,7 @@ mod tests {
         let mut state = AppState::from_config(TuiConfig::default());
         state.reduce(crate::state::Action::Execute(ActionId::ToggleLiveWrites));
 
-        let text = render_to_text_grid(&state, 120, 32);
+        let text = render_to_text_grid(&state, 160, 44);
 
         assert!(text.contains("Enable Live Writes"));
         assert!(text.contains("Enter: enable live writes for this session"));
@@ -479,18 +481,30 @@ mod tests {
             ..TuiConfig::default()
         });
         state.config_changes.push("watchlist".to_string());
+        state.reduce(crate::state::Action::ProfileValidationStarted {
+            generation: 1,
+            profile: "mainnet".to_string(),
+        });
+        state.reduce(crate::state::Action::ProfileValidationLoaded {
+            generation: 1,
+            snapshot: test_profile_validation_snapshot("mainnet", "mainnet.toml"),
+        });
 
         let text = render_to_text_grid(&state, 120, 32);
 
         assert!(text.contains("configuration cockpit"));
+        assert!(text.contains("Profile / Risk"));
+        assert!(text.contains("profile and risk policy"));
         assert!(text.contains("workspace: settings"));
         assert!(text.contains("dirty config: watchlist"));
         assert!(text.contains("watchlist:"));
         assert!(text.contains("trading profile: mainnet"));
+        assert!(text.contains("validation: ok"));
+        assert!(text.contains("risk.allow_live: true"));
+        assert!(text.contains("allowed symbols: btcusdt spot limit <= 50"));
         assert!(text.contains("provider preferences: equity=robinhood  crypto=okx"));
         assert!(text.contains("> equity provider: robinhood"));
         assert!(text.contains("crypto provider: okx"));
-        assert!(text.contains("up/down select setting"));
         assert!(text.contains("provider capability profiles:"));
         assert!(text.contains("normal key bindings:"));
     }

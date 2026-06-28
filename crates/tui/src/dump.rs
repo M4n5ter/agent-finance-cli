@@ -10,13 +10,13 @@ use crate::hints;
 use crate::model::{InteractionMode, Panel, WorkspaceKind};
 use crate::order_ticket::OrderTicketPreview;
 use crate::pane_status::{TuiPaneStatus, pane_health};
-use crate::profile_snapshot::ProfileValidationState;
+use crate::profile_snapshot::{ProfileValidationState, TradingProfileSnapshot};
 use crate::provider_health::{ProviderHealthReport, ProviderHealthTask};
 use crate::state::{AppState, StagedChangeView, StagedExecutionRequest};
 use crate::theme::ThemeConfig;
 use crate::transfer_ticket::TransferTicketPreview;
 
-const TUI_DUMP_SCHEMA_VERSION: u32 = 23;
+const TUI_DUMP_SCHEMA_VERSION: u32 = 25;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct TuiDump {
@@ -156,6 +156,7 @@ pub struct ProfileValidationDump {
     pub checks: Vec<DiagnosticCheck>,
     pub required_failure_count: usize,
     pub required_failures: Vec<DiagnosticCheck>,
+    pub profile_snapshot: Option<TradingProfileSnapshot>,
     pub error: Option<String>,
 }
 
@@ -178,6 +179,7 @@ impl ProfileValidationDump {
                 checks: Vec::new(),
                 required_failure_count: 0,
                 required_failures: Vec::new(),
+                profile_snapshot: None,
                 error: None,
             },
             ProfileValidationState::Loading { profile } => Self {
@@ -187,11 +189,13 @@ impl ProfileValidationDump {
                 checks: Vec::new(),
                 required_failure_count: 0,
                 required_failures: Vec::new(),
+                profile_snapshot: None,
                 error: None,
             },
             ProfileValidationState::Ready {
                 profile,
                 path,
+                profile_config,
                 checks,
                 ..
             } => {
@@ -203,6 +207,7 @@ impl ProfileValidationDump {
                     checks: checks.clone(),
                     required_failure_count: required_failures.len(),
                     required_failures,
+                    profile_snapshot: Some(TradingProfileSnapshot::from(profile_config.as_ref())),
                     error: None,
                 }
             }
@@ -213,6 +218,7 @@ impl ProfileValidationDump {
                 checks: Vec::new(),
                 required_failure_count: 0,
                 required_failures: Vec::new(),
+                profile_snapshot: None,
                 error: Some(error.clone()),
             },
         }
@@ -291,6 +297,7 @@ mod tests {
         assert_eq!(dump.workspace, WorkspaceKind::Settings);
         for panel in [
             Panel::Settings,
+            Panel::ProfileRisk,
             Panel::Watchlist,
             Panel::ProviderHealth,
             Panel::TaskLog,
@@ -394,6 +401,23 @@ mod tests {
                 .contains_key("profile_config")
         );
         assert_eq!(
+            value["profile_validation"]["profile_snapshot"]["risk"]["allow_live"],
+            true
+        );
+        assert_eq!(
+            value["profile_validation"]["profile_snapshot"]["required_permissions"][0],
+            "spot-trading"
+        );
+        assert_eq!(
+            value["profile_validation"]["profile_snapshot"]["missing_permissions"][0],
+            "spot-trading"
+        );
+        assert_eq!(
+            value["profile_validation"]["profile_snapshot"]["risk"]["allowed_symbols"]["btcusdt"]["markets"]
+                [0],
+            "spot"
+        );
+        assert_eq!(
             value["profile_validation"]["checks"][0]["name"],
             "profile-parse"
         );
@@ -466,6 +490,12 @@ mod tests {
                 .as_object()
                 .expect("profile_validation")
                 .contains_key("profile_config")
+        );
+        assert!(
+            value["profile_validation"]
+                .as_object()
+                .expect("profile_validation")
+                .contains_key("profile_snapshot")
         );
     }
 

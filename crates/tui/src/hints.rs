@@ -44,6 +44,9 @@ pub fn mode_key_hints(state: &AppState) -> Vec<String> {
         InteractionMode::Normal if state.panels.focused() == Panel::FuturesState => {
             crate::futures_state_controls::futures_state_key_hints()
         }
+        InteractionMode::Normal if state.panels.focused() == Panel::ProfileRisk => {
+            crate::profile_risk_controls::profile_risk_key_hints()
+        }
         InteractionMode::Normal if state.panels.focused() == Panel::Settings => {
             crate::settings_controls::settings_key_hints()
         }
@@ -289,9 +292,6 @@ mod tests {
                 "up/down select setting",
                 "left/right adjust",
                 "enter next value",
-                "e profile",
-                "v validate",
-                "t risk",
                 "u undo",
                 "q quit",
             ]
@@ -353,6 +353,22 @@ mod tests {
                 "f stage state",
                 "q quit",
             ]
+        );
+    }
+
+    #[test]
+    fn profile_risk_focus_shows_profile_risk_hints() {
+        let mut state = AppState::from_config(TuiConfig::default());
+        state.reduce(Action::Execute(ActionId::SetWorkspace(
+            crate::model::WorkspaceKind::Settings,
+        )));
+        state.reduce(Action::Execute(ActionId::FocusPanel(
+            crate::model::Panel::ProfileRisk,
+        )));
+
+        assert_eq!(
+            mode_key_hints(&state),
+            vec!["e profile", "v validate", "t stage risk", "q quit"]
         );
     }
 

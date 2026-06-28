@@ -19,6 +19,7 @@ mod order_ticket_controls;
 mod pane_status;
 mod panel_input;
 mod profile_editor;
+mod profile_risk_controls;
 mod profile_snapshot;
 mod profile_validation_load;
 mod provider_health;

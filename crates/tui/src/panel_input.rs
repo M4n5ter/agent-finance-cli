@@ -12,6 +12,7 @@ pub(crate) fn key_action(state: &AppState, key: KeyEvent) -> Option<Action> {
         Panel::Account => crate::account_controls::account_key_action(key),
         Panel::TransferTicket => crate::transfer_ticket_controls::transfer_ticket_key_action(key),
         Panel::FuturesState => crate::futures_state_controls::futures_state_key_action(key),
+        Panel::ProfileRisk => crate::profile_risk_controls::profile_risk_key_action(key),
         Panel::Settings => crate::settings_controls::settings_key_action(key),
         Panel::IntentReview => intent_review_key_action(key),
         Panel::Quote

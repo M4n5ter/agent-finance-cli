@@ -155,6 +155,11 @@ function smokeDumpState() {
       fail(`account dump-state is missing visible ${panel} panel`);
     }
   }
+  const settingsDump = dumpStateForWorkspace("settings");
+  assertCoreDumpShape(settingsDump);
+  if (!settingsDump.panes.some((pane) => pane.panel === "profile-risk" && pane.visible)) {
+    fail("settings dump-state is missing visible profile-risk panel");
+  }
 }
 
 function dumpStateForWorkspace(workspace) {
@@ -221,7 +226,7 @@ function assertCoreDumpShape(dump) {
       fail(`dump-state JSON is missing ${key}`);
     }
   }
-  if (dump.schema_version !== 23) {
+  if (dump.schema_version !== 25) {
     fail(`dump-state schema_version mismatch: ${dump.schema_version}`);
   }
   if (

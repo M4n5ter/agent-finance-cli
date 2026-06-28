@@ -1,6 +1,6 @@
 ---
 source: crates/tui/src/render.rs
-assertion_line: 421
+assertion_line: 537
 expression: "render_to_text_grid(&state, 140, 40)"
 ---
 ┌Watchlist [fresh]─────────────────────────────┐┌Quote / Sessions [partial]────────────────────────────────────────────────────────────────┐
@@ -25,10 +25,10 @@ expression: "render_to_text_grid(&state, 140, 40)"
 │                    │  Focus provider health - Move keyboard focus to provider health                                │▓                   │
 └────────────────────│  Toggle history - Show or hide the historical price chart                                      │▓                   │
 ┌Provider Health [par│  Set trading profile - Edit the default trading profile used by order, cancel, transfer, and fu│▓                   │
-│provi stat detail   │  Revalidate trading profile - Reload and validate the selected trading profile from disk       │▓                   │
-│auto  capa Default r│  Stage profile live toggle - Review a risk.allow_live change for the selected trading profile  │▓                   │
-│yahoo capa Broadest │  Previous symbol - Move watchlist selection to the previous symbol                             │▓                   │
-│sec-e capa Official │  Stage selected cancel - Move the selected open order into intent review as a cancel           │▓                   │
+│provi stat detail   │  Toggle profile risk - Show or hide profile validation and risk policy                         │▓                   │
+│auto  capa Default r│  Revalidate trading profile - Reload and validate the selected trading profile from disk       │▓                   │
+│yahoo capa Broadest │  Stage profile live toggle - Review a risk.allow_live change for the selected trading profile  │▓                   │
+│sec-e capa Official │  Previous symbol - Move watchlist selection to the previous symbol                             │▓                   │
 │stooq capa Delayed q└────────────────────────────────────────────────────────────────────────────────────────────────┘▓                   │
 │cnbc- capa pre/post e▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓                   │
 │cnbc  capa CNBC quote payload -               ││                                                                                          │

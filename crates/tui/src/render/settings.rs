@@ -5,7 +5,6 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Paragraph, Wrap};
 
 use crate::model::Panel;
-use crate::profile_snapshot::ProfileValidationState;
 use crate::settings_editor::SettingRow;
 use crate::state::AppState;
 
@@ -38,7 +37,6 @@ pub(super) fn render_settings(frame: &mut Frame<'_>, state: &AppState, area: Rec
                 "off"
             }
         )),
-        profile_validation_line(state),
         Line::from(format!(
             "default submit mode: {}  effective={}",
             state.default_submit_mode,
@@ -63,7 +61,6 @@ pub(super) fn render_settings(frame: &mut Frame<'_>, state: &AppState, area: Rec
         Line::from(""),
         Line::from("settings editor"),
     ];
-    lines.extend(profile_validation_failures(state));
     lines.extend(setting_rows(state));
     lines.extend([
         Line::from(""),
@@ -73,7 +70,7 @@ pub(super) fn render_settings(frame: &mut Frame<'_>, state: &AppState, area: Rec
         Line::from(
             ": command palette  a add symbols  d delete symbol  watchlist left/right reorder",
         ),
-        Line::from(crate::settings_controls::settings_profile_risk_hint()),
+        Line::from("profile/risk: use the Profile / Risk panel for validation and risk changes"),
         Line::from("save/undo: command palette -> Save config / Undo config change"),
     ]);
     for change in state.config_changes.iter().take(3) {
@@ -89,59 +86,6 @@ pub(super) fn render_settings(frame: &mut Frame<'_>, state: &AppState, area: Rec
             .wrap(Wrap { trim: true }),
         area,
     );
-}
-
-fn profile_validation_line(state: &AppState) -> Line<'static> {
-    match &state.profile_validation {
-        ProfileValidationState::Idle => {
-            let Some(profile) = state.trading_profile.as_deref() else {
-                return Line::from("profile validation: no profile");
-            };
-            Line::from(format!("profile validation: {profile} pending"))
-        }
-        ProfileValidationState::Loading { profile } => {
-            Line::from(format!("profile validation: {profile} loading"))
-        }
-        ProfileValidationState::Ready { path, checks, .. } => {
-            let failures = checks
-                .iter()
-                .filter(|check| check.required && !check.ok)
-                .count();
-            if failures == 0 {
-                Line::from(format!("profile validation: ok  path={}", path.display()))
-            } else {
-                Line::from(Span::styled(
-                    format!(
-                        "profile validation: {failures} required failure(s)  path={}",
-                        path.display()
-                    ),
-                    state.theme.warning_style(),
-                ))
-            }
-        }
-        ProfileValidationState::Failed { profile, error } => Line::from(Span::styled(
-            format!("profile validation: {profile} failed  {error}"),
-            state.theme.warning_style(),
-        )),
-    }
-}
-
-fn profile_validation_failures(state: &AppState) -> Vec<Line<'static>> {
-    let ProfileValidationState::Ready { checks, .. } = &state.profile_validation else {
-        return Vec::new();
-    };
-
-    checks
-        .iter()
-        .filter(|check| check.required && !check.ok)
-        .take(3)
-        .map(|check| {
-            Line::from(Span::styled(
-                format!("profile validation failure: {}", check.message),
-                state.theme.warning_style(),
-            ))
-        })
-        .collect()
 }
 
 fn setting_rows(state: &AppState) -> Vec<Line<'static>> {

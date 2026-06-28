@@ -13,6 +13,7 @@ const MIDDLE_COLUMN_SPECS: [ColumnSpec; 3] = [
     ColumnSpec::new(
         &[
             Panel::Settings,
+            Panel::ProfileRisk,
             Panel::OrderTicket,
             Panel::OpenOrders,
             Panel::IntentReview,
@@ -20,6 +21,7 @@ const MIDDLE_COLUMN_SPECS: [ColumnSpec; 3] = [
         ],
         &[
             (Panel::Settings, 34),
+            (Panel::ProfileRisk, 28),
             (Panel::OrderTicket, 34),
             (Panel::OpenOrders, 24),
             (Panel::IntentReview, 22),
@@ -278,6 +280,7 @@ fn active_docked_groups(config: &LayoutConfig, open_panels: &[Panel]) -> Vec<(Do
             config.main_ratio,
             &[
                 Panel::Settings,
+                Panel::ProfileRisk,
                 Panel::OrderTicket,
                 Panel::OpenOrders,
                 Panel::IntentReview,

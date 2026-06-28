@@ -166,6 +166,7 @@ fn pane_data_state(state: &AppState, panel: Panel) -> PaneDataState {
             false,
         ),
         Panel::Settings => PaneDataState::new(false, SelectedDataState::Fresh, false),
+        Panel::ProfileRisk => profile_risk_data_state(state),
     }
 }
 
@@ -217,6 +218,31 @@ fn ticket_data_state(ready: bool) -> PaneDataState {
         },
         false,
     )
+}
+
+fn profile_risk_data_state(state: &AppState) -> PaneDataState {
+    match &state.profile_validation {
+        ProfileValidationState::Idle => PaneDataState::new(
+            false,
+            if state.trading_profile.is_some() {
+                SelectedDataState::Stale
+            } else {
+                SelectedDataState::Empty
+            },
+            false,
+        ),
+        ProfileValidationState::Loading { .. } => {
+            PaneDataState::new(true, SelectedDataState::Stale, false)
+        }
+        ProfileValidationState::Ready { checks, .. } => PaneDataState::new(
+            false,
+            SelectedDataState::Fresh,
+            checks.iter().any(|check| check.required && !check.ok),
+        ),
+        ProfileValidationState::Failed { .. } => {
+            PaneDataState::new(false, SelectedDataState::Empty, true)
+        }
+    }
 }
 
 fn selected_symbol_is_crypto(state: &AppState) -> bool {

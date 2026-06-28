@@ -68,6 +68,7 @@ impl WorkspaceKind {
             ],
             Self::Settings => &[
                 Panel::Settings,
+                Panel::ProfileRisk,
                 Panel::Watchlist,
                 Panel::ProviderHealth,
                 Panel::TaskLog,
@@ -214,10 +215,11 @@ pub enum Panel {
     ProviderHealth,
     TaskLog,
     Settings,
+    ProfileRisk,
 }
 
 impl Panel {
-    pub const ALL: [Self; 16] = [
+    pub const ALL: [Self; 17] = [
         Self::Watchlist,
         Self::Quote,
         Self::OrderTicket,
@@ -234,6 +236,7 @@ impl Panel {
         Self::ProviderHealth,
         Self::TaskLog,
         Self::Settings,
+        Self::ProfileRisk,
     ];
 
     pub const fn title(self) -> &'static str {
@@ -254,6 +257,7 @@ impl Panel {
             Self::ProviderHealth => "Provider Health",
             Self::TaskLog => "Task Log",
             Self::Settings => "Settings",
+            Self::ProfileRisk => "Profile / Risk",
         }
     }
 
@@ -275,6 +279,7 @@ impl Panel {
             Self::ProviderHealth => "provider-health",
             Self::TaskLog => "task-log",
             Self::Settings => "settings",
+            Self::ProfileRisk => "profile-risk",
         }
     }
 
@@ -296,6 +301,7 @@ impl Panel {
             Self::ProviderHealth => "Focus provider health",
             Self::TaskLog => "Focus task log",
             Self::Settings => "Focus settings",
+            Self::ProfileRisk => "Focus profile risk",
         }
     }
 
@@ -317,6 +323,7 @@ impl Panel {
             Self::ProviderHealth => "Move keyboard focus to provider health",
             Self::TaskLog => "Move keyboard focus to runtime task log",
             Self::Settings => "Move keyboard focus to configuration maintenance",
+            Self::ProfileRisk => "Move keyboard focus to profile validation and risk policy",
         }
     }
 
@@ -338,6 +345,7 @@ impl Panel {
             Self::ProviderHealth => "Toggle provider health",
             Self::TaskLog => "Toggle task log",
             Self::Settings => "Toggle settings",
+            Self::ProfileRisk => "Toggle profile risk",
         }
     }
 
@@ -359,6 +367,7 @@ impl Panel {
             Self::ProviderHealth => "Show or hide provider capability coverage",
             Self::TaskLog => "Show or hide the runtime task log",
             Self::Settings => "Show or hide configuration maintenance",
+            Self::ProfileRisk => "Show or hide profile validation and risk policy",
         }
     }
 
@@ -380,6 +389,7 @@ impl Panel {
             Self::ProviderHealth => 13,
             Self::TaskLog => 14,
             Self::Settings => 15,
+            Self::ProfileRisk => 16,
         }
     }
 }

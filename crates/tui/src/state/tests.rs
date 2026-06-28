@@ -2116,7 +2116,7 @@ fn profile_live_toggle_stages_validated_profile_risk_review_for_local_commit_con
 }
 
 #[test]
-fn settings_risk_shortcut_stages_profile_risk_review() {
+fn profile_risk_shortcut_stages_profile_risk_review() {
     let mut state = AppState::from_config(TuiConfig {
         workspace: WorkspaceConfig {
             current: WorkspaceKind::Settings,
@@ -2126,7 +2126,7 @@ fn settings_risk_shortcut_stages_profile_risk_review() {
         },
         ..TuiConfig::default()
     });
-    state.reduce(Action::Execute(ActionId::FocusPanel(Panel::Settings)));
+    state.reduce(Action::Execute(ActionId::FocusPanel(Panel::ProfileRisk)));
     state.reduce(Action::ProfileValidationStarted {
         generation: 1,
         profile: "mainnet".to_string(),

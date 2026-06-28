@@ -359,7 +359,8 @@ fn dump_is_ready(state: &AppState) -> bool {
         | Panel::RiskAudit
         | Panel::ProviderHealth
         | Panel::TaskLog
-        | Panel::Settings => true,
+        | Panel::Settings
+        | Panel::ProfileRisk => true,
     })
 }
 

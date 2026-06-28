@@ -1,16 +1,11 @@
 use crossterm::event::{KeyCode, KeyEvent};
 
-use crate::command::ActionId;
-use crate::model::FloatingKind;
 use crate::state::Action;
 
 const PANEL_CONTROL_HINTS: &[&str] = &[
     "up/down select setting",
     "left/right adjust",
     "enter next value",
-    "e profile",
-    "v validate",
-    "t risk",
     "u undo",
 ];
 
@@ -25,11 +20,6 @@ pub(crate) fn settings_key_action(key: KeyEvent) -> Option<Action> {
         KeyCode::Right | KeyCode::Char('l') | KeyCode::Enter => {
             Some(Action::AdjustSelectedSetting(1))
         }
-        KeyCode::Char('e') => Some(Action::Execute(ActionId::OpenFloating(
-            FloatingKind::TradingProfile,
-        ))),
-        KeyCode::Char('v') => Some(Action::Execute(ActionId::RevalidateTradingProfile)),
-        KeyCode::Char('t') => Some(Action::Execute(ActionId::StageProfileLiveToggle)),
         KeyCode::Char('u') => Some(Action::UndoConfigChange),
         _ => None,
     }
@@ -46,8 +36,4 @@ pub(crate) fn settings_key_hints() -> Vec<String> {
 
 pub(crate) fn settings_panel_hint() -> String {
     PANEL_CONTROL_HINTS.join("  ")
-}
-
-pub(crate) fn settings_profile_risk_hint() -> &'static str {
-    "profile/risk: e edit profile  v revalidate  t stage risk.allow_live"
 }
