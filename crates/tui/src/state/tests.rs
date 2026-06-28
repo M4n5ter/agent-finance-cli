@@ -5,6 +5,7 @@ use crate::config::MAX_LEFT_MAIN_RATIO;
 use crate::model::InteractionMode;
 use crate::task_failure::TaskFailureSource;
 use crate::task_log::TaskStatus;
+use crate::theme::ThemeColor;
 use agent_finance_core::intent::IntentStatus;
 use agent_finance_core::submit::{SubmitIntentKind, SubmitMode};
 use agent_finance_core::{
@@ -1696,6 +1697,25 @@ fn settings_provider_preferences_edit_export_and_request_runtime_update() {
         crate::config::EquityProvider::Yahoo
     );
     assert_eq!(config.providers.crypto, CryptoProvider::Binance);
+}
+
+#[test]
+fn settings_theme_edit_exports_without_provider_runtime_update() {
+    let mut state = AppState::from_config(TuiConfig {
+        workspace: WorkspaceConfig {
+            current: WorkspaceKind::Settings,
+        },
+        ..TuiConfig::default()
+    });
+
+    state.reduce(Action::MoveSettingsSelection(2));
+    state.reduce(Action::AdjustSelectedSetting(1));
+
+    assert_eq!(state.theme.accent, ThemeColor::Gray);
+    assert_eq!(state.config_changes, ["theme"]);
+    assert!(state.take_pending_provider_preferences_update().is_none());
+    let config = state.export_config(&TuiConfig::default());
+    assert_eq!(config.theme.accent, ThemeColor::Gray);
 }
 
 #[test]

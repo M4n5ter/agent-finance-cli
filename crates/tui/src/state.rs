@@ -391,19 +391,19 @@ impl AppState {
     }
 
     fn adjust_selected_setting(&mut self, direction: isize) {
-        let changed = self
-            .settings_editor
-            .selected()
-            .adjust(&mut self.providers, direction);
-        if !changed {
+        let row = self.settings_editor.selected();
+        let Some(change) = row.adjust(&mut self.providers, &mut self.theme, direction) else {
             return;
-        }
+        };
 
-        self.pending_provider_preferences_update = true;
-        self.mark_config_changed("providers");
+        if change.requires_provider_reload {
+            self.pending_provider_preferences_update = true;
+        }
+        self.mark_config_changed(change.section);
         self.task_log.info(format!(
-            "provider preferences updated: equity={} crypto={}",
-            self.providers.equity, self.providers.crypto
+            "setting updated: {}={}",
+            row.label(),
+            row.value(&self.providers, &self.theme)
         ));
     }
 

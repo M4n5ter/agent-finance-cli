@@ -10,9 +10,10 @@ use crate::order_ticket::OrderTicketPreview;
 use crate::pane_status::{TuiPaneStatus, pane_health};
 use crate::provider_health::{ProviderHealthReport, ProviderHealthTask};
 use crate::state::{AppState, StagedChangeView, StagedSubmitRequest};
+use crate::theme::ThemeConfig;
 use crate::transfer_ticket::TransferTicketPreview;
 
-const TUI_DUMP_SCHEMA_VERSION: u32 = 13;
+const TUI_DUMP_SCHEMA_VERSION: u32 = 14;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct TuiDump {
@@ -26,6 +27,7 @@ pub struct TuiDump {
     pub panes: Vec<TuiPaneDump>,
     pub provider_health: ProviderHealthReport,
     pub provider_preferences: ProviderConfig,
+    pub theme_preferences: ThemeConfig,
     pub tasks: Vec<ProviderHealthTask>,
     pub default_submit_mode: SubmitMode,
     pub live_writes_enabled: bool,
@@ -68,6 +70,7 @@ impl TuiDump {
                 .map(|panel| pane_dump(state, panel))
                 .collect(),
             provider_preferences: state.providers.clone(),
+            theme_preferences: state.theme.clone(),
             tasks: provider_health.tasks.clone(),
             default_submit_mode: state.default_submit_mode,
             live_writes_enabled: state.live_writes_enabled,
@@ -131,6 +134,7 @@ mod tests {
     use crate::config::{EquityProvider, ProviderConfig, TuiConfig, WorkspaceConfig};
     use crate::model::FloatingKind;
     use crate::state::{Action, StagedChangeEvent};
+    use crate::theme::{ThemeColor, ThemeConfig};
     use agent_finance_core::submit::SubmitMode;
     use agent_finance_core::{Environment, Provider, SignedReadSnapshot};
 
@@ -217,6 +221,12 @@ mod tests {
                 equity: EquityProvider::Robinhood,
                 crypto: agent_finance_market::args::CryptoProvider::Okx,
             },
+            theme: ThemeConfig {
+                accent: ThemeColor::Blue,
+                selection_background: ThemeColor::Magenta,
+                selection_foreground: ThemeColor::White,
+                ..ThemeConfig::default()
+            },
             ..TuiConfig::default()
         });
 
@@ -226,6 +236,12 @@ mod tests {
         assert_eq!(value["trading_profile"], "mainnet");
         assert_eq!(value["provider_preferences"]["equity"], "robinhood");
         assert_eq!(value["provider_preferences"]["crypto"], "okx");
+        assert_eq!(value["theme_preferences"]["accent"], "blue");
+        assert_eq!(
+            value["theme_preferences"]["selection_background"],
+            "magenta"
+        );
+        assert_eq!(value["theme_preferences"]["selection_foreground"], "white");
         assert!(
             value["panes"]
                 .as_array()

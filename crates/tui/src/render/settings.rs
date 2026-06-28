@@ -5,7 +5,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Paragraph, Wrap};
 
 use crate::model::Panel;
-use crate::settings_editor::SettingsRow;
+use crate::settings_editor::SettingRow;
 use crate::state::AppState;
 
 use super::widgets::panel_block;
@@ -47,6 +47,10 @@ pub(super) fn render_settings(frame: &mut Frame<'_>, state: &AppState, area: Rec
             state.providers.equity, state.providers.crypto
         )),
         Line::from(format!(
+            "theme: accent={}  selection={}/{}",
+            state.theme.accent, state.theme.selection_background, state.theme.selection_foreground
+        )),
+        Line::from(format!(
             "provider capability profiles: {}",
             state.provider_profiles.len()
         )),
@@ -85,12 +89,12 @@ pub(super) fn render_settings(frame: &mut Frame<'_>, state: &AppState, area: Rec
 }
 
 fn setting_rows(state: &AppState) -> Vec<Line<'static>> {
-    SettingsRow::ALL
+    SettingRow::ALL
         .into_iter()
         .map(|row| {
             let selected = state.settings_editor.selected() == row;
             let marker = if selected { ">" } else { " " };
-            let value = row.value(&state.providers);
+            let value = row.value(&state.providers, &state.theme);
             let text = format!("{marker} {}: {value}", row.label());
             if selected {
                 Line::from(Span::styled(

@@ -113,6 +113,19 @@ pub enum ThemeColor {
 }
 
 impl ThemeColor {
+    pub const ALL: [Self; 10] = [
+        Self::Black,
+        Self::Red,
+        Self::Green,
+        Self::Yellow,
+        Self::Blue,
+        Self::Magenta,
+        Self::Cyan,
+        Self::Gray,
+        Self::DarkGray,
+        Self::White,
+    ];
+
     pub const fn label(self) -> &'static str {
         match self {
             Self::Black => "black",
@@ -141,6 +154,15 @@ impl ThemeColor {
             "dark-gray",
             "white",
         ]
+    }
+
+    pub fn shift(self, direction: isize) -> Self {
+        let index = Self::ALL
+            .iter()
+            .position(|color| *color == self)
+            .unwrap_or_default() as isize;
+        let next = (index + direction).rem_euclid(Self::ALL.len() as isize) as usize;
+        Self::ALL[next]
     }
 
     pub const fn color(self) -> Color {
@@ -235,6 +257,13 @@ mod tests {
         assert_eq!("dark-gray".parse::<ThemeColor>(), Ok(ThemeColor::DarkGray));
         assert_eq!("dark_grey".parse::<ThemeColor>(), Ok(ThemeColor::DarkGray));
         assert!("orange".parse::<ThemeColor>().is_err());
+    }
+
+    #[test]
+    fn theme_color_shift_wraps_palette() {
+        assert_eq!(ThemeColor::Black.shift(-1), ThemeColor::White);
+        assert_eq!(ThemeColor::White.shift(1), ThemeColor::Black);
+        assert_eq!(ThemeColor::Cyan.shift(1), ThemeColor::Gray);
     }
 
     #[test]

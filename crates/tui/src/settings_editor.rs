@@ -1,59 +1,175 @@
 use crate::config::ProviderConfig;
+use crate::theme::{ThemeColor, ThemeConfig};
 
 #[derive(Debug, Clone, Copy, Default, Eq, PartialEq)]
 pub struct SettingsEditorState {
-    selected: SettingsRow,
+    selected: usize,
 }
 
 impl SettingsEditorState {
-    pub const fn selected(&self) -> SettingsRow {
-        self.selected
+    pub fn selected(&self) -> SettingRow {
+        SettingRow::ALL
+            .get(self.selected)
+            .copied()
+            .unwrap_or(SettingRow::ALL[0])
     }
 
     pub fn move_selection(&mut self, direction: isize) {
-        self.selected = self.selected.shift(direction);
+        self.selected = shift_index(self.selected, SettingRow::ALL.len(), direction);
     }
 }
 
-#[derive(Debug, Clone, Copy, Default, Eq, PartialEq)]
-pub enum SettingsRow {
-    #[default]
-    EquityProvider,
-    CryptoProvider,
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub struct SettingRow {
+    label: &'static str,
+    target: SettingTarget,
 }
 
-impl SettingsRow {
-    pub const ALL: [Self; 2] = [Self::EquityProvider, Self::CryptoProvider];
+impl SettingRow {
+    pub const ALL: [Self; 5] = [
+        Self::provider("equity provider", ProviderSetting::Equity),
+        Self::provider("crypto provider", ProviderSetting::Crypto),
+        Self::theme("theme accent", ThemeSetting::Accent),
+        Self::theme("selection background", ThemeSetting::SelectionBackground),
+        Self::theme("selection foreground", ThemeSetting::SelectionForeground),
+    ];
+
+    const fn provider(label: &'static str, setting: ProviderSetting) -> Self {
+        Self {
+            label,
+            target: SettingTarget::Provider(setting),
+        }
+    }
+
+    const fn theme(label: &'static str, setting: ThemeSetting) -> Self {
+        Self {
+            label,
+            target: SettingTarget::Theme(setting),
+        }
+    }
 
     pub const fn label(self) -> &'static str {
+        self.label
+    }
+
+    pub fn value(self, providers: &ProviderConfig, theme: &ThemeConfig) -> String {
+        self.target.value(providers, theme)
+    }
+
+    pub fn adjust(
+        self,
+        providers: &mut ProviderConfig,
+        theme: &mut ThemeConfig,
+        direction: isize,
+    ) -> Option<SettingChange> {
+        self.target.adjust(providers, theme, direction)
+    }
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub struct SettingChange {
+    pub section: &'static str,
+    pub requires_provider_reload: bool,
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+enum SettingTarget {
+    Provider(ProviderSetting),
+    Theme(ThemeSetting),
+}
+
+impl SettingTarget {
+    fn value(self, providers: &ProviderConfig, theme: &ThemeConfig) -> String {
         match self {
-            Self::EquityProvider => "equity provider",
-            Self::CryptoProvider => "crypto provider",
+            Self::Provider(setting) => setting.value(providers),
+            Self::Theme(setting) => setting.value(theme),
         }
     }
 
-    pub fn value(self, providers: &ProviderConfig) -> String {
+    fn adjust(
+        self,
+        providers: &mut ProviderConfig,
+        theme: &mut ThemeConfig,
+        direction: isize,
+    ) -> Option<SettingChange> {
         match self {
-            Self::EquityProvider => providers.equity.to_string(),
-            Self::CryptoProvider => providers.crypto.to_string(),
+            Self::Provider(setting) => setting.adjust(providers, direction),
+            Self::Theme(setting) => setting.adjust(theme, direction),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+enum ProviderSetting {
+    Equity,
+    Crypto,
+}
+
+impl ProviderSetting {
+    fn value(self, providers: &ProviderConfig) -> String {
+        match self {
+            Self::Equity => providers.equity.to_string(),
+            Self::Crypto => providers.crypto.to_string(),
         }
     }
 
-    pub fn adjust(self, providers: &mut ProviderConfig, direction: isize) -> bool {
+    fn adjust(self, providers: &mut ProviderConfig, direction: isize) -> Option<SettingChange> {
+        let changed = match self {
+            Self::Equity => providers.adjust_equity(direction),
+            Self::Crypto => providers.adjust_crypto(direction),
+        };
+        changed.then_some(SettingChange {
+            section: "providers",
+            requires_provider_reload: true,
+        })
+    }
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+enum ThemeSetting {
+    Accent,
+    SelectionBackground,
+    SelectionForeground,
+}
+
+impl ThemeSetting {
+    fn value(self, theme: &ThemeConfig) -> String {
+        self.color(theme).to_string()
+    }
+
+    fn adjust(self, theme: &mut ThemeConfig, direction: isize) -> Option<SettingChange> {
+        let color = self.color_mut(theme);
+        let next = color.shift(direction);
+        if *color == next {
+            return None;
+        }
+        *color = next;
+        Some(SettingChange {
+            section: "theme",
+            requires_provider_reload: false,
+        })
+    }
+
+    const fn color(self, theme: &ThemeConfig) -> ThemeColor {
         match self {
-            Self::EquityProvider => providers.adjust_equity(direction),
-            Self::CryptoProvider => providers.adjust_crypto(direction),
+            Self::Accent => theme.accent,
+            Self::SelectionBackground => theme.selection_background,
+            Self::SelectionForeground => theme.selection_foreground,
         }
     }
 
-    fn shift(self, direction: isize) -> Self {
-        let index = Self::ALL
-            .iter()
-            .position(|row| *row == self)
-            .unwrap_or_default() as isize;
-        let next = (index + direction).rem_euclid(Self::ALL.len() as isize) as usize;
-        Self::ALL[next]
+    fn color_mut(self, theme: &mut ThemeConfig) -> &mut ThemeColor {
+        match self {
+            Self::Accent => &mut theme.accent,
+            Self::SelectionBackground => &mut theme.selection_background,
+            Self::SelectionForeground => &mut theme.selection_foreground,
+        }
     }
+}
+
+fn shift_index(current: usize, len: usize, direction: isize) -> usize {
+    debug_assert!(len > 0);
+    (current as isize + direction).rem_euclid(len as isize) as usize
 }
 
 #[cfg(test)]
@@ -65,9 +181,12 @@ mod tests {
         let mut state = SettingsEditorState::default();
 
         state.move_selection(-1);
-        assert_eq!(state.selected(), SettingsRow::CryptoProvider);
+        assert_eq!(state.selected().label(), "selection foreground");
 
         state.move_selection(1);
-        assert_eq!(state.selected(), SettingsRow::EquityProvider);
+        assert_eq!(state.selected().label(), "equity provider");
+
+        state.move_selection(2);
+        assert_eq!(state.selected().label(), "theme accent");
     }
 }
