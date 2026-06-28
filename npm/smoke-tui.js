@@ -26,6 +26,9 @@ fs.writeFileSync(
     'selection_background = "magenta"',
     'selection_foreground = "white"',
     "",
+    "[trading]",
+    'default_profile = "smoke"',
+    "",
   ].join("\n"),
 );
 
@@ -37,7 +40,14 @@ if (!commandExists("tmux")) {
 }
 
 const tuiCommand =
-  commandWithArgs(["--config", configPath, "--no-persist", "--symbols", "AAPL,BTCUSDT"]);
+  commandWithArgs([
+    "--config",
+    configPath,
+    "--no-persist",
+    "--no-account-load",
+    "--symbols",
+    "AAPL,BTCUSDT",
+  ]);
 const wrappedCommand = `cd ${shellQuote(root)} && ${tuiCommand}; printf '%s' "$?" > ${shellQuote(statusPath)}`;
 
 try {
@@ -66,31 +76,31 @@ try {
     fail("TUI ignored the configured equity provider and rendered yahoo-boats");
   }
 
-  runTmux(["send-keys", "-t", session, ":"]);
-  if (!waitForScreen(["Command Palette", "Open help"], 4_000)) {
-    fail("TUI did not open the command palette before workspace switch");
-  }
-  runTmux(["send-keys", "-t", session, "workspace research"]);
-  if (!waitForScreen(["workspace research", "Workspace research"], 4_000)) {
-    fail("TUI command palette did not filter the research workspace command");
-  }
+  executePaletteCommand(
+    "workspace research",
+    ["workspace research", "Workspace research"],
+    ["Research", "Polymarket"],
+    "research workspace switch",
+  );
+
+  executePaletteCommand(
+    "toggle live",
+    ["toggle live", "Toggle live writes"],
+    ["Enable Live Writes", "Enter: enable live writes for this session"],
+    "live writes toggle",
+  );
   runTmux(["send-keys", "-t", session, "Enter"]);
-  if (!waitForScreen(["Research", "Polymarket"], 4_000)) {
-    fail("TUI did not switch to the research workspace");
+  if (!waitForScreen(["live:on", "dry-run"], 4_000)) {
+    fail("TUI did not enable session live writes while keeping dry-run submit mode");
   }
 
-  runTmux(["send-keys", "-t", session, ":"]);
-  if (!waitForScreen(["Command Palette", "Open help"], 4_000)) {
-    fail("TUI did not open the command palette");
-  }
-
-  runTmux(["send-keys", "-t", session, "focus quote"]);
-  if (!waitForScreen(["focus quote", "Focus quote"], 4_000)) {
-    fail("TUI command palette did not filter commands from typed input");
-  }
-
-  runTmux(["send-keys", "-t", session, "Enter"]);
-  const afterQuoteCommand = waitForScreen(["mode: normal", "Quote / Sessions"], 4_000);
+  executePaletteCommand(
+    "focus quote",
+    ["focus quote", "Focus quote"],
+    ["Quote / Sessions"],
+    "quote focus",
+  );
+  const afterQuoteCommand = waitForScreen(["Quote / Sessions"], 4_000);
   if (!afterQuoteCommand || afterQuoteCommand.includes("Command Palette")) {
     fail("TUI did not execute the filtered command palette action");
   }
@@ -105,6 +115,10 @@ try {
   if (!waitForScreen(["Watchlist", "Polymarket", "News / Research", "Quote / Sessions"], 4_000)) {
     fail("TUI did not restore the workspace layout after zoom");
   }
+
+  editWatchlist();
+
+  stageAndCloseDryRunOrder();
 
   runTmux(["send-keys", "-t", session, "q"]);
   waitForSessionExit(8_000);
@@ -125,6 +139,7 @@ function smokeDumpState() {
     "--config",
     configPath,
     "--no-persist",
+    "--no-account-load",
     "--symbols",
     "AAPL,BTCUSDT",
     "--workspace",
@@ -204,6 +219,15 @@ function smokeDumpState() {
   if (dump.pending_staged_confirmation !== null) {
     fail("dump-state JSON should not have a pending staged confirmation by default");
   }
+  if (dump.trading_profile !== "smoke") {
+    fail(`dump-state trading_profile mismatch: ${dump.trading_profile}`);
+  }
+  if (dump.account !== null) {
+    fail("dump-state should not load signed account data with --no-account-load");
+  }
+  if (dump.tasks.some((task) => task.source === "account")) {
+    fail("dump-state should not enqueue account load tasks with --no-account-load");
+  }
   if (!dump.transfer_ticket || dump.transfer_ticket.asset !== "USDT" || dump.transfer_ticket.direction !== "spot-to-usds-futures") {
     fail("dump-state JSON is missing the default transfer_ticket contract");
   }
@@ -215,6 +239,89 @@ function smokeDumpState() {
   }
   if (!Array.isArray(dump.panes) || !dump.panes.some((pane) => pane.panel === "history" && pane.visible)) {
     fail("dump-state JSON is missing a visible history pane");
+  }
+}
+
+function executePaletteCommand(query, filterMarkers, resultMarkers, context) {
+  runTmux(["send-keys", "-t", session, ":"]);
+  if (!waitForScreen(["Command Palette", "Open help"], 4_000)) {
+    fail(`TUI did not open the command palette for ${context}`);
+  }
+  runTmux(["send-keys", "-t", session, query]);
+  if (!waitForScreen(filterMarkers, 4_000)) {
+    fail(`TUI command palette did not filter ${context}`);
+  }
+  runTmux(["send-keys", "-t", session, "Enter"]);
+  if (!waitForScreen(resultMarkers, 4_000)) {
+    fail(`TUI did not complete ${context}`);
+  }
+}
+
+function editWatchlist() {
+  executePaletteCommand(
+    "focus watchlist",
+    ["focus watchlist", "Focus watchlist"],
+    ["Watchlist"],
+    "watchlist focus",
+  );
+
+  runTmux(["send-keys", "-t", session, "a"]);
+  if (!waitForScreen(["Add Symbols"], 4_000)) {
+    fail("TUI did not open the watchlist add overlay");
+  }
+  runTmux(["send-keys", "-t", session, "MSFT", "Enter"]);
+  if (!waitForScreen(["MSFT"], 4_000)) {
+    fail("TUI did not add MSFT to the watchlist");
+  }
+  runTmux(["send-keys", "-t", session, "d"]);
+  if (!waitForScreen(["removed MSFT"], 4_000)) {
+    fail("TUI did not return to the original watchlist after deleting MSFT");
+  }
+  const watchlist = panelTextByTitle(capturePane(), "Watchlist");
+  if (!watchlist.includes("AAPL") || !watchlist.includes("BTCUSDT") || watchlist.includes("MSFT")) {
+    fail("TUI watchlist panel did not return to the original symbols after deleting MSFT");
+  }
+}
+
+function stageAndCloseDryRunOrder() {
+  executePaletteCommand(
+    "workspace trade",
+    ["workspace trade", "Workspace trade"],
+    ["Trade", "Order Ticket", "Intent Review"],
+    "trade workspace switch",
+  );
+  executePaletteCommand(
+    "focus order",
+    ["focus order", "Focus order ticket"],
+    ["staged order", "quantity: -", "blocked: quantity is required"],
+    "order ticket focus",
+  );
+
+  fillMinimalOrderTicket();
+  executePaletteCommand(
+    "stage order",
+    ["stage order", "Stage order ticket"],
+    ["staged intents"],
+    "order ticket staging",
+  );
+  if (
+    !waitForScreen(
+      ["staged intents", "ready", "dry-run", "order", "buy 0.001", "spot", "[smoke]"],
+      4_000,
+    )
+  ) {
+    fail("TUI did not stage a dry-run order intent from the order ticket");
+  }
+  runTmux(["send-keys", "-t", session, "d"]);
+  if (!waitForScreen(["No staged changes.", "order ticket candidate ready to stage"], 4_000)) {
+    fail("TUI did not close the staged dry-run order intent");
+  }
+}
+
+function fillMinimalOrderTicket() {
+  runTmux(["send-keys", "-t", session, "Down", "Down", "Down", "Right"]);
+  if (!waitForScreen(["quantity: 0.001"], 4_000)) {
+    fail("TUI did not set the default order quantity before staging");
   }
 }
 
@@ -259,6 +366,28 @@ function capturePane() {
     env: tmuxEnv(),
   });
   return result.status === 0 ? result.stdout : "";
+}
+
+function panelTextByTitle(screen, title) {
+  const lines = screen.split("\n");
+  const titleIndex = lines.findIndex((line) => line.includes(title));
+  if (titleIndex === -1) {
+    return "";
+  }
+  const panelLines = [];
+  for (let index = titleIndex; index < lines.length; index += 1) {
+    const line = lines[index];
+    panelLines.push(line);
+    if (index > titleIndex && line.includes("┘")) {
+      break;
+    }
+  }
+  return panelLines
+    .map((line) => {
+      const cells = [...line.matchAll(/│([^│]*)/g)].map((match) => match[1]);
+      return cells.join("\n");
+    })
+    .join("\n");
 }
 
 function runTmux(args) {

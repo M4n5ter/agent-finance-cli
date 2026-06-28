@@ -33,6 +33,7 @@ pub struct TuiLaunch {
     pub no_proxy: bool,
     pub timeout_seconds: u64,
     pub timezone: String,
+    pub account_load: bool,
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
@@ -67,6 +68,7 @@ impl TuiLaunch {
             no_proxy,
             timeout_seconds,
             timezone: timezone.to_string(),
+            account_load: true,
         }
     }
 
@@ -77,6 +79,11 @@ impl TuiLaunch {
 
     pub fn with_profile(mut self, profile: Option<String>) -> Self {
         self.profile = normalize_profile_name(profile);
+        self
+    }
+
+    pub const fn with_account_load(mut self, account_load: bool) -> Self {
+        self.account_load = account_load;
         self
     }
 

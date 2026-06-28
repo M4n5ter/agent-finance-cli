@@ -108,6 +108,10 @@ pub struct TuiArgs {
     #[arg(long)]
     pub profile: Option<String>,
 
+    /// Skip automatic signed account snapshot reads; live submit checks can still use signed APIs.
+    #[arg(long)]
+    pub no_account_load: bool,
+
     /// Initial workspace for the cockpit.
     #[arg(long, value_parser = enum_value_parser::<WorkspaceKind>(WorkspaceKind::labels()))]
     pub workspace: Option<WorkspaceKind>,
@@ -248,6 +252,24 @@ mod tests {
             panic!("expected TUI command");
         };
         assert_eq!(args.profile.as_deref(), Some("mainnet"));
+    }
+
+    #[test]
+    fn tui_can_skip_signed_account_loads_for_offline_smoke() {
+        let cli = Cli::try_parse_from([
+            "agent-finance",
+            "tui",
+            "--profile",
+            "smoke",
+            "--no-account-load",
+        ])
+        .expect("offline TUI account-load guard should parse");
+
+        let Command::Tui(args) = cli.command else {
+            panic!("expected tui command");
+        };
+        assert_eq!(args.profile.as_deref(), Some("smoke"));
+        assert!(args.no_account_load);
     }
 }
 

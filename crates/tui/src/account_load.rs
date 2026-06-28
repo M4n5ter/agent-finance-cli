@@ -4,11 +4,22 @@ use crate::state::{Action, AppState};
 #[derive(Debug, Clone)]
 pub(crate) struct AccountLoadRuntime {
     next_generation: u64,
+    enabled: bool,
 }
 
 impl AccountLoadRuntime {
     pub(crate) const fn new() -> Self {
-        Self { next_generation: 1 }
+        Self {
+            next_generation: 1,
+            enabled: true,
+        }
+    }
+
+    pub(crate) const fn disabled() -> Self {
+        Self {
+            next_generation: 1,
+            enabled: false,
+        }
     }
 
     fn next_generation(&mut self) -> u64 {
@@ -38,6 +49,9 @@ fn prepare_account_load_request(
     runtime: &mut AccountLoadRuntime,
     force: bool,
 ) -> Option<AccountLoadRequest> {
+    if !runtime.enabled {
+        return None;
+    }
     if state.account_loading() || state.scheduler_error.is_some() {
         return None;
     }
@@ -66,4 +80,26 @@ fn prepare_account_load_request(
 struct AccountLoadRequest {
     generation: u64,
     profile: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::{TradingConfig, TuiConfig};
+
+    #[test]
+    fn disabled_account_load_runtime_does_not_enqueue_profile_reads() {
+        let mut state = AppState::from_config(TuiConfig {
+            trading: TradingConfig {
+                default_profile: Some("smoke".to_string()),
+            },
+            ..TuiConfig::default()
+        });
+        let mut runtime = AccountLoadRuntime::disabled();
+
+        let request = prepare_account_load_request(&mut state, &mut runtime, false);
+
+        assert!(request.is_none());
+        assert!(!state.account_loading());
+    }
 }

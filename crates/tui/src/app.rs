@@ -42,7 +42,7 @@ pub fn run(launch: TuiLaunch) -> Result<()> {
     let mut terminal = TerminalGuard::enter().context("failed to initialize terminal UI")?;
     let scheduler = Scheduler::start(&launch, runtime_config.providers.clone());
     let mut next_refresh_generation = 1;
-    let mut account_load = AccountLoadRuntime::new();
+    let mut account_load = account_load_runtime(&launch);
     let mut symbol_loads = SymbolLoadRuntimes::new();
     request_refresh(&scheduler, &mut state, &mut next_refresh_generation);
     request_account_load(&scheduler, &mut state, &mut account_load, false);
@@ -89,7 +89,7 @@ fn run_dump_state(
         .context("dump-state options were not configured")?;
     let scheduler = Scheduler::start(launch, runtime_config.providers.clone());
     let mut next_refresh_generation = 1;
-    let mut account_load = AccountLoadRuntime::new();
+    let mut account_load = account_load_runtime(launch);
     let mut symbol_loads = SymbolLoadRuntimes::new();
     let deadline = Instant::now() + Duration::from_secs(options.wait_seconds);
 
@@ -207,6 +207,14 @@ fn run_loop(
 fn drain_scheduler_events(scheduler: &Scheduler, state: &mut AppState) {
     while let Some(event) = scheduler.try_recv() {
         apply_scheduler_event(state, event);
+    }
+}
+
+fn account_load_runtime(launch: &TuiLaunch) -> AccountLoadRuntime {
+    if launch.account_load {
+        AccountLoadRuntime::new()
+    } else {
+        AccountLoadRuntime::disabled()
     }
 }
 

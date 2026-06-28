@@ -41,6 +41,7 @@ pub async fn run() -> Result<()> {
                     timezone,
                 )
                 .with_profile(args.profile)
+                .with_account_load(!args.no_account_load)
                 .with_workspace(args.workspace)
                 .with_dump_state(dump_state),
             )
