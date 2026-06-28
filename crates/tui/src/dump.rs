@@ -2,6 +2,7 @@ use agent_finance_core::submit::SubmitMode;
 use serde::Serialize;
 
 use crate::account::AccountSnapshot;
+use crate::config::ProviderConfig;
 use crate::futures_state_ticket::FuturesStateTicketPreview;
 use crate::hints;
 use crate::model::{InteractionMode, Panel, WorkspaceKind};
@@ -11,7 +12,7 @@ use crate::provider_health::{ProviderHealthReport, ProviderHealthTask};
 use crate::state::{AppState, StagedChangeView, StagedSubmitRequest};
 use crate::transfer_ticket::TransferTicketPreview;
 
-const TUI_DUMP_SCHEMA_VERSION: u32 = 12;
+const TUI_DUMP_SCHEMA_VERSION: u32 = 13;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct TuiDump {
@@ -24,6 +25,7 @@ pub struct TuiDump {
     pub partial: bool,
     pub panes: Vec<TuiPaneDump>,
     pub provider_health: ProviderHealthReport,
+    pub provider_preferences: ProviderConfig,
     pub tasks: Vec<ProviderHealthTask>,
     pub default_submit_mode: SubmitMode,
     pub live_writes_enabled: bool,
@@ -65,6 +67,7 @@ impl TuiDump {
                 .into_iter()
                 .map(|panel| pane_dump(state, panel))
                 .collect(),
+            provider_preferences: state.providers.clone(),
             tasks: provider_health.tasks.clone(),
             default_submit_mode: state.default_submit_mode,
             live_writes_enabled: state.live_writes_enabled,
@@ -125,7 +128,7 @@ fn dump_errors(state: &AppState) -> Vec<String> {
 mod tests {
     use super::*;
     use crate::command::ActionId;
-    use crate::config::{TuiConfig, WorkspaceConfig};
+    use crate::config::{EquityProvider, ProviderConfig, TuiConfig, WorkspaceConfig};
     use crate::model::FloatingKind;
     use crate::state::{Action, StagedChangeEvent};
     use agent_finance_core::submit::SubmitMode;
@@ -210,6 +213,10 @@ mod tests {
             trading: crate::config::TradingConfig {
                 default_profile: Some("mainnet".to_string()),
             },
+            providers: ProviderConfig {
+                equity: EquityProvider::Robinhood,
+                crypto: agent_finance_market::args::CryptoProvider::Okx,
+            },
             ..TuiConfig::default()
         });
 
@@ -217,6 +224,8 @@ mod tests {
 
         assert_eq!(value["workspace"], "market");
         assert_eq!(value["trading_profile"], "mainnet");
+        assert_eq!(value["provider_preferences"]["equity"], "robinhood");
+        assert_eq!(value["provider_preferences"]["crypto"], "okx");
         assert!(
             value["panes"]
                 .as_array()

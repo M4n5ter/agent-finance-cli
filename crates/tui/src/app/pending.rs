@@ -2,15 +2,23 @@ use crate::config::{TuiConfig, TuiLaunch};
 use crate::scheduler::Scheduler;
 use crate::state::{Action, AppState, StagedChangeEvent};
 
+use super::{SymbolLoadRuntimes, request_provider_backed_symbol_loads, request_refresh};
+
 pub(super) struct PendingAppRequests<'a> {
     pub scheduler: &'a Scheduler,
     pub launch: &'a TuiLaunch,
     pub runtime_config: &'a TuiConfig,
     pub persisted_config: &'a TuiConfig,
+    pub next_refresh_generation: &'a mut u64,
+    pub symbol_loads: &'a mut SymbolLoadRuntimes,
 }
 
-pub(super) fn drain_pending_app_requests(context: PendingAppRequests<'_>, state: &mut AppState) {
+pub(super) fn drain_pending_app_requests(
+    mut context: PendingAppRequests<'_>,
+    state: &mut AppState,
+) {
     request_pending_staged_submit(context.scheduler, state);
+    apply_pending_provider_preferences(&mut context, state);
     persist_pending_config_save(&context, state);
 }
 
@@ -28,6 +36,21 @@ fn request_pending_staged_submit(scheduler: &Scheduler, state: &mut AppState) {
             });
             state.reduce(Action::Log(error.to_string()));
         }
+    }
+}
+
+fn apply_pending_provider_preferences(context: &mut PendingAppRequests<'_>, state: &mut AppState) {
+    let Some(providers) = state.take_pending_provider_preferences_update() else {
+        return;
+    };
+
+    match context.scheduler.update_provider_policy(providers) {
+        Ok(()) => {
+            state.invalidate_provider_backed_loads();
+            request_refresh(context.scheduler, state, context.next_refresh_generation);
+            request_provider_backed_symbol_loads(context.scheduler, state, context.symbol_loads);
+        }
+        Err(error) => state.reduce(Action::SchedulerFailed(error.to_string())),
     }
 }
 
@@ -70,6 +93,8 @@ mod tests {
         let persisted_config = TuiConfig::default();
         let scheduler = Scheduler::start(&launch, runtime_config.providers.clone());
         let mut state = AppState::from_config(runtime_config.clone());
+        let mut next_refresh_generation = 1;
+        let mut symbol_loads = SymbolLoadRuntimes::new();
 
         state.reduce(Action::ResizeDockedColumns {
             left_ratio: 31,
@@ -83,6 +108,8 @@ mod tests {
                 launch: &launch,
                 runtime_config: &runtime_config,
                 persisted_config: &persisted_config,
+                next_refresh_generation: &mut next_refresh_generation,
+                symbol_loads: &mut symbol_loads,
             },
             &mut state,
         );
@@ -111,6 +138,8 @@ mod tests {
         let runtime_config = launch.runtime_config(persisted_config.clone());
         let scheduler = Scheduler::start(&launch, runtime_config.providers.clone());
         let mut state = AppState::from_config(runtime_config.clone());
+        let mut next_refresh_generation = 1;
+        let mut symbol_loads = SymbolLoadRuntimes::new();
 
         state.reduce(Action::Execute(crate::command::ActionId::OpenFloating(
             crate::model::FloatingKind::TradingProfile,
@@ -134,6 +163,8 @@ mod tests {
                 launch: &launch,
                 runtime_config: &runtime_config,
                 persisted_config: &persisted_config,
+                next_refresh_generation: &mut next_refresh_generation,
+                symbol_loads: &mut symbol_loads,
             },
             &mut state,
         );
@@ -160,6 +191,9 @@ mod tests {
         let runtime_config = TuiConfig::default();
         let persisted_config = TuiConfig::default();
         let mut state = AppState::from_config(runtime_config.clone());
+        let scheduler = Scheduler::start(&launch, runtime_config.providers.clone());
+        let mut next_refresh_generation = 1;
+        let mut symbol_loads = SymbolLoadRuntimes::new();
 
         state.reduce(Action::ResizeDockedColumns {
             left_ratio: 31,
@@ -169,10 +203,12 @@ mod tests {
 
         persist_pending_config_save(
             &PendingAppRequests {
-                scheduler: &Scheduler::start(&launch, runtime_config.providers.clone()),
+                scheduler: &scheduler,
                 launch: &launch,
                 runtime_config: &runtime_config,
                 persisted_config: &persisted_config,
+                next_refresh_generation: &mut next_refresh_generation,
+                symbol_loads: &mut symbol_loads,
             },
             &mut state,
         );

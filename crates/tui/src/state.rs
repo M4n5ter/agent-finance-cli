@@ -8,13 +8,16 @@ use agent_finance_market::snapshot::MarketSnapshot;
 
 use crate::account::AccountSnapshot;
 use crate::command::{ActionId, CommandPaletteState};
-use crate::config::{FloatingConfig, LayoutConfig, PanelConfig, TuiConfig, WorkspaceConfig};
+use crate::config::{
+    FloatingConfig, LayoutConfig, PanelConfig, ProviderConfig, TuiConfig, WorkspaceConfig,
+};
 use crate::futures_state_ticket::{FuturesStateTicket, FuturesStateTicketPreview};
 use crate::keymap::KeymapConfig;
 use crate::model::{DockedPanels, FloatingKind, FloatingPane, FloatingSize, Panel, WorkspaceKind};
 use crate::order_ticket::{OrderTicket, OrderTicketPreview};
 use crate::profile_editor::ProfileEditorState;
 use crate::search::SymbolSearchState;
+use crate::settings_editor::SettingsEditorState;
 use crate::task_failure::TaskFailures;
 use crate::task_log::TaskLog;
 use crate::theme::ThemeConfig;
@@ -57,6 +60,8 @@ pub struct AppState {
     pub watchlist_add: WatchlistAddState,
     pub profile_editor: ProfileEditorState,
     pub keymap: KeymapConfig,
+    pub providers: ProviderConfig,
+    pub settings_editor: SettingsEditorState,
     pub task_log: TaskLog,
     pub provider_profiles: Vec<ProviderProfile>,
     pub market_snapshot: Option<MarketSnapshot>,
@@ -80,6 +85,7 @@ pub struct AppState {
     staged_changes: StagedChanges,
     pending_staged_confirmation: Option<StagedSubmitRequest>,
     pending_staged_submit: Option<StagedSubmitRequest>,
+    pending_provider_preferences_update: bool,
     pending_config_save: bool,
 }
 
@@ -106,6 +112,8 @@ impl AppState {
             watchlist_add: WatchlistAddState::default(),
             profile_editor: ProfileEditorState::default(),
             keymap: config.keymap,
+            providers: config.providers,
+            settings_editor: SettingsEditorState::default(),
             task_log: TaskLog::default(),
             provider_profiles: service::provider_profiles(),
             market_snapshot: None,
@@ -129,6 +137,7 @@ impl AppState {
             staged_changes: StagedChanges::default(),
             pending_staged_confirmation: None,
             pending_staged_submit: None,
+            pending_provider_preferences_update: false,
             pending_config_save: false,
         };
         state.apply_workspace_entry_policy();
@@ -156,6 +165,7 @@ impl AppState {
                 .collect(),
         };
         config.keymap = self.keymap.clone();
+        config.providers = self.providers.clone();
         config.theme = self.theme.clone();
         config.trading.default_profile = self.trading_profile.clone();
         config.normalize();
@@ -192,6 +202,27 @@ impl AppState {
 
     pub fn take_pending_staged_submit(&mut self) -> Option<StagedSubmitRequest> {
         self.pending_staged_submit.take()
+    }
+
+    pub fn take_pending_provider_preferences_update(&mut self) -> Option<ProviderConfig> {
+        self.pending_provider_preferences_update.then(|| {
+            self.pending_provider_preferences_update = false;
+            self.providers.clone()
+        })
+    }
+
+    pub fn invalidate_provider_backed_loads(&mut self) {
+        let cancelled_refresh = self.refresh.cancel();
+        let cancelled_history = self.history.reset();
+        let cancelled_evidence = self.evidence.reset();
+        self.market_snapshot = None;
+        if cancelled_refresh.is_some()
+            || cancelled_history.is_some()
+            || cancelled_evidence.is_some()
+        {
+            self.task_log
+                .info("provider preference change invalidated in-flight market data".to_string());
+        }
     }
 
     pub fn take_pending_config_save(&mut self) -> bool {
@@ -357,6 +388,23 @@ impl AppState {
         }
         self.selected_open_order =
             shift_index(self.selected_open_order.min(len - 1), len, direction);
+    }
+
+    fn adjust_selected_setting(&mut self, direction: isize) {
+        let changed = self
+            .settings_editor
+            .selected()
+            .adjust(&mut self.providers, direction);
+        if !changed {
+            return;
+        }
+
+        self.pending_provider_preferences_update = true;
+        self.mark_config_changed("providers");
+        self.task_log.info(format!(
+            "provider preferences updated: equity={} crypto={}",
+            self.providers.equity, self.providers.crypto
+        ));
     }
 
     pub(super) fn mark_config_changed(&mut self, section: &str) {
@@ -596,6 +644,10 @@ impl AppState {
                     .adjust_selected_field(direction, symbol.as_deref());
             }
             Action::MoveOpenOrderSelection(direction) => self.move_open_order_selection(direction),
+            Action::MoveSettingsSelection(direction) => {
+                self.settings_editor.move_selection(direction);
+            }
+            Action::AdjustSelectedSetting(direction) => self.adjust_selected_setting(direction),
             Action::StageOrderTicket => self.stage_order_ticket(),
             Action::StageTransferTicket => self.stage_transfer_ticket(),
             Action::StageFuturesStateTicket => self.stage_futures_state_ticket(),
@@ -982,6 +1034,8 @@ pub enum Action {
     MoveFuturesStateTicketField(isize),
     AdjustFuturesStateTicketField(isize),
     MoveOpenOrderSelection(isize),
+    MoveSettingsSelection(isize),
+    AdjustSelectedSetting(isize),
     StageOrderTicket,
     StageTransferTicket,
     StageFuturesStateTicket,

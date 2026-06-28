@@ -419,6 +419,22 @@ impl Default for ProviderConfig {
     }
 }
 
+impl ProviderConfig {
+    pub fn adjust_equity(&mut self, direction: isize) -> bool {
+        let next = self.equity.shift(direction);
+        let changed = next != self.equity;
+        self.equity = next;
+        changed
+    }
+
+    pub fn adjust_crypto(&mut self, direction: isize) -> bool {
+        let next = shift_crypto_provider(self.crypto, direction);
+        let changed = next != self.crypto;
+        self.crypto = next;
+        changed
+    }
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Eq, PartialEq)]
 pub struct TradingConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -504,6 +520,14 @@ pub enum EquityProvider {
 }
 
 impl EquityProvider {
+    pub const ALL: [Self; 5] = [
+        Self::Auto,
+        Self::Yahoo,
+        Self::YahooExtended,
+        Self::Stooq,
+        Self::Robinhood,
+    ];
+
     pub const fn label(self) -> &'static str {
         match self {
             Self::Auto => "auto",
@@ -526,6 +550,10 @@ impl EquityProvider {
             Self::Stooq => Provider::Stooq,
             Self::Robinhood => Provider::Robinhood,
         }
+    }
+
+    fn shift(self, direction: isize) -> Self {
+        shift_value(Self::ALL.as_slice(), self, direction)
     }
 }
 
@@ -556,6 +584,27 @@ impl FromStr for EquityProvider {
 
 fn default_equity_provider() -> EquityProvider {
     EquityProvider::Auto
+}
+
+const TUI_CRYPTO_PROVIDERS: [CryptoProvider; 5] = [
+    CryptoProvider::Auto,
+    CryptoProvider::Binance,
+    CryptoProvider::Coinbase,
+    CryptoProvider::Okx,
+    CryptoProvider::Coingecko,
+];
+
+fn shift_crypto_provider(provider: CryptoProvider, direction: isize) -> CryptoProvider {
+    shift_value(TUI_CRYPTO_PROVIDERS.as_slice(), provider, direction)
+}
+
+fn shift_value<T: Copy + Eq>(values: &[T], current: T, direction: isize) -> T {
+    let index = values
+        .iter()
+        .position(|value| *value == current)
+        .unwrap_or_default() as isize;
+    let next = (index + direction).rem_euclid(values.len() as isize) as usize;
+    values[next]
 }
 
 fn serialize_equity_provider<S>(

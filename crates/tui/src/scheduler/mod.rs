@@ -1,5 +1,6 @@
 use std::cell::Cell;
 use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
+use std::sync::{Arc, RwLock};
 use std::thread;
 
 use agent_finance_market::{
@@ -32,6 +33,7 @@ pub struct Scheduler {
     research_commands: Sender<ResearchCommand>,
     account_commands: Sender<AccountCommand>,
     write_commands: Sender<WriteCommand>,
+    provider_policy: Arc<RwLock<TuiProviderPolicy>>,
     events: Receiver<SchedulerEvent>,
     disconnected_reported: Cell<bool>,
 }
@@ -51,36 +53,50 @@ impl Scheduler {
             launch.timeout_seconds,
             &launch.timezone,
         );
-        let policy = TuiProviderPolicy::from(providers);
+        let policy = Arc::new(RwLock::new(TuiProviderPolicy::from(providers)));
 
-        let refresh_policy = policy.clone();
+        let refresh_policy = Arc::clone(&policy);
         spawn_scheduler_worker(
             "refresh",
             runtime.clone(),
             refresh_command_rx,
             event_tx.clone(),
-            move |tokio, runtime, command| {
-                handle_refresh_command(tokio, runtime, command, &refresh_policy)
+            move |tokio, runtime, command| match provider_policy_snapshot(&refresh_policy) {
+                Ok(policy) => handle_refresh_command(tokio, runtime, command, &policy),
+                Err(error) => SchedulerEvent::RefreshFailed {
+                    generation: command.generation,
+                    error: error.to_string(),
+                },
             },
         );
-        let history_policy = policy.clone();
+        let history_policy = Arc::clone(&policy);
         spawn_scheduler_worker(
             "history",
             runtime.clone(),
             history_command_rx,
             event_tx.clone(),
-            move |tokio, runtime, command| {
-                handle_history_command(tokio, runtime, command, &history_policy)
+            move |tokio, runtime, command| match provider_policy_snapshot(&history_policy) {
+                Ok(policy) => handle_history_command(tokio, runtime, command, &policy),
+                Err(error) => SchedulerEvent::HistoryFailed {
+                    generation: command.generation,
+                    symbol: command.symbol,
+                    error: error.to_string(),
+                },
             },
         );
-        let evidence_policy = policy;
+        let evidence_policy = Arc::clone(&policy);
         spawn_scheduler_worker(
             "evidence",
             runtime.clone(),
             evidence_command_rx,
             event_tx.clone(),
-            move |tokio, runtime, command| {
-                handle_evidence_command(tokio, runtime, command, &evidence_policy)
+            move |tokio, runtime, command| match provider_policy_snapshot(&evidence_policy) {
+                Ok(policy) => handle_evidence_command(tokio, runtime, command, &policy),
+                Err(error) => SchedulerEvent::EvidenceFailed {
+                    generation: command.generation,
+                    symbol: command.symbol,
+                    error: error.to_string(),
+                },
             },
         );
         spawn_scheduler_worker(
@@ -100,6 +116,7 @@ impl Scheduler {
             research_commands,
             account_commands,
             write_commands,
+            provider_policy: policy,
             events,
             disconnected_reported: Cell::new(false),
         }
@@ -153,6 +170,15 @@ impl Scheduler {
             .map_err(|error| anyhow!("failed to request TUI staged submit: {error}"))
     }
 
+    pub fn update_provider_policy(&self, providers: ProviderConfig) -> Result<()> {
+        let mut policy = self
+            .provider_policy
+            .write()
+            .map_err(|_| anyhow!("failed to update TUI provider policy: lock poisoned"))?;
+        *policy = TuiProviderPolicy::from(providers);
+        Ok(())
+    }
+
     pub fn try_recv(&self) -> Option<SchedulerEvent> {
         match self.events.try_recv() {
             Ok(event) => Some(event),
@@ -163,6 +189,13 @@ impl Scheduler {
             Err(TryRecvError::Disconnected) => None,
         }
     }
+}
+
+fn provider_policy_snapshot(policy: &Arc<RwLock<TuiProviderPolicy>>) -> Result<TuiProviderPolicy> {
+    policy
+        .read()
+        .map(|policy| policy.clone())
+        .map_err(|_| anyhow!("failed to read TUI provider policy: lock poisoned"))
 }
 
 #[derive(Debug)]
@@ -573,6 +606,27 @@ mod tests {
         assert_eq!(quote.crypto_provider, CryptoProvider::Okx);
         assert_eq!(history.provider, MarketDataProvider::Robinhood);
         assert_eq!(history.crypto_provider, CryptoProvider::Okx);
+        assert_eq!(evidence.provider, CryptoProvider::Okx);
+    }
+
+    #[test]
+    fn scheduler_provider_policy_can_be_updated_for_later_requests() {
+        let launch = TuiLaunch::new(Vec::new(), None, true);
+        let scheduler = Scheduler::start(&launch, ProviderConfig::default());
+
+        scheduler
+            .update_provider_policy(ProviderConfig {
+                equity: EquityProvider::Robinhood,
+                crypto: CryptoProvider::Okx,
+            })
+            .expect("update provider policy");
+
+        let policy = provider_policy_snapshot(&scheduler.provider_policy).expect("policy");
+        let quote = policy.public_quote_request(vec!["CRDO".to_string()]);
+        let evidence = policy.crypto_evidence_request("BTCUSDT".to_string());
+
+        assert_eq!(quote.equity_provider, MarketDataProvider::Robinhood);
+        assert_eq!(quote.crypto_provider, CryptoProvider::Okx);
         assert_eq!(evidence.provider, CryptoProvider::Okx);
     }
 }

@@ -92,6 +92,11 @@ impl<T> SelectedSymbolLoad<T> {
     pub(super) fn cancel(&mut self) -> Option<ActiveLoad<String>> {
         self.request.cancel()
     }
+
+    pub(super) fn reset(&mut self) -> Option<ActiveLoad<String>> {
+        self.snapshot = None;
+        self.request.cancel()
+    }
 }
 
 pub trait SymbolSnapshot {

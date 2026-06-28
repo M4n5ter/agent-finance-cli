@@ -29,6 +29,9 @@ pub fn mode_key_hints(state: &AppState) -> Vec<String> {
         InteractionMode::Normal if state.panels.focused() == Panel::IntentReview => {
             intent_review_key_hints()
         }
+        InteractionMode::Normal if state.panels.focused() == Panel::Settings => {
+            settings_key_hints()
+        }
         InteractionMode::Normal => normal_key_hints(state),
         InteractionMode::Command | InteractionMode::Search => Vec::new(),
         InteractionMode::Help | InteractionMode::Inspect => vec![
@@ -37,6 +40,18 @@ pub fn mode_key_hints(state: &AppState) -> Vec<String> {
             "q quit".to_string(),
         ],
     }
+}
+
+fn settings_key_hints() -> Vec<String> {
+    [
+        "up/down select setting",
+        "left/right adjust",
+        "enter next value",
+        "q quit",
+    ]
+    .into_iter()
+    .map(str::to_string)
+    .collect()
 }
 
 fn intent_review_key_hints() -> Vec<String> {
@@ -256,5 +271,23 @@ mod tests {
 
         assert!(hints.len() <= 20);
         assert!(hints.contains("workspace"));
+    }
+
+    #[test]
+    fn settings_focus_shows_provider_editor_hints() {
+        let mut state = AppState::from_config(TuiConfig::default());
+        state.reduce(Action::Execute(ActionId::SetWorkspace(
+            crate::model::WorkspaceKind::Settings,
+        )));
+
+        assert_eq!(
+            mode_key_hints(&state),
+            vec![
+                "up/down select setting",
+                "left/right adjust",
+                "enter next value",
+                "q quit",
+            ]
+        );
     }
 }

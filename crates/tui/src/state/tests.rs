@@ -11,6 +11,7 @@ use agent_finance_core::{
     Environment, FuturesStateChange, Market, OrderSpec, Provider, SignedReadRequest,
     SignedReadSnapshot,
 };
+use agent_finance_market::args::CryptoProvider;
 use agent_finance_market::crypto_evidence_snapshot::CryptoQuoteEvidenceSnapshot;
 use agent_finance_market::history_snapshot::HistorySnapshot;
 use agent_finance_market::research_snapshot::ResearchContextSnapshot;
@@ -1660,6 +1661,41 @@ fn trading_profile_editor_updates_exported_config_and_can_clear_profile() {
     assert_eq!(state.trading_profile, None);
     let config = state.export_config(&TuiConfig::default());
     assert_eq!(config.trading.default_profile, None);
+}
+
+#[test]
+fn settings_provider_preferences_edit_export_and_request_runtime_update() {
+    let mut state = AppState::from_config(TuiConfig {
+        workspace: WorkspaceConfig {
+            current: WorkspaceKind::Settings,
+        },
+        ..TuiConfig::default()
+    });
+
+    state.reduce(Action::AdjustSelectedSetting(1));
+
+    assert_eq!(state.providers.equity, crate::config::EquityProvider::Yahoo);
+    assert_eq!(state.config_changes, ["providers"]);
+    let pending = state
+        .take_pending_provider_preferences_update()
+        .expect("provider preference update");
+    assert_eq!(pending.equity, crate::config::EquityProvider::Yahoo);
+    assert!(state.take_pending_provider_preferences_update().is_none());
+
+    state.reduce(Action::MoveSettingsSelection(1));
+    state.reduce(Action::AdjustSelectedSetting(1));
+
+    assert_eq!(state.providers.crypto, CryptoProvider::Binance);
+    let pending = state
+        .take_pending_provider_preferences_update()
+        .expect("crypto provider preference update");
+    assert_eq!(pending.crypto, CryptoProvider::Binance);
+    let config = state.export_config(&TuiConfig::default());
+    assert_eq!(
+        config.providers.equity,
+        crate::config::EquityProvider::Yahoo
+    );
+    assert_eq!(config.providers.crypto, CryptoProvider::Binance);
 }
 
 #[test]

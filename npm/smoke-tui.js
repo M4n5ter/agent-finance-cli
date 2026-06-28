@@ -156,6 +156,7 @@ function smokeDumpState() {
     "watchlist_add_query",
     "panes",
     "provider_health",
+    "provider_preferences",
     "tasks",
     "transfer_ticket",
     "futures_state_ticket",
@@ -170,8 +171,15 @@ function smokeDumpState() {
   if (dump.workspace !== "market") {
     fail(`dump-state workspace mismatch: ${dump.workspace}`);
   }
-  if (dump.schema_version !== 12) {
+  if (dump.schema_version !== 13) {
     fail(`dump-state schema_version mismatch: ${dump.schema_version}`);
+  }
+  if (
+    !dump.provider_preferences ||
+    dump.provider_preferences.equity !== "yahoo" ||
+    dump.provider_preferences.crypto !== "binance"
+  ) {
+    fail("dump-state provider_preferences missing or unexpected");
   }
   if (Object.prototype.hasOwnProperty.call(dump, "write_sessions")) {
     fail("dump-state JSON still exposes legacy write_sessions");

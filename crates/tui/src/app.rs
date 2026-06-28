@@ -175,6 +175,8 @@ fn run_loop(
                         launch: context.launch,
                         runtime_config: context.runtime_config,
                         persisted_config: context.persisted_config,
+                        next_refresh_generation: context.next_refresh_generation,
+                        symbol_loads: context.symbol_loads,
                     },
                     state,
                 );
@@ -345,6 +347,16 @@ fn request_symbol_loads(
 ) {
     for kind in SymbolTaskKind::ALL {
         request_symbol_load(scheduler, state, runtimes.runtime_mut(kind), kind, force);
+    }
+}
+
+fn request_provider_backed_symbol_loads(
+    scheduler: &Scheduler,
+    state: &mut AppState,
+    runtimes: &mut SymbolLoadRuntimes,
+) {
+    for kind in [SymbolTaskKind::History, SymbolTaskKind::Evidence] {
+        request_symbol_load(scheduler, state, runtimes.runtime_mut(kind), kind, true);
     }
 }
 
@@ -758,6 +770,78 @@ mod tests {
             prepare_symbol_task_request(&mut state, &mut runtime, SymbolTaskKind::History, true),
             None
         );
+    }
+
+    #[test]
+    fn provider_preference_update_invalidates_in_flight_provider_backed_loads() {
+        let launch = crate::config::TuiLaunch::new(Vec::new(), None, true);
+        let runtime_config = crate::config::TuiConfig {
+            watchlist: vec!["BTCUSDT".to_string()],
+            ..crate::config::TuiConfig::default()
+        };
+        let persisted_config = runtime_config.clone();
+        let scheduler = Scheduler::start(&launch, runtime_config.providers.clone());
+        let mut state = AppState::from_config(runtime_config.clone());
+        let mut next_refresh_generation = 1;
+        let mut symbol_loads = SymbolLoadRuntimes::new();
+
+        assert!(prepare_refresh_request(&mut state, &mut next_refresh_generation).is_some());
+        for kind in SymbolTaskKind::ALL {
+            assert!(
+                prepare_symbol_task_request(
+                    &mut state,
+                    symbol_loads.runtime_mut(kind),
+                    kind,
+                    false
+                )
+                .is_some(),
+                "{kind:?} should start"
+            );
+        }
+        state.reduce(Action::AdjustSelectedSetting(1));
+
+        drain_pending_app_requests(
+            PendingAppRequests {
+                scheduler: &scheduler,
+                launch: &launch,
+                runtime_config: &runtime_config,
+                persisted_config: &persisted_config,
+                next_refresh_generation: &mut next_refresh_generation,
+                symbol_loads: &mut symbol_loads,
+            },
+            &mut state,
+        );
+
+        assert_eq!(next_refresh_generation, 3);
+        assert!(state.refresh_loading());
+        assert!(state.history.loading());
+        assert!(state.evidence.loading());
+        assert!(state.research.loading());
+        assert_eq!(symbol_loads.history.next_generation, 3);
+        assert_eq!(symbol_loads.evidence.next_generation, 3);
+        assert_eq!(symbol_loads.research.next_generation, 2);
+
+        state.reduce(Action::SnapshotLoaded {
+            generation: 1,
+            snapshot: market_snapshot(),
+        });
+        state.reduce(Action::HistoryLoaded {
+            generation: 1,
+            snapshot: history_snapshot("BTCUSDT"),
+        });
+        state.reduce(Action::EvidenceLoaded {
+            generation: 1,
+            snapshot: evidence_snapshot("BTCUSDT"),
+        });
+        state.reduce(Action::ResearchLoaded {
+            generation: 1,
+            snapshot: research_snapshot("BTCUSDT"),
+        });
+
+        assert!(state.market_snapshot.is_none());
+        assert!(state.history.selected_snapshot("BTCUSDT").is_none());
+        assert!(state.evidence.selected_snapshot("BTCUSDT").is_none());
+        assert!(state.research.selected_snapshot("BTCUSDT").is_some());
     }
 
     #[test]

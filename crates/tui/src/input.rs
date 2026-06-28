@@ -53,6 +53,11 @@ pub fn key_action(state: &AppState, key: KeyEvent) -> Option<Action> {
     {
         return Some(action);
     }
+    if state.panels.focused() == Panel::Settings
+        && let Some(action) = settings_key_action(key)
+    {
+        return Some(action);
+    }
     if state.panels.focused() == Panel::IntentReview
         && let Some(action) = intent_review_key_action(key)
     {
@@ -246,6 +251,18 @@ fn account_key_action(key: KeyEvent) -> Option<Action> {
         KeyCode::Char('f') => Some(Action::StageFuturesStateTicket),
         KeyCode::Char('t') => Some(Action::StageTransferTicket),
         KeyCode::Char('c') => Some(Action::StageSelectedOpenOrderCancel),
+        _ => None,
+    }
+}
+
+fn settings_key_action(key: KeyEvent) -> Option<Action> {
+    match key.code {
+        KeyCode::Up | KeyCode::Char('k') => Some(Action::MoveSettingsSelection(-1)),
+        KeyCode::Down | KeyCode::Char('j') => Some(Action::MoveSettingsSelection(1)),
+        KeyCode::Left | KeyCode::Char('h') => Some(Action::AdjustSelectedSetting(-1)),
+        KeyCode::Right | KeyCode::Char('l') | KeyCode::Enter => {
+            Some(Action::AdjustSelectedSetting(1))
+        }
         _ => None,
     }
 }
@@ -873,5 +890,27 @@ mod tests {
         state.reduce(Action::StageOrderTicket);
         state.reduce(Action::SubmitStagedChange);
         state
+    }
+
+    #[test]
+    fn settings_focus_routes_provider_preference_controls() {
+        let mut state = AppState::from_config(crate::config::TuiConfig::default());
+        state.reduce(Action::Execute(ActionId::SetWorkspace(
+            WorkspaceKind::Settings,
+        )));
+        state.reduce(Action::Execute(ActionId::FocusPanel(Panel::Settings)));
+
+        assert_eq!(
+            key_action(&state, KeyEvent::from(KeyCode::Down)),
+            Some(Action::MoveSettingsSelection(1))
+        );
+        assert_eq!(
+            key_action(&state, KeyEvent::from(KeyCode::Right)),
+            Some(Action::AdjustSelectedSetting(1))
+        );
+        assert_eq!(
+            key_action(&state, KeyEvent::from(KeyCode::Char('h'))),
+            Some(Action::AdjustSelectedSetting(-1))
+        );
     }
 }

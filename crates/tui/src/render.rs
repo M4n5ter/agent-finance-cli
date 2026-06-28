@@ -34,7 +34,7 @@ pub fn render(frame: &mut Frame<'_>, state: &AppState) {
 mod tests {
     use super::*;
     use crate::command::ActionId;
-    use crate::config::TuiConfig;
+    use crate::config::{EquityProvider, ProviderConfig, TuiConfig};
     use crate::model::{FloatingKind, WorkspaceKind};
     use crate::theme::{ThemeColor, ThemeConfig};
     use agent_finance_core::{
@@ -370,6 +370,10 @@ mod tests {
             workspace: crate::config::WorkspaceConfig {
                 current: WorkspaceKind::Settings,
             },
+            providers: ProviderConfig {
+                equity: EquityProvider::Robinhood,
+                crypto: agent_finance_market::args::CryptoProvider::Okx,
+            },
             ..TuiConfig::default()
         });
         state.config_changes.push("watchlist".to_string());
@@ -381,7 +385,11 @@ mod tests {
         assert!(text.contains("dirty config: watchlist"));
         assert!(text.contains("watchlist:"));
         assert!(text.contains("trading profile: mainnet"));
-        assert!(text.contains("provider profiles:"));
+        assert!(text.contains("provider preferences: equity=robinhood  crypto=okx"));
+        assert!(text.contains("> equity provider: robinhood"));
+        assert!(text.contains("crypto provider: okx"));
+        assert!(text.contains("up/down select setting"));
+        assert!(text.contains("provider capability profiles:"));
         assert!(text.contains("normal key bindings:"));
     }
 
