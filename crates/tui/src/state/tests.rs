@@ -1229,6 +1229,37 @@ fn focusing_hidden_panel_moves_to_a_workspace_that_can_show_it() {
 }
 
 #[test]
+fn entering_settings_workspace_focuses_its_primary_panel() {
+    let mut state = AppState::from_config(TuiConfig::default());
+    assert_eq!(state.panels.focused(), Panel::Watchlist);
+
+    state.reduce(Action::SetWorkspace(WorkspaceKind::Settings));
+
+    assert_eq!(state.workspace, WorkspaceKind::Settings);
+    assert_eq!(state.panels.focused(), Panel::Settings);
+    assert!(state.visible_panels().contains(&Panel::Settings));
+}
+
+#[test]
+fn settings_workspace_initialization_opens_its_primary_panel_for_old_custom_layouts() {
+    let state = AppState::from_config(TuiConfig {
+        workspace: crate::config::WorkspaceConfig {
+            current: WorkspaceKind::Settings,
+        },
+        panels: crate::config::PanelConfig {
+            open: vec![Panel::Watchlist, Panel::ProviderHealth, Panel::TaskLog],
+            focused: Panel::Watchlist,
+        },
+        ..TuiConfig::default()
+    });
+
+    assert_eq!(state.workspace, WorkspaceKind::Settings);
+    assert_eq!(state.panels.focused(), Panel::Settings);
+    assert!(state.panels.contains(Panel::Settings));
+    assert!(state.visible_panels().contains(&Panel::Settings));
+}
+
+#[test]
 fn command_palette_show_panel_routes_to_visible_workspace() {
     let mut state = AppState::from_config(TuiConfig::default());
     state.reduce(Action::SetWorkspace(WorkspaceKind::Research));

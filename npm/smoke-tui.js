@@ -85,18 +85,19 @@ try {
   }
 
   runTmux(["send-keys", "-t", session, "Enter"]);
-  if (!waitForScreen(["mode: normal", "focus: Quote / Sessions"], 4_000)) {
+  const afterQuoteCommand = waitForScreen(["mode: normal", "Quote / Sessions"], 4_000);
+  if (!afterQuoteCommand || afterQuoteCommand.includes("Command Palette")) {
     fail("TUI did not execute the filtered command palette action");
   }
 
   runTmux(["send-keys", "-t", session, "z"]);
-  const zoomed = waitForScreen(["Quote / Sessions", "focus: Quote / Sessions"], 4_000);
+  const zoomed = waitForScreen(["Quote / Sessions"], 4_000);
   if (!zoomed || zoomed.includes("Watchlist")) {
     fail("TUI did not zoom the focused pane");
   }
 
   runTmux(["send-keys", "-t", session, "z"]);
-  if (!waitForScreen(["Watchlist", "Polymarket", "News / Research", "Quote / Sessions", "focus: Quote / Sessions"], 4_000)) {
+  if (!waitForScreen(["Watchlist", "Polymarket", "News / Research", "Quote / Sessions"], 4_000)) {
     fail("TUI did not restore the workspace layout after zoom");
   }
 
@@ -169,7 +170,7 @@ function smokeDumpState() {
   if (dump.workspace !== "crypto") {
     fail(`dump-state workspace mismatch: ${dump.workspace}`);
   }
-  if (dump.schema_version !== 10) {
+  if (dump.schema_version !== 11) {
     fail(`dump-state schema_version mismatch: ${dump.schema_version}`);
   }
   if (Object.prototype.hasOwnProperty.call(dump, "write_sessions")) {

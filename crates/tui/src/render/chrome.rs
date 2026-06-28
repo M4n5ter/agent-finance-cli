@@ -96,7 +96,9 @@ pub(super) fn render_floating(
             Line::from("Tab/Shift-Tab: move pane focus"),
             Line::from("z: zoom focused pane or restore workspace layout"),
             Line::from("j/k or arrows: switch selected symbol"),
-            Line::from("1-6: focus watchlist, quote, history, evidence, Polymarket, research"),
+            Line::from(
+                "1-7: focus watchlist, quote, history, evidence, Polymarket, research, settings",
+            ),
             Line::from(": open command palette"),
             Line::from("/ search watchlist symbols"),
             Line::from("Enter: execute selected command in command palette"),
@@ -427,33 +429,68 @@ fn status_detail(state: &AppState, symbol: &str, errors: usize, width: u16) -> S
         "ready"
     };
 
-    if width < 42 {
-        return format!(
-            " {symbol} {} live:{}{} {runtime} e:{errors} ",
-            state.interaction_mode().label(),
-            live_label(state),
-            compact_config_segment(state),
-        );
-    }
+    let compact = format!(
+        " {symbol} {} live:{}{} {runtime} e:{errors} ",
+        state.interaction_mode().label(),
+        live_label(state),
+        compact_config_segment(state),
+    );
+    let compact_without_errors = format!(
+        " {symbol} {} live:{}{} {runtime} ",
+        state.interaction_mode().label(),
+        live_label(state),
+        compact_config_segment(state),
+    );
+    let terse = format!(" {symbol} {runtime} ");
 
-    if width < 82 {
+    let (medium, medium_without_errors, semantic_short) =
         if let Some(profile) = state.trading_profile.as_deref() {
-            return format!(
-                " {symbol} | profile: {profile} | live:{}{} | {} | {runtime} | e:{errors} ",
-                live_label(state),
-                config_segment(state),
-                state.effective_submit_mode()
-            );
-        }
-        return format!(
-            " {symbol} | mode: {} | live:{}{} | {} | focus: {} | {runtime} | e:{errors} ",
-            state.interaction_mode().label(),
-            live_label(state),
-            config_segment(state),
-            state.effective_submit_mode(),
-            state.panels.focused().title(),
-        );
-    }
+            (
+                format!(
+                    " {symbol} | profile: {profile} | live:{}{} | {} | {runtime} | e:{errors} ",
+                    live_label(state),
+                    config_segment(state),
+                    state.effective_submit_mode()
+                ),
+                format!(
+                    " {symbol} | profile: {profile} | live:{}{} | {} | {runtime} ",
+                    live_label(state),
+                    config_segment(state),
+                    state.effective_submit_mode()
+                ),
+                format!(
+                    " {symbol} profile: {profile} live:{}{} {} {runtime} ",
+                    live_label(state),
+                    compact_config_segment(state),
+                    state.effective_submit_mode()
+                ),
+            )
+        } else {
+            (
+                format!(
+                    " {symbol} | mode: {} | live:{}{} | {} | focus: {} | {runtime} | e:{errors} ",
+                    state.interaction_mode().label(),
+                    live_label(state),
+                    config_segment(state),
+                    state.effective_submit_mode(),
+                    state.panels.focused().title(),
+                ),
+                format!(
+                    " {symbol} | mode: {} | live:{}{} | {} | {runtime} ",
+                    state.interaction_mode().label(),
+                    live_label(state),
+                    config_segment(state),
+                    state.effective_submit_mode(),
+                ),
+                format!(
+                    " {symbol} mode: {} live:{}{} {} {runtime} ",
+                    state.interaction_mode().label(),
+                    live_label(state),
+                    compact_config_segment(state),
+                    state.effective_submit_mode(),
+                ),
+            )
+        };
 
     let profile = state
         .trading_profile
@@ -470,7 +507,27 @@ fn status_detail(state: &AppState, symbol: &str, errors: usize, width: u16) -> S
         state.workspace.panels().len(),
     );
     let hint_budget = width.saturating_sub(prefix.len() as u16 + 1) as usize;
-    format!("{}{} ", prefix, hints::status_key_hints(state, hint_budget))
+    let long = format!("{}{} ", prefix, hints::status_key_hints(state, hint_budget));
+    fit_status_detail(
+        width,
+        [
+            long,
+            medium,
+            medium_without_errors,
+            semantic_short,
+            compact,
+            compact_without_errors,
+            terse,
+        ],
+    )
+}
+
+fn fit_status_detail(width: u16, candidates: impl IntoIterator<Item = String>) -> String {
+    let width = width as usize;
+    candidates
+        .into_iter()
+        .find(|candidate| candidate.len() <= width)
+        .unwrap_or_default()
 }
 
 fn write_label(state: &AppState) -> String {

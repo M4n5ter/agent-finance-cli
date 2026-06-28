@@ -11,6 +11,8 @@ use crate::provider_health::{ProviderHealthReport, ProviderHealthTask};
 use crate::state::{AppState, StagedChangeView, StagedSubmitRequest};
 use crate::transfer_ticket::TransferTicketPreview;
 
+const TUI_DUMP_SCHEMA_VERSION: u32 = 11;
+
 #[derive(Debug, Clone, Serialize)]
 pub struct TuiDump {
     pub schema_version: u32,
@@ -52,7 +54,7 @@ impl TuiDump {
     pub fn from_state(state: &AppState, partial: bool) -> Self {
         let provider_health = ProviderHealthReport::from_state(state);
         Self {
-            schema_version: 10,
+            schema_version: TUI_DUMP_SCHEMA_VERSION,
             workspace: state.workspace,
             mode: state.interaction_mode(),
             selected_symbol: state.selected_symbol().map(ToString::to_string),
@@ -159,6 +161,44 @@ mod tests {
                 .iter()
                 .any(|pane| pane.panel == Panel::Research && !pane.visible)
         );
+        assert!(
+            dump.panes
+                .iter()
+                .any(|pane| pane.panel == Panel::Settings && !pane.visible)
+        );
+    }
+
+    #[test]
+    fn dump_exposes_settings_workspace_panels() {
+        let state = AppState::from_config(TuiConfig {
+            watchlist: vec!["AAPL".to_string(), "BTCUSDT".to_string()],
+            workspace: WorkspaceConfig {
+                current: WorkspaceKind::Settings,
+            },
+            ..TuiConfig::default()
+        });
+
+        let dump = TuiDump::from_state(&state, false);
+
+        assert_eq!(dump.workspace, WorkspaceKind::Settings);
+        for panel in [
+            Panel::Settings,
+            Panel::Watchlist,
+            Panel::ProviderHealth,
+            Panel::TaskLog,
+        ] {
+            assert!(
+                dump.panes
+                    .iter()
+                    .any(|pane| pane.panel == panel && pane.visible),
+                "{panel:?} should be visible in settings workspace"
+            );
+        }
+        assert!(
+            dump.panes
+                .iter()
+                .any(|pane| pane.panel == Panel::Quote && !pane.visible)
+        );
     }
 
     #[test]
@@ -235,7 +275,7 @@ mod tests {
 
         let value = serde_json::to_value(TuiDump::from_state(&state, true)).expect("serialize");
 
-        assert_eq!(value["schema_version"], 10);
+        assert_eq!(value["schema_version"], TUI_DUMP_SCHEMA_VERSION);
         assert_eq!(value["default_submit_mode"], "live");
         assert_eq!(value["live_writes_enabled"], false);
         assert_eq!(value["effective_submit_mode"], "dry-run");
@@ -310,7 +350,7 @@ mod tests {
         state.reduce(Action::SubmitStagedChange);
 
         let value = serde_json::to_value(TuiDump::from_state(&state, true)).expect("serialize");
-        assert_eq!(value["schema_version"], 10);
+        assert_eq!(value["schema_version"], TUI_DUMP_SCHEMA_VERSION);
         assert_eq!(
             value["pending_staged_confirmation"]["id"],
             staged_change_id.as_str()

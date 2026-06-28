@@ -200,6 +200,7 @@ impl AppState {
     pub(super) fn set_workspace(&mut self, workspace: WorkspaceKind) {
         self.workspace = workspace;
         self.clear_zoom();
+        self.apply_workspace_entry_policy();
         self.ensure_visible_focus();
     }
 
@@ -228,6 +229,17 @@ impl AppState {
         }
 
         self.panels.open_panel(self.workspace.default_panel());
+    }
+
+    pub(super) fn apply_workspace_entry_policy(&mut self) {
+        let Some(panel) = self.workspace.entry_focus_panel() else {
+            return;
+        };
+        if self.panels.contains(panel) {
+            self.panels.focus(panel);
+        } else {
+            self.panels.open_panel(panel);
+        }
     }
 
     fn workspace_contains(&self, panel: Panel) -> bool {

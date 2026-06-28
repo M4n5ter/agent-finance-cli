@@ -9,6 +9,7 @@ mod chrome;
 mod history;
 mod panels;
 mod provider_health;
+mod settings;
 mod widgets;
 
 use chrome::{render_floating, render_status};
@@ -358,6 +359,30 @@ mod tests {
         assert!(text.contains("futures state ticket"));
         assert!(text.contains("blocked: USD-M futures symbol is required"));
         assert!(text.contains("No account snapshot loaded yet"));
+    }
+
+    #[test]
+    fn settings_workspace_renders_configuration_cockpit() {
+        let mut state = AppState::from_config(TuiConfig {
+            trading: crate::config::TradingConfig {
+                default_profile: Some("mainnet".to_string()),
+            },
+            workspace: crate::config::WorkspaceConfig {
+                current: WorkspaceKind::Settings,
+            },
+            ..TuiConfig::default()
+        });
+        state.config_changes.push("watchlist".to_string());
+
+        let text = render_to_text_grid(&state, 120, 32);
+
+        assert!(text.contains("configuration cockpit"));
+        assert!(text.contains("workspace: settings"));
+        assert!(text.contains("dirty config: watchlist"));
+        assert!(text.contains("watchlist:"));
+        assert!(text.contains("trading profile: mainnet"));
+        assert!(text.contains("provider profiles:"));
+        assert!(text.contains("normal key bindings:"));
     }
 
     #[test]

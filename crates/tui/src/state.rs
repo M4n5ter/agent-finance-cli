@@ -131,6 +131,7 @@ impl AppState {
             pending_staged_submit: None,
             pending_config_save: false,
         };
+        state.apply_workspace_entry_policy();
         state.ensure_visible_focus();
         state
     }

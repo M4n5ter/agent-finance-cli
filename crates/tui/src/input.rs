@@ -364,6 +364,10 @@ mod tests {
             key_action(&state, KeyEvent::from(KeyCode::Char('5'))),
             Some(Action::Execute(ActionId::FocusPanel(Panel::Polymarket)))
         );
+        assert_eq!(
+            key_action(&state, KeyEvent::from(KeyCode::Char('7'))),
+            Some(Action::Execute(ActionId::FocusPanel(Panel::Settings)))
+        );
     }
 
     #[test]

@@ -12,16 +12,18 @@ pub enum WorkspaceKind {
     Research,
     Crypto,
     Providers,
+    Settings,
 }
 
 impl WorkspaceKind {
-    pub const ALL: [Self; 6] = [
+    pub const ALL: [Self; 7] = [
         Self::Overview,
         Self::Trade,
         Self::Account,
         Self::Research,
         Self::Crypto,
         Self::Providers,
+        Self::Settings,
     ];
 
     pub const fn title(self) -> &'static str {
@@ -32,6 +34,7 @@ impl WorkspaceKind {
             Self::Research => "Research",
             Self::Crypto => "Crypto",
             Self::Providers => "Providers",
+            Self::Settings => "Settings",
         }
     }
 
@@ -79,11 +82,24 @@ impl WorkspaceKind {
                 Panel::TaskLog,
                 Panel::Quote,
             ],
+            Self::Settings => &[
+                Panel::Settings,
+                Panel::Watchlist,
+                Panel::ProviderHealth,
+                Panel::TaskLog,
+            ],
         }
     }
 
     pub const fn default_panel(self) -> Panel {
         self.panels()[0]
+    }
+
+    pub const fn entry_focus_panel(self) -> Option<Panel> {
+        match self {
+            Self::Settings => Some(Self::Settings.default_panel()),
+            _ => None,
+        }
     }
 
     pub fn shift(self, direction: isize) -> Self {
@@ -103,6 +119,7 @@ impl WorkspaceKind {
             Self::Research => "research",
             Self::Crypto => "crypto",
             Self::Providers => "providers",
+            Self::Settings => "settings",
         }
     }
 
@@ -114,6 +131,7 @@ impl WorkspaceKind {
             "research",
             "crypto",
             "providers",
+            "settings",
         ]
     }
 }
@@ -135,6 +153,7 @@ impl FromStr for WorkspaceKind {
             "research" => Ok(Self::Research),
             "crypto" => Ok(Self::Crypto),
             "providers" => Ok(Self::Providers),
+            "settings" => Ok(Self::Settings),
             _ => Err(format!("unknown workspace {value}")),
         }
     }
@@ -177,10 +196,11 @@ pub enum Panel {
     Research,
     ProviderHealth,
     TaskLog,
+    Settings,
 }
 
 impl Panel {
-    pub const ALL: [Self; 11] = [
+    pub const ALL: [Self; 12] = [
         Self::Watchlist,
         Self::Quote,
         Self::OrderTicket,
@@ -192,6 +212,7 @@ impl Panel {
         Self::Research,
         Self::ProviderHealth,
         Self::TaskLog,
+        Self::Settings,
     ];
 
     pub const fn title(self) -> &'static str {
@@ -207,6 +228,7 @@ impl Panel {
             Self::Research => "News / Research",
             Self::ProviderHealth => "Provider Health",
             Self::TaskLog => "Task Log",
+            Self::Settings => "Settings",
         }
     }
 
@@ -223,6 +245,7 @@ impl Panel {
             Self::Research => 8,
             Self::ProviderHealth => 9,
             Self::TaskLog => 10,
+            Self::Settings => 11,
         }
     }
 }

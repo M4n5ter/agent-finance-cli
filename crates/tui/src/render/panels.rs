@@ -18,6 +18,7 @@ use crate::theme::ThemeConfig;
 use super::account::render_account;
 use super::history;
 use super::provider_health;
+use super::settings::render_settings;
 use super::widgets::{compact_text, format_price, format_volume, panel_block};
 
 pub(super) fn render_docked(frame: &mut Frame<'_>, state: &AppState, layout: &CockpitLayout) {
@@ -37,6 +38,7 @@ pub(super) fn render_docked(frame: &mut Frame<'_>, state: &AppState, layout: &Co
             Panel::Research => render_research(frame, state, area),
             Panel::ProviderHealth => render_provider_health(frame, state, area),
             Panel::TaskLog => render_task_log(frame, state, area),
+            Panel::Settings => render_settings(frame, state, area),
         }
     }
 }

@@ -30,6 +30,10 @@ impl KeymapConfig {
         self.overrides.is_empty()
     }
 
+    pub fn normal_len(&self) -> usize {
+        self.normal.len()
+    }
+
     pub fn normalize(&mut self) {
         *self = Self::from_overrides(std::mem::take(&mut self.overrides));
     }
@@ -238,6 +242,7 @@ fn default_normal_bindings() -> Vec<KeyBinding> {
         ("4", ActionId::FocusPanel(Panel::Evidence)),
         ("5", ActionId::FocusPanel(Panel::Polymarket)),
         ("6", ActionId::FocusPanel(Panel::Research)),
+        ("7", ActionId::FocusPanel(Panel::Settings)),
     ]
     .into_iter()
     .map(|(key, action)| KeyBinding {

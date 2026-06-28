@@ -310,7 +310,8 @@ fn dump_is_ready(state: &AppState) -> bool {
         | Panel::OrderTicket
         | Panel::IntentReview
         | Panel::ProviderHealth
-        | Panel::TaskLog => true,
+        | Panel::TaskLog
+        | Panel::Settings => true,
     })
 }
 

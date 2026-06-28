@@ -165,7 +165,7 @@ macro_rules! action {
     };
 }
 
-pub const ACTION_REGISTRY: [ActionSpec; 52] = [
+pub const ACTION_REGISTRY: [ActionSpec; 55] = [
     action!(
         "select-next-symbol",
         ActionId::SelectSymbolBy(1),
@@ -353,6 +353,12 @@ pub const ACTION_REGISTRY: [ActionSpec; 52] = [
         "Show provider health and runtime task status"
     ),
     action!(
+        "workspace-settings",
+        ActionId::SetWorkspace(WorkspaceKind::Settings),
+        "Workspace settings",
+        "Show configuration maintenance controls"
+    ),
+    action!(
         "focus-watchlist",
         ActionId::FocusPanel(Panel::Watchlist),
         "Focus watchlist",
@@ -411,6 +417,12 @@ pub const ACTION_REGISTRY: [ActionSpec; 52] = [
         ActionId::FocusPanel(Panel::TaskLog),
         "Focus task log",
         "Move keyboard focus to runtime task log"
+    ),
+    action!(
+        "focus-settings",
+        ActionId::FocusPanel(Panel::Settings),
+        "Focus settings",
+        "Move keyboard focus to configuration maintenance"
     ),
     action!(
         "toggle-watchlist",
@@ -473,6 +485,12 @@ pub const ACTION_REGISTRY: [ActionSpec; 52] = [
         "Show or hide the runtime task log"
     ),
     action!(
+        "toggle-settings",
+        ActionId::TogglePanel(Panel::Settings),
+        "Toggle settings",
+        "Show or hide configuration maintenance"
+    ),
+    action!(
         "close-command-palette",
         ActionId::CloseCommandPalette,
         "Close command palette",
@@ -512,6 +530,26 @@ mod tests {
             palette.selected_action(),
             Some(ActionId::OpenFloating(FloatingKind::TradingProfile))
         );
+    }
+
+    #[test]
+    fn command_palette_can_route_to_settings_workspace() {
+        let mut palette = CommandPaletteState::default();
+
+        for character in "settings".chars() {
+            palette.edit_query(InputRequest::InsertChar(character));
+        }
+
+        assert_eq!(
+            palette.selected_action(),
+            Some(ActionId::SetWorkspace(WorkspaceKind::Settings))
+        );
+        let visible = (0..palette.len())
+            .filter_map(|index| palette.command_at(index))
+            .map(|command| command.title)
+            .collect::<Vec<_>>();
+        assert!(visible.contains(&"Focus settings"));
+        assert!(visible.contains(&"Toggle settings"));
     }
 
     #[test]

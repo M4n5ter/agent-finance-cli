@@ -160,6 +160,7 @@ fn pane_data_state(state: &AppState, panel: Panel) -> PaneDataState {
             },
             false,
         ),
+        Panel::Settings => PaneDataState::new(false, SelectedDataState::Fresh, false),
     }
 }
 

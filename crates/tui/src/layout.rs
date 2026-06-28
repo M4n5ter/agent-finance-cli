@@ -11,8 +11,9 @@ const MIN_PANEL_HEIGHT: u16 = 4;
 const STATUS_HEIGHT: u16 = 1;
 const MIDDLE_COLUMN_SPECS: [ColumnSpec; 3] = [
     ColumnSpec::new(
-        &[Panel::OrderTicket, Panel::IntentReview],
+        &[Panel::Settings, Panel::OrderTicket, Panel::IntentReview],
         &[
+            (Panel::Settings, 34),
             (Panel::OrderTicket, 42),
             (Panel::IntentReview, 28),
             (Panel::Account, 28),
@@ -264,6 +265,7 @@ fn active_docked_groups(config: &LayoutConfig, open_panels: &[Panel]) -> Vec<(Do
             DockedGroup::Middle,
             config.main_ratio,
             &[
+                Panel::Settings,
                 Panel::OrderTicket,
                 Panel::IntentReview,
                 Panel::Account,
@@ -728,12 +730,14 @@ mod tests {
         let layout = build(area, &config, &[], &Panel::ALL);
 
         assert_eq!(layout.panel_at(2, 2), Some(Panel::Watchlist));
-        assert_eq!(layout.panel_at(80, 2), Some(Panel::OrderTicket));
-        assert_eq!(layout.panel_at(80, 22), Some(Panel::IntentReview));
-        assert_eq!(layout.panel_at(80, 30), Some(Panel::Account));
-        assert_eq!(layout.panel_at(80, 40), Some(Panel::Quote));
-        assert_eq!(layout.panel_at(150, 36), Some(Panel::Research));
-        assert_eq!(layout.panel_at(150, 22), Some(Panel::Polymarket));
+        for panel in Panel::ALL {
+            let rect = layout.panel_rect(panel).expect("panel is open");
+            assert_eq!(
+                layout.panel_at(rect.x + rect.width / 2, rect.y + rect.height / 2),
+                Some(panel),
+                "{panel:?} center should hit its own panel"
+            );
+        }
 
         assert_eq!(
             layout.hit_test(layout.panel_rect(Panel::Watchlist).unwrap().right(), 2),
