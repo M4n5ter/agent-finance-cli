@@ -1,5 +1,6 @@
 mod account;
 mod account_controls;
+mod account_holdings;
 mod account_load;
 mod account_panel_view;
 mod action_line_view;

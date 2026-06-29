@@ -7,6 +7,7 @@ use serde::Serialize;
 use std::cmp::Reverse;
 use std::str::FromStr;
 
+use crate::account_holdings::AccountHoldingsSummary;
 use crate::profile_snapshot::TradingProfileSnapshot;
 
 pub const ACCOUNT_TRANSFER_HISTORY_PAGE_SIZE: usize = 10;
@@ -148,6 +149,10 @@ impl AccountSnapshot {
             .collect::<Vec<_>>();
         transfers.sort_by_key(|transfer| Reverse(transfer.timestamp_ms));
         transfers
+    }
+
+    pub(crate) fn holdings(&self) -> AccountHoldingsSummary {
+        AccountHoldingsSummary::from_reads(&self.reads)
     }
 
     pub fn has_data(&self) -> bool {

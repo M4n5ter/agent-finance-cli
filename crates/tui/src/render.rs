@@ -195,6 +195,74 @@ mod tests {
                     .map(|plan| {
                         let request = plan.request();
                         let payload = match &request {
+                            SignedReadRequest::SpotBalances => serde_json::json!({
+                                "balances": [
+                                    {
+                                        "asset": "USDT",
+                                        "free": "15.75",
+                                        "locked": "0"
+                                    },
+                                    {
+                                        "asset": "BTC",
+                                        "free": "0",
+                                        "locked": "0.001"
+                                    },
+                                    {
+                                        "asset": "ETH",
+                                        "free": "0",
+                                        "locked": "0"
+                                    }
+                                ]
+                            }),
+                            SignedReadRequest::UsdsFuturesPositions => serde_json::json!({
+                                "assets": [
+                                    {
+                                        "asset": "USDT",
+                                        "walletBalance": "8.25",
+                                        "availableBalance": "6.5",
+                                        "marginBalance": "8",
+                                        "maxWithdrawAmount": "6",
+                                        "unrealizedProfit": "-0.25"
+                                    },
+                                    {
+                                        "asset": "BNB",
+                                        "walletBalance": "0",
+                                        "availableBalance": "0",
+                                        "marginBalance": "0",
+                                        "maxWithdrawAmount": "0",
+                                        "unrealizedProfit": "0"
+                                    }
+                                ],
+                                "positions": [
+                                    {
+                                        "symbol": "BTCUSDT",
+                                        "positionSide": "LONG",
+                                        "positionAmt": "0.002",
+                                        "notional": "130",
+                                        "isolatedMargin": "0",
+                                        "isolatedWallet": "0",
+                                        "unrealizedProfit": "2"
+                                    },
+                                    {
+                                        "symbol": "BTCUSDT",
+                                        "positionSide": "SHORT",
+                                        "positionAmt": "-0.001",
+                                        "notional": "-65",
+                                        "isolatedMargin": "1.25",
+                                        "isolatedWallet": "10",
+                                        "unrealizedProfit": "-1"
+                                    },
+                                    {
+                                        "symbol": "ETHUSDT",
+                                        "positionSide": "BOTH",
+                                        "positionAmt": "0",
+                                        "notional": "0",
+                                        "isolatedMargin": "0",
+                                        "isolatedWallet": "0",
+                                        "unrealizedProfit": "0"
+                                    }
+                                ]
+                            }),
                             SignedReadRequest::OpenOrders {
                                 market: Market::Spot,
                                 ..
@@ -320,7 +388,22 @@ mod tests {
         state.reduce(crate::state::Action::Focus(crate::model::Panel::Account));
         state.reduce(crate::state::Action::ToggleFocusedZoom);
         state.selected_open_order = 4;
-        let text = render_to_text_grid(&state, 180, 52);
+        let text = render_to_text_grid(&state, 180, 72);
+        assert!(text.contains("spot balances (2)"));
+        assert!(text.contains("USDT free:15.75 locked:0"));
+        assert!(text.contains("BTC free:0 locked:0.001"));
+        assert!(text.contains("USD-M assets (1)"));
+        assert!(text.contains("USDT wallet:8.25 availableUsd:6.5 margin:8 withdraw:6 upnl:-0.25"));
+        assert!(text.contains("USD-M positions (2)"));
+        assert!(
+            text.contains("BTCUSDT LONG amt:0.002 notional:130 isoMargin:0 isoWallet:0 upnl:2")
+        );
+        assert!(
+            text.contains(
+                "BTCUSDT SHORT amt:-0.001 notional:-65 isoMargin:1.25 isoWallet:10 upnl:-1"
+            )
+        );
+        assert!(text.contains("open orders (5)"));
         assert!(text.contains("+1 earlier open orders"));
         assert!(text.contains("> usds-futures SELL 10 XRPUSDT @ 2 [futures-2]"));
         assert!(text.contains("transfer history (2)"));
