@@ -40,6 +40,8 @@ mod search_floating_view;
 mod settings_controls;
 mod settings_editor;
 mod settings_panel_view;
+mod staged_gate_preview;
+mod staged_intent;
 mod state;
 mod status_bar;
 mod task_failure;

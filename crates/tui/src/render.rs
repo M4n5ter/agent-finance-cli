@@ -50,7 +50,6 @@ mod tests {
     use crate::model::{FloatingKind, Panel, WorkspaceKind};
     use crate::mouse_target::MousePosition;
     use crate::profile_snapshot::test_profile_validation_snapshot;
-    use crate::task_log::TaskKey;
     use crate::theme::{ThemeColor, ThemeConfig};
     use agent_finance_core::{
         Environment, Market, Provider, SignedReadRequest, SignedReadSnapshot,
@@ -389,54 +388,6 @@ mod tests {
         assert!(text.contains("> spot BUY 0.06 BTCUSDT @ 64000 [spot-1]"));
         assert!(text.contains("usds-futures SELL 10 XRPUSDT @ 2 [futures-2]"));
         assert!(text.contains("up/down open order  c stage cancel"));
-    }
-
-    #[test]
-    fn risk_audit_renders_trade_gate_queue_and_recent_events() {
-        let mut state = AppState::from_config(TuiConfig {
-            watchlist: vec!["BTCUSDT".to_string()],
-            trading: crate::config::TradingConfig {
-                default_profile: Some("mainnet".to_string()),
-            },
-            workspace: crate::config::WorkspaceConfig {
-                current: WorkspaceKind::Trade,
-            },
-            ..TuiConfig::default()
-        });
-        state.reduce(crate::state::Action::ProfileValidationStarted {
-            generation: 1,
-            profile: "mainnet".to_string(),
-        });
-        state.reduce(crate::state::Action::ProfileValidationLoaded {
-            generation: 1,
-            snapshot: test_profile_validation_snapshot("mainnet", "mainnet.toml"),
-        });
-        state
-            .order_ticket
-            .set_quantity_text(Some("0.05".to_string()));
-        state.order_ticket.set_price_text(Some("204".to_string()));
-        state.reduce(crate::state::Action::StageOrderTicket);
-        state.task_log.succeeded(
-            TaskKey::ProfileValidation {
-                generation: 1,
-                profile: "mainnet".to_string(),
-            },
-            "mainnet profile validation passed",
-        );
-        state.reduce(crate::state::Action::Focus(crate::model::Panel::RiskAudit));
-        state.reduce(crate::state::Action::ToggleFocusedZoom);
-
-        let text = render_to_text_grid(&state, 170, 44);
-
-        assert!(text.contains("Risk / Audit"));
-        assert!(text.contains("trading gate  live:off / effective:dry-run"));
-        assert!(text.contains("profile validation: mainnet ok"));
-        assert!(text.contains("risk policy: live:allowed  daily order cap:100"));
-        assert!(text.contains("required permissions: spot_trading"));
-        assert!(text.contains("symbols: btcusdt <= 50"));
-        assert!(text.contains("staged queue: total:1  ready:1"));
-        assert!(text.contains("recent events"));
-        assert!(text.contains("ok mainnet profile validation passed"));
     }
 
     #[test]
