@@ -485,6 +485,72 @@ fn mouse_click_on_open_order_row_selects_order() {
 }
 
 #[test]
+fn mouse_click_on_open_order_cancel_action_stages_cancel() {
+    let area = Rect::new(0, 0, 160, 48);
+    let mut state = AppState::from_config(crate::config::TuiConfig {
+        workspace: crate::config::WorkspaceConfig {
+            current: WorkspaceKind::Trade,
+        },
+        trading: crate::config::TradingConfig {
+            default_profile: Some("mainnet".to_string()),
+        },
+        ..crate::config::TuiConfig::default()
+    });
+    state.account_snapshot = Some(account_snapshot_with_open_orders("mainnet"));
+    let mut drag = MouseDrag::default();
+    let panel = layout::build(
+        area,
+        &state.layout,
+        &state.floating,
+        &state.visible_panels(),
+    )
+    .panel_rect(Panel::OpenOrders)
+    .expect("open orders panel is visible");
+
+    let click = clickable_panel_action(
+        &mut state,
+        area,
+        panel,
+        Panel::OpenOrders,
+        ActionId::StageSelectedOpenOrderCancel,
+    );
+    handle_mouse_event(area, &mut state, &mut drag, click);
+
+    assert_eq!(state.staged_change_count(), 1);
+    assert_eq!(state.panels.focused(), Panel::IntentReview);
+    assert_eq!(drag, MouseDrag::default());
+}
+
+#[test]
+fn narrow_open_order_action_line_does_not_create_mouse_action() {
+    let mut state = AppState::from_config(crate::config::TuiConfig {
+        workspace: crate::config::WorkspaceConfig {
+            current: WorkspaceKind::Trade,
+        },
+        trading: crate::config::TradingConfig {
+            default_profile: Some("mainnet".to_string()),
+        },
+        ..crate::config::TuiConfig::default()
+    });
+    state.account_snapshot = Some(account_snapshot_with_open_orders("mainnet"));
+    let panel = Rect::new(0, 0, 20, 10);
+    let open_orders = state.account_snapshot.as_ref().unwrap().open_orders();
+    let action_row =
+        crate::open_order_view::open_order_rows(&open_orders, state.selected_open_order).len()
+            as u16;
+
+    let action = crate::panel_mouse::click_action(
+        &state,
+        Panel::OpenOrders,
+        panel,
+        panel.right().saturating_sub(2),
+        panel.y + action_row + 1,
+    );
+
+    assert_eq!(action, None);
+}
+
+#[test]
 fn mouse_click_on_account_open_order_row_selects_order() {
     let area = Rect::new(0, 0, 160, 48);
     let mut state = AppState::from_config(crate::config::TuiConfig {
@@ -1247,18 +1313,20 @@ fn clickable_panel_action(
 ) -> MouseEvent {
     let mut drag = MouseDrag::default();
     for content_row in 0..panel.height.saturating_sub(2) {
-        let column = panel.x + 2;
-        let row = panel.y + content_row + 1;
-        handle_mouse_event(
-            area,
-            state,
-            &mut drag,
-            mouse_event(MouseEventKind::Moved, column, row),
-        );
-        if current_mouse_target(area, state)
-            .is_some_and(|target| target.panel_action_hovered(target_panel, target_action))
-        {
-            return mouse_event(MouseEventKind::Down(MouseButton::Left), column, row);
+        for content_column in 0..panel.width.saturating_sub(2) {
+            let column = panel.x + content_column + 1;
+            let row = panel.y + content_row + 1;
+            handle_mouse_event(
+                area,
+                state,
+                &mut drag,
+                mouse_event(MouseEventKind::Moved, column, row),
+            );
+            if current_mouse_target(area, state)
+                .is_some_and(|target| target.panel_action_hovered(target_panel, target_action))
+            {
+                return mouse_event(MouseEventKind::Down(MouseButton::Left), column, row);
+            }
         }
     }
     panic!("clickable panel action was not found");

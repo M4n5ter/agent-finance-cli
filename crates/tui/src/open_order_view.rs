@@ -1,8 +1,11 @@
 use std::ops::Range;
 
 use crate::account::OpenOrderSummary;
+use crate::command::ActionId;
 
 pub(crate) const VISIBLE_OPEN_ORDER_LIMIT: usize = 4;
+
+const STAGE_CANCEL_LABEL: &str = "[stage cancel]";
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) enum OpenOrderRow<'a> {
@@ -20,6 +23,19 @@ pub(crate) enum OpenOrderRow<'a> {
     More {
         hidden: usize,
     },
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub(crate) struct OpenOrderActionLine {
+    pub text: String,
+    pub actions: Vec<OpenOrderActionSpan>,
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub(crate) struct OpenOrderActionSpan {
+    pub start: u16,
+    pub end: u16,
+    pub action: ActionId,
 }
 
 pub(crate) fn visible_open_order_window(len: usize, selected: usize) -> Range<usize> {
@@ -78,6 +94,62 @@ pub(crate) fn open_order_index_at_content_row(
     match open_order_rows(open_orders, selected).get(content_row)? {
         OpenOrderRow::Order { index, .. } => Some(*index),
         _ => None,
+    }
+}
+
+pub(crate) fn open_order_action_line(width: u16) -> OpenOrderActionLine {
+    let mut line = OpenOrderActionLine {
+        text: String::from("selected order"),
+        actions: Vec::new(),
+    };
+    line.truncate_to_width(width);
+    line.push_visible_text(width, "  ");
+    line.push_visible_action(
+        width,
+        STAGE_CANCEL_LABEL,
+        ActionId::StageSelectedOpenOrderCancel,
+    );
+    line
+}
+
+pub(crate) fn open_order_action_at_content_cell(
+    open_orders: &[OpenOrderSummary],
+    selected: usize,
+    width: u16,
+    content_row: usize,
+    content_column: u16,
+) -> Option<ActionId> {
+    if open_orders.is_empty() || content_row != open_order_rows(open_orders, selected).len() {
+        return None;
+    }
+    open_order_action_line(width)
+        .actions
+        .into_iter()
+        .find(|span| (span.start..span.end).contains(&content_column))
+        .map(|span| span.action)
+}
+
+impl OpenOrderActionLine {
+    fn push_visible_text(&mut self, width: u16, text: &str) {
+        let remaining = width as usize - self.text.len().min(width as usize);
+        self.text.push_str(&text[..text.len().min(remaining)]);
+    }
+
+    fn push_visible_action(&mut self, width: u16, text: &'static str, action: ActionId) {
+        if self.text.len() + text.len() > width as usize {
+            return;
+        }
+        let start = self.text.len() as u16;
+        self.text.push_str(text);
+        self.actions.push(OpenOrderActionSpan {
+            start,
+            end: self.text.len() as u16,
+            action,
+        });
+    }
+
+    fn truncate_to_width(&mut self, width: u16) {
+        self.text.truncate(self.text.len().min(width as usize));
     }
 }
 
@@ -144,6 +216,46 @@ mod tests {
         assert_eq!(
             open_order_index_at_content_row(&open_orders, selected, 3),
             Some(1)
+        );
+    }
+
+    #[test]
+    fn action_line_maps_visible_cancel_to_action() {
+        let line = open_order_action_line(80);
+        let span = line
+            .actions
+            .iter()
+            .find(|span| span.action == ActionId::StageSelectedOpenOrderCancel)
+            .expect("cancel action");
+        assert_eq!(
+            &line.text[span.start as usize..span.end as usize],
+            STAGE_CANCEL_LABEL
+        );
+
+        let open_orders = ["BTCUSDT", "ETHUSDT"]
+            .into_iter()
+            .map(order)
+            .collect::<Vec<_>>();
+        let row = open_order_rows(&open_orders, 0).len();
+        assert_eq!(
+            open_order_action_at_content_cell(&open_orders, 0, 80, row, span.start),
+            Some(ActionId::StageSelectedOpenOrderCancel)
+        );
+        assert_eq!(
+            open_order_action_at_content_cell(&open_orders, 0, 80, row - 1, span.start),
+            None
+        );
+    }
+
+    #[test]
+    fn narrow_action_line_does_not_expose_hidden_cancel() {
+        let open_orders = [order("BTCUSDT")];
+        let row = open_order_rows(&open_orders, 0).len();
+
+        assert!(open_order_action_line(18).actions.is_empty());
+        assert_eq!(
+            open_order_action_at_content_cell(&open_orders, 0, 18, row, 17),
+            None
         );
     }
 }

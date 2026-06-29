@@ -54,6 +54,7 @@ impl PanelHit {
             (Panel::Account | Panel::OpenOrders, Self::Row(index)) => {
                 Some(Action::SelectOpenOrder(index))
             }
+            (Panel::OpenOrders, Self::Action { action, .. }) => Some(Action::Execute(action)),
             (Panel::IntentReview, Self::Row(index)) => Some(Action::SelectStagedChange(index)),
             (Panel::IntentReview, Self::IntentReviewAction(action)) => match action {
                 IntentReviewAction::ExecuteSelected => Some(Action::ExecuteStagedChange),
@@ -103,10 +104,24 @@ fn panel_hit_at(
         }
         Panel::OpenOrders => {
             let open_orders = state.account_snapshot.as_ref()?.open_orders();
+            let content_row = content_row(area, row)?;
+            let content_column = content_column(area, column).unwrap_or(u16::MAX);
+            if let Some(action) = crate::open_order_view::open_order_action_at_content_cell(
+                &open_orders,
+                state.selected_open_order,
+                content_width(area),
+                content_row,
+                content_column,
+            ) {
+                return Some(PanelHit::Action {
+                    label: "stage cancel",
+                    action,
+                });
+            }
             crate::open_order_view::open_order_index_at_content_row(
                 &open_orders,
                 state.selected_open_order,
-                content_row(area, row)?,
+                content_row,
             )
             .map(PanelHit::Row)
         }

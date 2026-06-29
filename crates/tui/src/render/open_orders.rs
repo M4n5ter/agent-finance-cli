@@ -31,6 +31,7 @@ pub(super) fn render_open_orders(
             if snapshot.open_orders().is_empty() {
                 lines.push(Line::from("No open orders."));
             } else {
+                lines.push(open_order_action_line(state, area, mouse_target));
                 lines.push(Line::from(
                     crate::open_order_controls::open_order_section_hint(),
                 ));
@@ -129,4 +130,46 @@ pub(crate) fn open_order_line(
         ),
         style,
     ))
+}
+
+fn open_order_action_line(
+    state: &AppState,
+    area: Rect,
+    mouse_target: Option<MouseTarget>,
+) -> Line<'static> {
+    let action_line = crate::open_order_view::open_order_action_line(area.width.saturating_sub(2));
+    let mut spans = Vec::new();
+    let mut cursor = 0usize;
+
+    for action in action_line.actions {
+        let start = action.start as usize;
+        let end = action.end as usize;
+        if cursor < start {
+            spans.push(Span::styled(
+                action_line.text[cursor..start].to_string(),
+                state.theme.text_style(),
+            ));
+        }
+        let hovered = mouse_target
+            .is_some_and(|target| target.panel_action_hovered(Panel::OpenOrders, action.action));
+        let style = if hovered {
+            state.theme.selected_style().add_modifier(Modifier::BOLD)
+        } else {
+            state.theme.accent_style()
+        };
+        spans.push(Span::styled(
+            action_line.text[start..end].to_string(),
+            style,
+        ));
+        cursor = end;
+    }
+
+    if cursor < action_line.text.len() {
+        spans.push(Span::styled(
+            action_line.text[cursor..].to_string(),
+            state.theme.text_style(),
+        ));
+    }
+
+    Line::from(spans)
 }
