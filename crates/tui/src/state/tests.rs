@@ -176,7 +176,7 @@ fn order_ticket_staging_requires_core_valid_preview_before_review_change() {
 }
 
 #[test]
-fn order_ticket_input_applies_quantity_text_before_staging() {
+fn ticket_text_input_applies_quantity_text_before_staging() {
     let mut state = AppState::from_config(TuiConfig {
         watchlist: vec!["CRDO".to_string()],
         workspace: WorkspaceConfig {
@@ -192,13 +192,13 @@ fn order_ticket_input_applies_quantity_text_before_staging() {
         crate::order_ticket::OrderTicketField::Quantity.index(),
     ));
 
-    state.reduce(Action::OpenOrderTicketInput);
+    state.reduce(Action::OpenTicketTextInput);
     for character in "0.05".chars() {
-        state.reduce(Action::EditOrderTicketInput(
+        state.reduce(Action::EditTicketTextInput(
             tui_input::InputRequest::InsertChar(character),
         ));
     }
-    state.reduce(Action::AcceptOrderTicketInput);
+    state.reduce(Action::AcceptTicketTextInput);
     state.reduce(Action::StageOrderTicket);
 
     assert_eq!(state.floating.last().map(|pane| pane.kind), None);
@@ -450,6 +450,39 @@ fn transfer_ticket_staging_creates_transfer_review_change() {
 }
 
 #[test]
+fn ticket_text_input_applies_transfer_amount_before_staging() {
+    let mut state = AppState::from_config(TuiConfig {
+        workspace: WorkspaceConfig {
+            current: WorkspaceKind::Account,
+        },
+        trading: crate::config::TradingConfig {
+            default_profile: Some("mainnet".to_string()),
+        },
+        ..TuiConfig::default()
+    });
+    state.focus_panel(Panel::TransferTicket);
+    state.reduce(Action::MoveTransferTicketField(2));
+
+    state.reduce(Action::OpenTicketTextInput);
+    for character in "7.5".chars() {
+        state.reduce(Action::EditTicketTextInput(
+            tui_input::InputRequest::InsertChar(character),
+        ));
+    }
+    state.reduce(Action::AcceptTicketTextInput);
+    state.reduce(Action::StageTransferTicket);
+
+    assert_eq!(state.floating.last().map(|pane| pane.kind), None);
+    let changes = state.staged_change_views();
+    assert_eq!(changes.len(), 1);
+    let StagedChangeSubject::Transfer(review) = &changes[0].subject else {
+        panic!("staged transfer");
+    };
+    assert_eq!(review.amount, "7.5");
+    assert_eq!(review.parsed_amount.to_string(), "7.5");
+}
+
+#[test]
 fn submitting_ready_transfer_change_queues_transfer_submit_request() {
     let mut state = AppState::from_config(TuiConfig {
         workspace: WorkspaceConfig {
@@ -528,6 +561,92 @@ fn futures_state_ticket_staging_requires_value_then_creates_review_change() {
         }
     );
     assert!(changes[0].summary.contains("ETHUSDT 2"));
+}
+
+#[test]
+fn ticket_text_input_applies_futures_leverage_before_staging() {
+    let mut state = AppState::from_config(TuiConfig {
+        watchlist: vec!["ETHUSDT".to_string()],
+        workspace: WorkspaceConfig {
+            current: WorkspaceKind::Account,
+        },
+        trading: crate::config::TradingConfig {
+            default_profile: Some("mainnet".to_string()),
+        },
+        ..TuiConfig::default()
+    });
+    state.focus_panel(Panel::FuturesState);
+    state.reduce(Action::MoveFuturesStateTicketField(1));
+    state.reduce(Action::MoveFuturesStateTicketField(1));
+
+    state.reduce(Action::OpenTicketTextInput);
+    state.reduce(Action::EditTicketTextInput(
+        tui_input::InputRequest::InsertChar('3'),
+    ));
+    state.reduce(Action::AcceptTicketTextInput);
+    state.reduce(Action::StageFuturesStateTicket);
+
+    assert_eq!(state.floating.last().map(|pane| pane.kind), None);
+    let changes = state.staged_change_views();
+    assert_eq!(changes.len(), 1);
+    let StagedChangeSubject::FuturesState(review) = &changes[0].subject else {
+        panic!("staged futures state");
+    };
+    assert_eq!(
+        review.change,
+        FuturesStateChange::Leverage {
+            symbol: "ETHUSDT".to_string(),
+            leverage: 3,
+        }
+    );
+}
+
+#[test]
+fn ticket_text_input_rejects_invalid_futures_leverage_without_mutating_draft() {
+    let mut state = AppState::from_config(TuiConfig {
+        watchlist: vec!["ETHUSDT".to_string()],
+        workspace: WorkspaceConfig {
+            current: WorkspaceKind::Account,
+        },
+        trading: crate::config::TradingConfig {
+            default_profile: Some("mainnet".to_string()),
+        },
+        ..TuiConfig::default()
+    });
+    state.futures_state_ticket.set_leverage(Some(2));
+    state.focus_panel(Panel::FuturesState);
+    state.reduce(Action::MoveFuturesStateTicketField(1));
+    state.reduce(Action::MoveFuturesStateTicketField(1));
+
+    state.reduce(Action::OpenTicketTextInput);
+    for character in "abc".chars() {
+        state.reduce(Action::EditTicketTextInput(
+            tui_input::InputRequest::InsertChar(character),
+        ));
+    }
+    state.reduce(Action::AcceptTicketTextInput);
+
+    assert_eq!(
+        state.floating.last().map(|pane| pane.kind),
+        Some(FloatingKind::TicketTextInput)
+    );
+    assert!(state.staged_change_views().is_empty());
+
+    state.reduce(Action::CloseFocusedFloating);
+    state.reduce(Action::StageFuturesStateTicket);
+
+    let changes = state.staged_change_views();
+    assert_eq!(changes.len(), 1);
+    let StagedChangeSubject::FuturesState(review) = &changes[0].subject else {
+        panic!("staged futures state");
+    };
+    assert_eq!(
+        review.change,
+        FuturesStateChange::Leverage {
+            symbol: "ETHUSDT".to_string(),
+            leverage: 2,
+        }
+    );
 }
 
 #[test]

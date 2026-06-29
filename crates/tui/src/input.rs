@@ -385,7 +385,7 @@ mod tests {
         );
         assert_eq!(
             key_action(&state, KeyEvent::from(KeyCode::Char('e'))),
-            Some(Action::OpenOrderTicketInput)
+            Some(Action::OpenTicketTextInput)
         );
         assert_eq!(
             key_action(
@@ -484,7 +484,7 @@ mod tests {
     }
 
     #[test]
-    fn order_ticket_input_mode_routes_text_input_and_acceptance() {
+    fn ticket_text_input_mode_routes_text_input_and_acceptance() {
         let mut state = AppState::from_config(crate::config::TuiConfig::default());
         state.reduce(Action::Execute(ActionId::SetWorkspace(
             WorkspaceKind::Trade,
@@ -493,11 +493,11 @@ mod tests {
         state.reduce(Action::SelectOrderTicketField(
             crate::order_ticket::OrderTicketField::Quantity.index(),
         ));
-        state.reduce(Action::OpenOrderTicketInput);
+        state.reduce(Action::OpenTicketTextInput);
 
         assert_eq!(
             key_action(&state, KeyEvent::from(KeyCode::Enter)),
-            Some(Action::AcceptOrderTicketInput)
+            Some(Action::AcceptTicketTextInput)
         );
         assert_eq!(
             key_action(&state, KeyEvent::from(KeyCode::Esc)),
@@ -505,7 +505,7 @@ mod tests {
         );
         assert!(matches!(
             key_action(&state, KeyEvent::from(KeyCode::Char('1'))),
-            Some(Action::EditOrderTicketInput(_))
+            Some(Action::EditTicketTextInput(_))
         ));
     }
 

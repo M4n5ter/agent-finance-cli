@@ -3,6 +3,8 @@ use std::str::FromStr;
 use agent_finance_core::{DecimalValue, SubmitMode, TransferDirection};
 use serde::Serialize;
 
+use crate::ticket_text_input::TicketTextInputTarget;
+
 #[derive(Debug, Clone, Eq, PartialEq, Serialize)]
 pub struct TransferTicket {
     selected_field: TransferTicketField,
@@ -23,8 +25,7 @@ impl Default for TransferTicket {
 }
 
 impl TransferTicket {
-    #[cfg(test)]
-    pub fn set_amount_text(&mut self, amount: Option<String>) {
+    pub(crate) fn set_amount_text(&mut self, amount: Option<String>) {
         self.amount = amount;
     }
 
@@ -103,6 +104,34 @@ impl TransferTicket {
 
     pub fn selected_field_label(&self) -> &'static str {
         self.selected_field.label()
+    }
+
+    pub(crate) fn selected_text_input(&self) -> Option<(TicketTextInputTarget, Option<&str>)> {
+        match self.selected_field {
+            TransferTicketField::Amount => Some((
+                TicketTextInputTarget::TransferAmount,
+                self.amount.as_deref(),
+            )),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn apply_text_input(
+        &mut self,
+        target: TicketTextInputTarget,
+        value: Option<String>,
+    ) -> Result<(), String> {
+        match target {
+            TicketTextInputTarget::TransferAmount => {
+                self.set_amount_text(value);
+                self.selected_field = TransferTicketField::Amount;
+                Ok(())
+            }
+            _ => Err(format!(
+                "{} does not target transfer ticket",
+                target.field_label()
+            )),
+        }
     }
 }
 

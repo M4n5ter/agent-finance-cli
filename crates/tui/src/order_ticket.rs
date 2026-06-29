@@ -5,6 +5,8 @@ use agent_finance_core::{
 };
 use serde::Serialize;
 
+use crate::ticket_text_input::TicketTextInputTarget;
+
 #[derive(Debug, Clone, Eq, PartialEq, Serialize)]
 pub struct OrderTicket {
     selected_field: OrderTicketField,
@@ -180,15 +182,36 @@ impl OrderTicket {
         self.selected_field.label()
     }
 
-    pub(crate) fn selected_field(&self) -> OrderTicketField {
-        self.selected_field
+    pub(crate) fn selected_text_input(&self) -> Option<(TicketTextInputTarget, Option<&str>)> {
+        match self.selected_field {
+            OrderTicketField::Quantity => {
+                Some((TicketTextInputTarget::OrderQuantity, self.quantity_text()))
+            }
+            OrderTicketField::Price => Some((TicketTextInputTarget::OrderPrice, self.price_text())),
+            _ => None,
+        }
     }
 
-    pub(crate) fn selected_text_input(&self) -> Option<(OrderTicketField, Option<&str>)> {
-        match self.selected_field {
-            OrderTicketField::Quantity => Some((self.selected_field, self.quantity_text())),
-            OrderTicketField::Price => Some((self.selected_field, self.price_text())),
-            _ => None,
+    pub(crate) fn apply_text_input(
+        &mut self,
+        target: TicketTextInputTarget,
+        value: Option<String>,
+    ) -> Result<(), String> {
+        match target {
+            TicketTextInputTarget::OrderQuantity => {
+                self.set_quantity_text(value);
+                self.select_field(OrderTicketField::Quantity.index());
+                Ok(())
+            }
+            TicketTextInputTarget::OrderPrice => {
+                self.set_price_text(value);
+                self.select_field(OrderTicketField::Price.index());
+                Ok(())
+            }
+            _ => Err(format!(
+                "{} does not target order ticket",
+                target.field_label()
+            )),
         }
     }
 

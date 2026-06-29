@@ -16,7 +16,7 @@ const ORDER_TICKET_HINTS: &[&str] = &[
 pub(crate) const ORDER_TICKET_ACTIONS: &[TicketPanelAction] = &[
     TicketPanelAction {
         label: "[edit field]",
-        action: ActionId::OpenOrderTicketInput,
+        action: ActionId::OpenTicketTextInput,
     },
     TicketPanelAction {
         label: "[capture price]",
@@ -33,7 +33,7 @@ pub(crate) fn order_ticket_key_action(key: KeyEvent) -> Option<Action> {
         KeyCode::Down => Some(Action::MoveOrderTicketField(1)),
         KeyCode::Left => Some(Action::AdjustOrderTicketField(-1)),
         KeyCode::Right | KeyCode::Enter => Some(Action::AdjustOrderTicketField(1)),
-        KeyCode::Char('e') => Some(Action::OpenOrderTicketInput),
+        KeyCode::Char('e') => Some(Action::OpenTicketTextInput),
         KeyCode::Char('c') => Some(Action::CaptureOrderReferencePrice),
         KeyCode::Char('s') => Some(Action::StageOrderTicket),
         _ => None,

@@ -71,7 +71,7 @@ impl AppState {
                 FloatingKind::SymbolSearch
                 | FloatingKind::WatchlistAdd
                 | FloatingKind::TradingProfile
-                | FloatingKind::OrderTicketInput,
+                | FloatingKind::TicketTextInput,
             ) => InteractionMode::Search,
             None => InteractionMode::Normal,
         }
@@ -171,12 +171,11 @@ impl AppState {
             FloatingKind::TradingProfile => {
                 self.profile_editor.reset(self.trading_profile.as_deref())
             }
-            FloatingKind::OrderTicketInput => {
-                let Some((field, value)) = self.order_ticket.selected_text_input() else {
+            FloatingKind::TicketTextInput => {
+                let Some((target, value)) = self.selected_ticket_text_input() else {
                     return;
                 };
-                let value = value.map(ToString::to_string);
-                self.order_ticket_input.reset(field, value.as_deref());
+                self.ticket_text_input.reset(target, value.as_deref());
             }
             FloatingKind::Help
             | FloatingKind::LiveWritesConfirmation

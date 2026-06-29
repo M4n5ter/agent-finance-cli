@@ -48,7 +48,7 @@ pub(crate) fn key_route(state: &AppState, key: KeyEvent) -> FloatingKeyRouting {
         Some(FloatingKind::SymbolSearch) => symbol_search_key_action(key),
         Some(FloatingKind::WatchlistAdd) => watchlist_add_key_action(key),
         Some(FloatingKind::TradingProfile) => trading_profile_key_action(key),
-        Some(FloatingKind::OrderTicketInput) => order_ticket_input_key_action(key),
+        Some(FloatingKind::TicketTextInput) => ticket_text_input_key_action(key),
         Some(FloatingKind::LiveWritesConfirmation) => live_writes_confirmation_key_action(key),
         Some(FloatingKind::StagedExecutionConfirmation) => {
             staged_execution_confirmation_key_action(state, key)
@@ -67,7 +67,7 @@ pub(crate) fn wheel_route(state: &AppState, direction: isize) -> Option<Option<A
         FloatingKind::Help
         | FloatingKind::WatchlistAdd
         | FloatingKind::TradingProfile
-        | FloatingKind::OrderTicketInput
+        | FloatingKind::TicketTextInput
         | FloatingKind::LiveWritesConfirmation
         | FloatingKind::StagedExecutionConfirmation
         | FloatingKind::ProviderDetails => None,
@@ -189,7 +189,7 @@ fn floating_hit_at(
         | FloatingKind::TradingProfile
         | FloatingKind::ProviderDetails
         | FloatingKind::WatchlistAdd
-        | FloatingKind::OrderTicketInput => None,
+        | FloatingKind::TicketTextInput => None,
     }
 }
 
@@ -249,11 +249,11 @@ fn trading_profile_key_action(key: KeyEvent) -> Option<Action> {
     )
 }
 
-fn order_ticket_input_key_action(key: KeyEvent) -> Option<Action> {
+fn ticket_text_input_key_action(key: KeyEvent) -> Option<Action> {
     simple_text_input_key_action(
         key,
-        Action::EditOrderTicketInput,
-        Action::AcceptOrderTicketInput,
+        Action::EditTicketTextInput,
+        Action::AcceptTicketTextInput,
     )
 }
 

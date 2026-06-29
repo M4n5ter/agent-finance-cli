@@ -1,18 +1,27 @@
 use crossterm::event::{KeyCode, KeyEvent};
 
+use crate::command::ActionId;
 use crate::state::Action;
+use crate::ticket_panel_view::TicketPanelAction;
 
 const TRANSFER_HINTS: &[&str] = &[
+    "e edit field",
     "[/] transfer field",
     "left/right transfer",
     "t stage transfer",
 ];
+
+pub(crate) const TRANSFER_TICKET_ACTIONS: &[TicketPanelAction] = &[TicketPanelAction {
+    label: "[edit field]",
+    action: ActionId::OpenTicketTextInput,
+}];
 
 pub(crate) fn transfer_ticket_key_action(key: KeyEvent) -> Option<Action> {
     if !key.modifiers.is_empty() {
         return None;
     }
     match key.code {
+        KeyCode::Char('e') => Some(Action::OpenTicketTextInput),
         KeyCode::Char('[') => Some(Action::MoveTransferTicketField(-1)),
         KeyCode::Char(']') => Some(Action::MoveTransferTicketField(1)),
         KeyCode::Left => Some(Action::AdjustTransferTicketField(-1)),

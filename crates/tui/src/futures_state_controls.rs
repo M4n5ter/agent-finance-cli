@@ -1,14 +1,27 @@
 use crossterm::event::{KeyCode, KeyEvent};
 
+use crate::command::ActionId;
 use crate::state::Action;
+use crate::ticket_panel_view::TicketPanelAction;
 
-const FUTURES_STATE_HINTS: &[&str] = &["u futures field", "i futures adjust", "f stage state"];
+const FUTURES_STATE_HINTS: &[&str] = &[
+    "e edit field",
+    "u futures field",
+    "i futures adjust",
+    "f stage state",
+];
+
+pub(crate) const FUTURES_STATE_ACTIONS: &[TicketPanelAction] = &[TicketPanelAction {
+    label: "[edit field]",
+    action: ActionId::OpenTicketTextInput,
+}];
 
 pub(crate) fn futures_state_key_action(key: KeyEvent) -> Option<Action> {
     if !key.modifiers.is_empty() {
         return None;
     }
     match key.code {
+        KeyCode::Char('e') => Some(Action::OpenTicketTextInput),
         KeyCode::Char('u') => Some(Action::MoveFuturesStateTicketField(1)),
         KeyCode::Char('i') | KeyCode::Enter => Some(Action::AdjustFuturesStateTicketField(1)),
         KeyCode::Char('f') => Some(Action::StageFuturesStateTicket),

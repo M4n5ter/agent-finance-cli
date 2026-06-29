@@ -504,7 +504,7 @@ pub enum FloatingKind {
     ProviderDetails,
     SymbolSearch,
     WatchlistAdd,
-    OrderTicketInput,
+    TicketTextInput,
 }
 
 impl FloatingKind {
@@ -517,7 +517,7 @@ impl FloatingKind {
         Self::ProviderDetails,
         Self::SymbolSearch,
         Self::WatchlistAdd,
-        Self::OrderTicketInput,
+        Self::TicketTextInput,
     ];
 
     pub const fn persistent(self) -> bool {
@@ -528,7 +528,7 @@ impl FloatingKind {
             | Self::TradingProfile
             | Self::SymbolSearch
             | Self::WatchlistAdd
-            | Self::OrderTicketInput => false,
+            | Self::TicketTextInput => false,
             Self::Help | Self::ProviderDetails => true,
         }
     }
@@ -540,7 +540,7 @@ impl FloatingKind {
                 | Self::TradingProfile
                 | Self::SymbolSearch
                 | Self::WatchlistAdd
-                | Self::OrderTicketInput
+                | Self::TicketTextInput
         )
     }
 
@@ -554,7 +554,7 @@ impl FloatingKind {
             Self::ProviderDetails => "Provider Details",
             Self::SymbolSearch => "Symbol Search",
             Self::WatchlistAdd => "Add Symbols",
-            Self::OrderTicketInput => "Order Ticket Input",
+            Self::TicketTextInput => "Ticket Text Input",
         }
     }
 }
@@ -590,7 +590,7 @@ impl FloatingSize {
             | FloatingKind::TradingProfile
             | FloatingKind::SymbolSearch
             | FloatingKind::WatchlistAdd
-            | FloatingKind::OrderTicketInput => Self {
+            | FloatingKind::TicketTextInput => Self {
                 width_ratio: 70,
                 height_ratio: 40,
             },

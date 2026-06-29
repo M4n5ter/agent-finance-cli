@@ -105,7 +105,7 @@ pub enum ActionId {
     TogglePanel(Panel),
     ToggleLiveWrites,
     CaptureOrderReferencePrice,
-    OpenOrderTicketInput,
+    OpenTicketTextInput,
     StageOrderTicket,
     StageTransferTicket,
     StageFuturesStateTicket,
@@ -269,10 +269,10 @@ pub static ACTION_REGISTRY: LazyLock<Vec<ActionSpec>> = LazyLock::new(|| {
             "Copy the current selected quote price into the order ticket price field"
         ),
         action!(
-            "edit-order-ticket-field",
-            ActionId::OpenOrderTicketInput,
-            "Edit order ticket field",
-            "Open text input for the selected order ticket quantity or price field"
+            "edit-ticket-text-field",
+            ActionId::OpenTicketTextInput,
+            "Edit ticket text field",
+            "Open text input for the selected ticket field when it supports direct text input"
         ),
         action!(
             "stage-order-ticket",
@@ -512,16 +512,16 @@ mod tests {
     }
 
     #[test]
-    fn command_palette_can_open_order_ticket_input() {
+    fn command_palette_can_open_ticket_text_input() {
         let mut palette = CommandPaletteState::default();
 
-        for character in "edit order field".chars() {
+        for character in "edit ticket text".chars() {
             palette.edit_query(InputRequest::InsertChar(character));
         }
 
         assert_eq!(
             palette.selected_action(),
-            Some(ActionId::OpenOrderTicketInput)
+            Some(ActionId::OpenTicketTextInput)
         );
     }
 

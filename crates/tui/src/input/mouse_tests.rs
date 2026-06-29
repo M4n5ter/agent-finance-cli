@@ -1065,16 +1065,16 @@ fn mouse_click_on_order_ticket_edit_field_action_opens_input() {
         area,
         panel,
         Panel::OrderTicket,
-        ActionId::OpenOrderTicketInput,
+        ActionId::OpenTicketTextInput,
     );
     handle_mouse_event(area, &mut state, &mut drag, click);
 
     assert_eq!(state.panels.focused(), Panel::OrderTicket);
     assert_eq!(
         state.floating.last().map(|pane| pane.kind),
-        Some(FloatingKind::OrderTicketInput)
+        Some(FloatingKind::TicketTextInput)
     );
-    assert_eq!(state.order_ticket_input.field().label(), "quantity");
+    assert_eq!(state.ticket_text_input.target().field_label(), "quantity");
     assert_eq!(drag, MouseDrag::default());
 }
 

@@ -155,8 +155,8 @@ pub(super) fn render_floating(
         render_trading_profile(frame, state, area);
         return;
     }
-    if kind == FloatingKind::OrderTicketInput {
-        render_order_ticket_input(frame, state, area);
+    if kind == FloatingKind::TicketTextInput {
+        render_ticket_text_input(frame, state, area);
         return;
     }
     if kind == FloatingKind::StagedExecutionConfirmation {
@@ -169,7 +169,7 @@ pub(super) fn render_floating(
         FloatingKind::SymbolSearch => unreachable!("symbol search is rendered separately"),
         FloatingKind::WatchlistAdd => unreachable!("watchlist add is rendered separately"),
         FloatingKind::TradingProfile => unreachable!("trading profile is rendered separately"),
-        FloatingKind::OrderTicketInput => unreachable!("order ticket input is rendered separately"),
+        FloatingKind::TicketTextInput => unreachable!("ticket text input is rendered separately"),
         FloatingKind::StagedExecutionConfirmation => {
             unreachable!("staged execution confirmation is rendered separately")
         }
@@ -481,20 +481,20 @@ fn render_trading_profile(frame: &mut Frame<'_>, state: &AppState, area: Rect) {
     );
 }
 
-fn render_order_ticket_input(frame: &mut Frame<'_>, state: &AppState, area: Rect) {
-    let field_label = state.order_ticket_input.field().label();
-    let next_value = state.order_ticket_input.committed_value();
+fn render_ticket_text_input(frame: &mut Frame<'_>, state: &AppState, area: Rect) {
+    let target = state.ticket_text_input.target();
+    let next_value = state.ticket_text_input.committed_value();
     let next_label = next_value.as_deref().unwrap_or("blank");
 
     render_search_floating(
         frame,
         area,
         SearchFloating {
-            title: "Order Ticket Input",
-            input_title: hints::input_floating_title_for_kind(FloatingKind::OrderTicketInput)
-                .expect("order ticket input has an input title"),
-            placeholder: "0.05 or 204.00",
-            query: state.order_ticket_input.query(),
+            title: "Ticket Text Input",
+            input_title: hints::input_floating_title_for_kind(FloatingKind::TicketTextInput)
+                .expect("ticket text input has an input title"),
+            placeholder: target.placeholder(),
+            query: state.ticket_text_input.query(),
             selected: 0,
             total: 3,
             noun: "actions",
@@ -508,9 +508,13 @@ fn render_order_ticket_input(frame: &mut Frame<'_>, state: &AppState, area: Rect
                 state.theme.text_style()
             };
             let text = match index {
-                0 => format!("field - {field_label}"),
+                0 => format!(
+                    "target - {} {}",
+                    target.ticket_label(),
+                    target.field_label()
+                ),
                 1 => format!("next - {next_label}"),
-                2 => "Enter - apply to order ticket".to_string(),
+                2 => format!("Enter - apply to {}", target.ticket_label()),
                 _ => return None,
             };
             Some(ListItem::new(Line::from(vec![

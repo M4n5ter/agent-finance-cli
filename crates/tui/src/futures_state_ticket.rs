@@ -3,6 +3,8 @@ use agent_finance_core::{
 };
 use serde::Serialize;
 
+use crate::ticket_text_input::TicketTextInputTarget;
+
 #[derive(Debug, Clone, Eq, PartialEq, Serialize)]
 pub struct FuturesStateTicket {
     selected_field: FuturesStateTicketField,
@@ -165,6 +167,42 @@ impl FuturesStateTicket {
 
     pub fn selected_field_label(&self) -> &'static str {
         self.selected_field.label()
+    }
+
+    pub(crate) fn selected_text_input(&self) -> Option<(TicketTextInputTarget, Option<String>)> {
+        match (self.selected_field, self.kind) {
+            (FuturesStateTicketField::Value, FuturesStateChangeKind::Leverage) => Some((
+                TicketTextInputTarget::FuturesLeverage,
+                self.leverage.map(|leverage| leverage.to_string()),
+            )),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn set_leverage_text(&mut self, value: Option<&str>) -> Result<(), String> {
+        self.leverage = value
+            .map(|value| {
+                value
+                    .parse::<u8>()
+                    .map_err(|error| format!("leverage: {error}"))
+            })
+            .transpose()?;
+        self.selected_field = FuturesStateTicketField::Value;
+        Ok(())
+    }
+
+    pub(crate) fn apply_text_input(
+        &mut self,
+        target: TicketTextInputTarget,
+        value: Option<String>,
+    ) -> Result<(), String> {
+        match target {
+            TicketTextInputTarget::FuturesLeverage => self.set_leverage_text(value.as_deref()),
+            _ => Err(format!(
+                "{} does not target futures state ticket",
+                target.field_label()
+            )),
+        }
     }
 
     fn explicit_or_context_symbol(&self, symbol_context: Option<&str>) -> Option<String> {
