@@ -3,6 +3,7 @@ use agent_finance_market::research_snapshot::{PredictionMarketSnapshot, Research
 
 use ratatui::layout::Rect;
 use ratatui::text::{Line, Span};
+use ratatui::widgets::{Paragraph, Wrap};
 
 use crate::model::Panel;
 use crate::provider_health::ProviderHealthReport;
@@ -17,19 +18,27 @@ pub(crate) fn info_row_at_content_row(
     area: Rect,
     content_row: usize,
 ) -> Option<usize> {
-    let count = match panel {
-        Panel::Quote => quote_lines(state).len(),
-        Panel::History => history_summary_lines(state)
-            .len()
-            .min(history_text_area_height(area)),
-        Panel::Evidence => evidence_panel_lines(state).len(),
-        Panel::Polymarket => polymarket_panel_lines(state).len(),
-        Panel::Research => research_panel_lines(state).len(),
-        Panel::RiskAudit => crate::render::risk_audit::risk_audit_lines(state).len(),
-        Panel::ProviderHealth => {
-            table_row_at_content_row(provider_health_row_count(state, area), content_row)?
+    match panel {
+        Panel::Quote => info_line_at_content_row(&quote_lines(state), area, content_row),
+        Panel::History => history_info_row_at_content_row(state, area, content_row),
+        Panel::Evidence => {
+            info_line_at_content_row(&evidence_panel_lines(state), area, content_row)
         }
-        Panel::TaskLog => table_row_at_content_row(task_log_row_count(state, area), content_row)?,
+        Panel::Polymarket => {
+            info_line_at_content_row(&polymarket_panel_lines(state), area, content_row)
+        }
+        Panel::Research => {
+            info_line_at_content_row(&research_panel_lines(state), area, content_row)
+        }
+        Panel::RiskAudit => info_line_at_content_row(
+            &crate::render::risk_audit::risk_audit_lines(state),
+            area,
+            content_row,
+        ),
+        Panel::ProviderHealth => {
+            table_row_at_content_row(provider_health_row_count(state, area), content_row)
+        }
+        Panel::TaskLog => table_row_at_content_row(task_log_row_count(state, area), content_row),
         Panel::Watchlist
         | Panel::OrderTicket
         | Panel::OpenOrders
@@ -38,10 +47,44 @@ pub(crate) fn info_row_at_content_row(
         | Panel::TransferTicket
         | Panel::FuturesState
         | Panel::Settings
-        | Panel::ProfileRisk => return None,
-    };
+        | Panel::ProfileRisk => None,
+    }
+}
 
-    (content_row < count).then_some(content_row)
+fn history_info_row_at_content_row(
+    state: &AppState,
+    area: Rect,
+    content_row: usize,
+) -> Option<usize> {
+    let text_height = history_text_area_height(area);
+    if content_row >= text_height {
+        return None;
+    }
+    info_line_at_content_row(&history_summary_lines(state), area, content_row)
+}
+
+fn info_line_at_content_row(lines: &[Line<'_>], area: Rect, content_row: usize) -> Option<usize> {
+    let width = panel_text_width(area);
+    let mut visual_row = 0;
+    for (index, line) in lines.iter().enumerate() {
+        let line_height = wrapped_line_height(line, width);
+        if content_row < visual_row + line_height {
+            return Some(index);
+        }
+        visual_row += line_height;
+    }
+    None
+}
+
+fn panel_text_width(area: Rect) -> usize {
+    usize::from(area.width.saturating_sub(2).max(1))
+}
+
+fn wrapped_line_height(line: &Line<'_>, width: usize) -> usize {
+    Paragraph::new(vec![line.clone()])
+        .wrap(Wrap { trim: true })
+        .line_count(width as u16)
+        .max(1)
 }
 
 pub(crate) fn quote_lines(state: &AppState) -> Vec<Line<'_>> {
@@ -537,5 +580,29 @@ mod tests {
             info_row_at_content_row(&state, Panel::Quote, area, 0),
             Some(0)
         );
+    }
+
+    #[test]
+    fn wrapped_quote_text_rows_keep_the_same_info_target() {
+        let state = AppState::from_config(crate::config::TuiConfig::default());
+        let area = Rect::new(0, 0, 24, 20);
+
+        assert_eq!(
+            info_row_at_content_row(&state, Panel::Quote, area, 1),
+            Some(1)
+        );
+        assert_eq!(
+            info_row_at_content_row(&state, Panel::Quote, area, 2),
+            Some(1)
+        );
+    }
+
+    #[test]
+    fn word_wrapped_info_rows_match_ratatui_visual_rows_before_next_item() {
+        let lines = [Line::from("aaa aaa aaa aaa"), Line::from("next item")];
+        let area = Rect::new(0, 0, 7, 20);
+
+        assert_eq!(info_line_at_content_row(&lines, area, 3), Some(0));
+        assert_eq!(info_line_at_content_row(&lines, area, 4), Some(1));
     }
 }

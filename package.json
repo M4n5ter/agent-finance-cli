@@ -1,6 +1,6 @@
 {
   "name": "agent-finance-cli",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "agent-finance: AI-agent-first market intelligence CLI for evidence-driven financial research.",
   "license": "MIT OR Apache-2.0",
   "repository": {
@@ -45,11 +45,11 @@
     "smoke:tui": "node npm/smoke-tui.js"
   },
   "optionalDependencies": {
-    "agent-finance-cli-darwin-arm64": "0.3.2",
-    "agent-finance-cli-darwin-x64": "0.3.2",
-    "agent-finance-cli-linux-arm64": "0.3.2",
-    "agent-finance-cli-linux-x64": "0.3.2",
-    "agent-finance-cli-win32-x64": "0.3.2"
+    "agent-finance-cli-darwin-arm64": "0.3.3",
+    "agent-finance-cli-darwin-x64": "0.3.3",
+    "agent-finance-cli-linux-arm64": "0.3.3",
+    "agent-finance-cli-linux-x64": "0.3.3",
+    "agent-finance-cli-win32-x64": "0.3.3"
   },
   "keywords": [
     "finance",
