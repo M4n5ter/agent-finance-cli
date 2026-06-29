@@ -464,6 +464,7 @@ mod tests {
         assert_eq!(
             mode_key_hints(&state),
             vec![
+                "c capture price",
                 "up/down field",
                 "left/right adjust",
                 "enter adjust",

@@ -68,9 +68,7 @@ impl PanelHit {
                     Some(Action::ApplyFuturesStateTicketPreset(preset))
                 }
             },
-            (Panel::Account | Panel::OpenOrders, Self::Action { action, .. }) => {
-                Some(Action::Execute(action))
-            }
+            (_, Self::Action { action, .. }) => Some(Action::Execute(action)),
             (Panel::IntentReview, Self::Row(index)) => Some(Action::SelectStagedChange(index)),
             (Panel::IntentReview, Self::IntentReviewAction(action)) => match action {
                 IntentReviewAction::ExecuteSelected => Some(Action::ExecuteStagedChange),
@@ -89,7 +87,6 @@ impl PanelHit {
                 Some(Action::SelectFuturesStateTicketField(index))
             }
             (Panel::FuturesState, Self::TicketReadyAction) => Some(Action::StageFuturesStateTicket),
-            (Panel::ProfileRisk, Self::Action { action, .. }) => Some(Action::Execute(action)),
             _ => None,
         }
     }
@@ -168,13 +165,24 @@ fn panel_hit_at(
                 .map(|hit| PanelHit::AccountHit { content_row, hit })
         }
         Panel::IntentReview => intent_review_hit_at(state, area, column, row),
-        Panel::OrderTicket => ticket_hit_at(content_row(area, row)?, order_ticket_rows(state)),
-        Panel::TransferTicket => {
-            ticket_hit_at(content_row(area, row)?, transfer_ticket_rows(state))
-        }
-        Panel::FuturesState => {
-            ticket_hit_at(content_row(area, row)?, futures_state_ticket_rows(state))
-        }
+        Panel::OrderTicket => ticket_hit_at(
+            content_row(area, row)?,
+            content_column(area, column).unwrap_or(u16::MAX),
+            content_width(area),
+            order_ticket_rows(state),
+        ),
+        Panel::TransferTicket => ticket_hit_at(
+            content_row(area, row)?,
+            content_column(area, column).unwrap_or(u16::MAX),
+            content_width(area),
+            transfer_ticket_rows(state),
+        ),
+        Panel::FuturesState => ticket_hit_at(
+            content_row(area, row)?,
+            content_column(area, column).unwrap_or(u16::MAX),
+            content_width(area),
+            futures_state_ticket_rows(state),
+        ),
         Panel::Settings => {
             crate::settings_panel_view::setting_index_at_content_row(state, content_row(area, row)?)
                 .map(PanelHit::Row)
@@ -222,7 +230,18 @@ fn intent_review_hit_at(state: &AppState, area: Rect, column: u16, row: u16) -> 
         .map(PanelHit::Row)
 }
 
-fn ticket_hit_at(content_row: usize, rows: TicketPanelRows) -> Option<PanelHit> {
+fn ticket_hit_at(
+    content_row: usize,
+    content_column: u16,
+    content_width: u16,
+    rows: TicketPanelRows,
+) -> Option<PanelHit> {
+    if let Some(action) = rows.action_at_content_cell(content_width, content_row, content_column) {
+        return Some(PanelHit::Action {
+            label: action.label,
+            action: action.action,
+        });
+    }
     match rows.click_at(content_row)? {
         TicketPanelClick::Field(index) => Some(PanelHit::TicketField(index)),
         TicketPanelClick::ReadyAction => Some(PanelHit::TicketReadyAction),
@@ -233,6 +252,7 @@ fn order_ticket_rows(state: &AppState) -> TicketPanelRows {
     let preview = state.order_ticket_preview();
     TicketPanelRows {
         detail_count: 1,
+        actions: crate::order_ticket_controls::ORDER_TICKET_ACTIONS,
         field_count: OrderTicketField::COUNT,
         ready: preview.ready,
         blocker_count: preview.blockers.len(),
@@ -243,6 +263,7 @@ fn transfer_ticket_rows(state: &AppState) -> TicketPanelRows {
     let preview = state.transfer_ticket_preview();
     TicketPanelRows {
         detail_count: 0,
+        actions: &[],
         field_count: TransferTicketField::COUNT,
         ready: preview.ready,
         blocker_count: preview.blockers.len(),
@@ -253,6 +274,7 @@ fn futures_state_ticket_rows(state: &AppState) -> TicketPanelRows {
     let preview = state.futures_state_ticket_preview();
     TicketPanelRows {
         detail_count: 0,
+        actions: &[],
         field_count: FuturesStateTicketField::MAX_COUNT,
         ready: preview.ready,
         blocker_count: preview.blockers.len(),

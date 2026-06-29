@@ -8,6 +8,7 @@ use crate::mouse_target::{self, MousePosition, MouseTarget, PanelMouseAction};
 use crate::search_floating_view::SearchFloatingLayout;
 use crate::status_bar::StatusAction;
 use agent_finance_core::{Environment, Market, Provider, SignedReadRequest, SignedReadSnapshot};
+use agent_finance_market::snapshot::{MarketSnapshot, QuoteSnapshot, RegularBasisSnapshot};
 use crossterm::event::{KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use ratatui::layout::Rect;
 
@@ -931,10 +932,109 @@ fn mouse_click_on_order_ticket_field_selects_that_field() {
     .panel_rect(Panel::OrderTicket)
     .expect("order ticket panel is visible");
 
-    handle_mouse_event(area, &mut state, &mut drag, panel_click(panel, 6));
+    let click = clickable_panel_field(&mut state, area, panel, Panel::OrderTicket, 4);
+    handle_mouse_event(area, &mut state, &mut drag, click);
 
     assert_eq!(state.order_ticket.selected_field_label(), "price");
     assert_eq!(state.panels.focused(), Panel::OrderTicket);
+    assert_eq!(drag, MouseDrag::default());
+}
+
+#[test]
+fn mouse_click_on_order_ticket_capture_price_action_fixes_quote_price() {
+    let area = Rect::new(0, 0, 160, 48);
+    let mut state = AppState::from_config(crate::config::TuiConfig {
+        watchlist: vec!["CRDO".to_string()],
+        workspace: crate::config::WorkspaceConfig {
+            current: WorkspaceKind::Trade,
+        },
+        trading: crate::config::TradingConfig {
+            default_profile: Some("mainnet".to_string()),
+        },
+        ..crate::config::TuiConfig::default()
+    });
+    state.market_snapshot = Some(market_snapshot_with_price("CRDO", 250.0));
+    let mut drag = MouseDrag::default();
+    let panel = layout::build(
+        area,
+        &state.layout,
+        &state.floating,
+        &state.visible_panels(),
+    )
+    .panel_rect(Panel::OrderTicket)
+    .expect("order ticket panel is visible");
+
+    let click = clickable_panel_action(
+        &mut state,
+        area,
+        panel,
+        Panel::OrderTicket,
+        ActionId::CaptureOrderReferencePrice,
+    );
+    handle_mouse_event(area, &mut state, &mut drag, click);
+
+    assert_eq!(state.panels.focused(), Panel::OrderTicket);
+    assert_eq!(state.order_ticket.selected_field_label(), "price");
+    assert_eq!(
+        state.order_ticket_preview().price.as_deref(),
+        Some("250.00")
+    );
+    assert_eq!(state.staged_change_count(), 0);
+    assert!(state.pending_staged_confirmation().is_none());
+    assert!(state.take_pending_staged_execution().is_none());
+    assert_eq!(drag, MouseDrag::default());
+}
+
+#[test]
+fn mouse_click_on_order_ticket_capture_price_blank_space_does_not_fix_price() {
+    let area = Rect::new(0, 0, 240, 48);
+    let mut state = AppState::from_config(crate::config::TuiConfig {
+        watchlist: vec!["CRDO".to_string()],
+        workspace: crate::config::WorkspaceConfig {
+            current: WorkspaceKind::Trade,
+        },
+        trading: crate::config::TradingConfig {
+            default_profile: Some("mainnet".to_string()),
+        },
+        ..crate::config::TuiConfig::default()
+    });
+    state.market_snapshot = Some(market_snapshot_with_price("CRDO", 250.0));
+    let mut drag = MouseDrag::default();
+    let panel = layout::build(
+        area,
+        &state.layout,
+        &state.floating,
+        &state.visible_panels(),
+    )
+    .panel_rect(Panel::OrderTicket)
+    .expect("order ticket panel is visible");
+    let action_click = clickable_panel_action(
+        &mut state,
+        area,
+        panel,
+        Panel::OrderTicket,
+        ActionId::CaptureOrderReferencePrice,
+    );
+    let blank_column = panel.x
+        + 1
+        + crate::order_ticket_controls::ORDER_TICKET_ACTIONS[0]
+            .label
+            .len() as u16
+        + 4;
+    assert!(blank_column < panel.right().saturating_sub(1));
+    let blank_click = mouse_event(
+        MouseEventKind::Down(MouseButton::Left),
+        blank_column,
+        action_click.row,
+    );
+
+    handle_mouse_event(area, &mut state, &mut drag, blank_click);
+
+    assert_eq!(state.panels.focused(), Panel::OrderTicket);
+    assert_eq!(state.order_ticket.selected_field_label(), "market");
+    assert_eq!(state.staged_change_count(), 0);
+    assert!(state.pending_staged_confirmation().is_none());
+    assert!(state.take_pending_staged_execution().is_none());
     assert_eq!(drag, MouseDrag::default());
 }
 
@@ -965,7 +1065,8 @@ fn mouse_click_on_ready_order_ticket_stages_review() {
     .panel_rect(Panel::OrderTicket)
     .expect("order ticket panel is visible");
 
-    handle_mouse_event(area, &mut state, &mut drag, panel_click(panel, 9));
+    let click = clickable_panel_ready_action(&mut state, area, panel, Panel::OrderTicket);
+    handle_mouse_event(area, &mut state, &mut drag, click);
 
     assert_eq!(state.staged_change_views().len(), 1);
     assert_eq!(state.panels.focused(), Panel::IntentReview);
@@ -1527,6 +1628,30 @@ fn account_snapshot_with_transferable_holdings(profile: &str) -> crate::AccountS
     )
 }
 
+fn market_snapshot_with_price(symbol: &str, price: f64) -> MarketSnapshot {
+    MarketSnapshot {
+        fetched_at_local: Some("2026-06-25 09:30:00".to_string()),
+        quotes: vec![QuoteSnapshot {
+            symbol: symbol.to_string(),
+            price: Some(price),
+            currency: Some("USD".to_string()),
+            provider: "test".to_string(),
+            session: Some("regular".to_string()),
+            market_time_local: None,
+            change_pct: None,
+            aliases: Vec::new(),
+            regular_basis: RegularBasisSnapshot {
+                previous_close: None,
+                open: None,
+                high: None,
+                low: None,
+                volume: None,
+            },
+        }],
+        errors: Vec::new(),
+    }
+}
+
 fn staged_execution_confirmation_state() -> AppState {
     let mut state = staged_review_state();
     state.reduce(Action::Execute(ActionId::OpenFloating(FloatingKind::Help)));
@@ -1648,12 +1773,73 @@ fn line_text(line: &ratatui::text::Line<'_>) -> String {
         .collect::<String>()
 }
 
+fn clickable_panel_field(
+    state: &mut AppState,
+    area: Rect,
+    panel: Rect,
+    target_panel: Panel,
+    target_index: usize,
+) -> MouseEvent {
+    clickable_panel_target(
+        state,
+        area,
+        panel,
+        |target| {
+            target
+                == MouseTarget::PanelAction {
+                    panel: target_panel,
+                    action: PanelMouseAction::SelectField {
+                        index: target_index,
+                    },
+                }
+        },
+        "clickable panel field was not found",
+    )
+}
+
+fn clickable_panel_ready_action(
+    state: &mut AppState,
+    area: Rect,
+    panel: Rect,
+    target_panel: Panel,
+) -> MouseEvent {
+    clickable_panel_target(
+        state,
+        area,
+        panel,
+        |target| {
+            target
+                == MouseTarget::PanelAction {
+                    panel: target_panel,
+                    action: PanelMouseAction::StageReadyChange,
+                }
+        },
+        "clickable panel ready action was not found",
+    )
+}
+
 fn clickable_panel_action(
     state: &mut AppState,
     area: Rect,
     panel: Rect,
     target_panel: Panel,
     target_action: ActionId,
+) -> MouseEvent {
+    clickable_panel_target(
+        state,
+        area,
+        panel,
+        |target| target.panel_action_hovered(target_panel, target_action),
+        "clickable panel action was not found",
+    )
+}
+
+fn clickable_panel_target(
+    state: &mut AppState,
+    area: Rect,
+    panel: Rect,
+    matches_target: impl Fn(MouseTarget) -> bool,
+    missing: &str,
 ) -> MouseEvent {
     let mut drag = MouseDrag::default();
     for content_row in 0..panel.height.saturating_sub(2) {
@@ -1666,14 +1852,12 @@ fn clickable_panel_action(
                 &mut drag,
                 mouse_event(MouseEventKind::Moved, column, row),
             );
-            if current_mouse_target(area, state)
-                .is_some_and(|target| target.panel_action_hovered(target_panel, target_action))
-            {
+            if current_mouse_target(area, state).is_some_and(&matches_target) {
                 return mouse_event(MouseEventKind::Down(MouseButton::Left), column, row);
             }
         }
     }
-    panic!("clickable panel action was not found");
+    panic!("{missing}");
 }
 
 fn floating_click(floating: Rect, content_column: u16, content_row: u16) -> MouseEvent {

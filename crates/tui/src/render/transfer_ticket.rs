@@ -25,6 +25,7 @@ pub(super) fn render_transfer_ticket(
             live_writes_enabled: preview.live_writes_enabled,
             effective_mode: preview.effective_mode.to_string(),
             detail_lines: Vec::new(),
+            actions: &[],
             fields: vec![
                 TicketField::new("direction", preview.direction.to_string(), selected),
                 TicketField::new("asset", preview.asset.clone(), selected),

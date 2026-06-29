@@ -31,6 +31,7 @@ pub(super) fn render_order_ticket(
                 preview.symbol.as_deref().unwrap_or("-"),
                 preview.profile.as_deref().unwrap_or("-")
             )],
+            actions: crate::order_ticket_controls::ORDER_TICKET_ACTIONS,
             fields: vec![
                 TicketField::new("market", ticket.market().to_string(), selected),
                 TicketField::new("side", ticket.side().to_string(), selected),

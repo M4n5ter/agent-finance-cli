@@ -26,6 +26,7 @@ pub(super) fn render_futures_state(
             live_writes_enabled: preview.live_writes_enabled,
             effective_mode: preview.effective_mode.to_string(),
             detail_lines: Vec::new(),
+            actions: &[],
             fields: vec![
                 TicketField::new("kind", preview.kind.to_string(), selected),
                 TicketField::new("scope", preview.scope_label(), selected),
