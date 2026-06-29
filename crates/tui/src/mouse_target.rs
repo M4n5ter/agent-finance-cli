@@ -95,6 +95,24 @@ impl MouseTarget {
         )
     }
 
+    pub fn panel_setting_adjust_hovered(
+        self,
+        panel: Panel,
+        index: usize,
+        direction: isize,
+    ) -> bool {
+        matches!(
+            self,
+            Self::PanelAction {
+                panel: hover_panel,
+                action: PanelMouseAction::SettingAdjust {
+                    index: hover_index,
+                    direction: hover_direction,
+                },
+            } if hover_panel == panel && hover_index == index && hover_direction == direction
+        )
+    }
+
     pub fn panel_intent_review_action_hovered(
         self,
         panel: Panel,
@@ -169,6 +187,10 @@ pub enum PanelMouseAction {
     },
     RowAction {
         content_row: usize,
+    },
+    SettingAdjust {
+        index: usize,
+        direction: isize,
     },
     IntentReviewAction {
         action: IntentReviewAction,

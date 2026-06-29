@@ -49,6 +49,10 @@ enum PanelHit {
         content_row: usize,
         hit: AccountPanelHit,
     },
+    SettingAdjust {
+        index: usize,
+        direction: isize,
+    },
     IntentReviewAction(IntentReviewAction),
 }
 
@@ -69,6 +73,9 @@ impl PanelHit {
                 }
             },
             (_, Self::Action { action, .. }) => Some(Action::Execute(action)),
+            (Panel::Settings, Self::SettingAdjust { index, direction }) => {
+                Some(Action::AdjustSettingRow { index, direction })
+            }
             (Panel::IntentReview, Self::Row(index)) => Some(Action::SelectStagedChange(index)),
             (Panel::IntentReview, Self::IntentReviewAction(action)) => match action {
                 IntentReviewAction::ExecuteSelected => Some(Action::ExecuteStagedChange),
@@ -106,6 +113,9 @@ impl PanelHit {
                 content_row,
                 hit: AccountPanelHit::TicketPreset(_),
             } => PanelMouseAction::RowAction { content_row },
+            Self::SettingAdjust { index, direction } => {
+                PanelMouseAction::SettingAdjust { index, direction }
+            }
             Self::IntentReviewAction(action) => PanelMouseAction::IntentReviewAction { action },
         }
     }
@@ -184,8 +194,26 @@ fn panel_hit_at(
             futures_state_ticket_rows(state),
         ),
         Panel::Settings => {
-            crate::settings_panel_view::setting_index_at_content_row(state, content_row(area, row)?)
-                .map(PanelHit::Row)
+            let content_row = content_row(area, row)?;
+            let content_width = content_width(area);
+            let content_column = content_column(area, column).unwrap_or(u16::MAX);
+            if let Some(action) = crate::settings_panel_view::action_at_content_cell(
+                state,
+                content_width,
+                content_row,
+                content_column,
+            ) {
+                return Some(PanelHit::SettingAdjust {
+                    index: action.action.index,
+                    direction: action.action.direction,
+                });
+            }
+            crate::settings_panel_view::setting_index_at_content_row(
+                state,
+                content_width,
+                content_row,
+            )
+            .map(PanelHit::Row)
         }
         Panel::ProfileRisk => {
             crate::profile_risk_panel_view::action_at_content_row(state, content_row(area, row)?)

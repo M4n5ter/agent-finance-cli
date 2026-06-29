@@ -513,6 +513,11 @@ impl AppState {
         ));
     }
 
+    fn adjust_setting_row(&mut self, index: usize, direction: isize) {
+        self.settings_editor.select(index);
+        self.adjust_selected_setting(direction);
+    }
+
     fn request_config_save(&mut self) {
         if self.config_changes.is_empty() {
             self.task_log.info("config already saved".to_string());
@@ -874,6 +879,9 @@ impl AppState {
             }
             Action::SelectSettingRow(index) => self.settings_editor.select(index),
             Action::AdjustSelectedSetting(direction) => self.adjust_selected_setting(direction),
+            Action::AdjustSettingRow { index, direction } => {
+                self.adjust_setting_row(index, direction);
+            }
             Action::StageOrderTicket => self.stage_order_ticket(),
             Action::StageTransferTicket => self.stage_transfer_ticket(),
             Action::StageFuturesStateTicket => self.stage_futures_state_ticket(),
@@ -1345,6 +1353,10 @@ pub enum Action {
     MoveSettingsSelection(isize),
     SelectSettingRow(usize),
     AdjustSelectedSetting(isize),
+    AdjustSettingRow {
+        index: usize,
+        direction: isize,
+    },
     StageOrderTicket,
     StageTransferTicket,
     StageFuturesStateTicket,

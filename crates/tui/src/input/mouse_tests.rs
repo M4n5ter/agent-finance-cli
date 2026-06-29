@@ -878,6 +878,42 @@ fn mouse_click_on_settings_row_selects_setting() {
 }
 
 #[test]
+fn mouse_click_on_settings_adjust_action_updates_setting() {
+    let area = Rect::new(0, 0, 160, 48);
+    let mut state = AppState::from_config(crate::config::TuiConfig {
+        workspace: crate::config::WorkspaceConfig {
+            current: WorkspaceKind::Settings,
+        },
+        ..crate::config::TuiConfig::default()
+    });
+    let original_provider = state.providers.equity;
+    let mut drag = MouseDrag::default();
+    let panel = layout::build(
+        area,
+        &state.layout,
+        &state.floating,
+        &state.visible_panels(),
+    )
+    .panel_rect(Panel::Settings)
+    .expect("settings panel is visible");
+
+    let click = clickable_panel_target(
+        &mut state,
+        area,
+        panel,
+        |target| target.panel_setting_adjust_hovered(Panel::Settings, 0, 1),
+        "settings next action was not found",
+    );
+    handle_mouse_event(area, &mut state, &mut drag, click);
+
+    assert_ne!(state.providers.equity, original_provider);
+    assert_eq!(state.settings_editor.selected().label(), "equity provider");
+    assert_eq!(state.config_changes, vec!["providers"]);
+    assert_eq!(state.panels.focused(), Panel::Settings);
+    assert_eq!(drag, MouseDrag::default());
+}
+
+#[test]
 fn mouse_click_on_profile_risk_action_executes_action() {
     let area = Rect::new(0, 0, 160, 48);
     let mut state = AppState::from_config(crate::config::TuiConfig {
