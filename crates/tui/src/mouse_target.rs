@@ -1,5 +1,6 @@
 use crate::command::ActionId;
 use crate::confirmation_dialog::ConfirmationButtonAction;
+use crate::intent_review_view::IntentReviewAction;
 use crate::layout::{CockpitLayout, LayoutHit};
 use crate::model::{FloatingKind, Panel, WorkspaceKind};
 use crate::state::AppState;
@@ -84,6 +85,22 @@ impl MouseTarget {
         )
     }
 
+    pub fn panel_intent_review_action_hovered(
+        self,
+        panel: Panel,
+        action: IntentReviewAction,
+    ) -> bool {
+        matches!(
+            self,
+            Self::PanelAction {
+                panel: hover_panel,
+                action: PanelMouseAction::IntentReviewAction {
+                    action: hover_action,
+                },
+            } if hover_panel == panel && hover_action == action
+        )
+    }
+
     pub fn panel_info_row_hovered(self, panel: Panel, index: usize) -> bool {
         matches!(
             self,
@@ -139,6 +156,9 @@ pub enum PanelMouseAction {
     ExecuteAction {
         label: &'static str,
         action: ActionId,
+    },
+    IntentReviewAction {
+        action: IntentReviewAction,
     },
     InspectRow {
         index: usize,

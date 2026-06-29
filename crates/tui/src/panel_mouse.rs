@@ -1,6 +1,7 @@
 use ratatui::layout::Rect;
 
 use crate::futures_state_ticket::FuturesStateTicketField;
+use crate::intent_review_view::IntentReviewAction;
 use crate::model::Panel;
 use crate::mouse_target::{MouseTarget, PanelMouseAction};
 use crate::order_ticket::OrderTicketField;
@@ -12,20 +13,20 @@ pub(crate) fn click_action(
     state: &AppState,
     panel: Panel,
     area: Rect,
-    _column: u16,
+    column: u16,
     row: u16,
 ) -> Option<Action> {
-    panel_hit_at(state, panel, area, row).and_then(|hit| hit.action_for(panel))
+    panel_hit_at(state, panel, area, column, row).and_then(|hit| hit.action_for(panel))
 }
 
 pub(crate) fn hover_target(
     state: &AppState,
     panel: Panel,
     area: Rect,
-    _column: u16,
+    column: u16,
     row: u16,
 ) -> Option<MouseTarget> {
-    panel_hit_at(state, panel, area, row)
+    panel_hit_at(state, panel, area, column, row)
         .map(|hit| MouseTarget::PanelAction {
             panel,
             action: hit.mouse_action(),
@@ -43,6 +44,7 @@ enum PanelHit {
         label: &'static str,
         action: crate::command::ActionId,
     },
+    IntentReviewAction(IntentReviewAction),
 }
 
 impl PanelHit {
@@ -53,6 +55,10 @@ impl PanelHit {
                 Some(Action::SelectOpenOrder(index))
             }
             (Panel::IntentReview, Self::Row(index)) => Some(Action::SelectStagedChange(index)),
+            (Panel::IntentReview, Self::IntentReviewAction(action)) => match action {
+                IntentReviewAction::ExecuteSelected => Some(Action::ExecuteStagedChange),
+                IntentReviewAction::CloseSelected => Some(Action::CloseSelectedStagedChange),
+            },
             (Panel::Settings, Self::Row(index)) => Some(Action::SelectSettingRow(index)),
             (Panel::OrderTicket, Self::TicketField(index)) => {
                 Some(Action::SelectOrderTicketField(index))
@@ -78,11 +84,18 @@ impl PanelHit {
             Self::TicketField(index) => PanelMouseAction::SelectField { index },
             Self::TicketReadyAction => PanelMouseAction::StageReadyChange,
             Self::Action { label, action } => PanelMouseAction::ExecuteAction { label, action },
+            Self::IntentReviewAction(action) => PanelMouseAction::IntentReviewAction { action },
         }
     }
 }
 
-fn panel_hit_at(state: &AppState, panel: Panel, area: Rect, row: u16) -> Option<PanelHit> {
+fn panel_hit_at(
+    state: &AppState,
+    panel: Panel,
+    area: Rect,
+    column: u16,
+    row: u16,
+) -> Option<PanelHit> {
     match panel {
         Panel::Watchlist => {
             let index = content_row(area, row)?;
@@ -102,11 +115,7 @@ fn panel_hit_at(state: &AppState, panel: Panel, area: Rect, row: u16) -> Option<
             content_row(area, row)?,
         )
         .map(PanelHit::Row),
-        Panel::IntentReview => crate::intent_review_view::staged_change_index_at_content_row(
-            state.staged_change_review_views().len(),
-            content_row(area, row)?,
-        )
-        .map(PanelHit::Row),
+        Panel::IntentReview => intent_review_hit_at(state, area, column, row),
         Panel::OrderTicket => ticket_hit_at(content_row(area, row)?, order_ticket_rows(state)),
         Panel::TransferTicket => {
             ticket_hit_at(content_row(area, row)?, transfer_ticket_rows(state))
@@ -140,6 +149,25 @@ fn panel_hit_at(state: &AppState, panel: Panel, area: Rect, row: u16) -> Option<
         )
         .map(PanelHit::InfoRow),
     }
+}
+
+fn intent_review_hit_at(state: &AppState, area: Rect, column: u16, row: u16) -> Option<PanelHit> {
+    let content_row = content_row(area, row)?;
+    let changes = state.staged_change_review_views();
+    if !changes.is_empty()
+        && let Some(action) = crate::intent_review_view::action_at_content_cell(
+            state
+                .staged_change_count()
+                .saturating_sub(crate::state::VISIBLE_REVIEW_LIMIT),
+            content_width(area),
+            content_row,
+            content_column(area, column).unwrap_or(u16::MAX),
+        )
+    {
+        return Some(PanelHit::IntentReviewAction(action));
+    }
+    crate::intent_review_view::staged_change_index_at_content_row(changes.len(), content_row)
+        .map(PanelHit::Row)
 }
 
 fn ticket_hit_at(content_row: usize, rows: TicketPanelRows) -> Option<PanelHit> {
@@ -184,4 +212,15 @@ fn content_row(area: Rect, row: u16) -> Option<usize> {
         return None;
     }
     Some(row.saturating_sub(area.y).saturating_sub(1) as usize)
+}
+
+fn content_column(area: Rect, column: u16) -> Option<u16> {
+    if column <= area.x || column >= area.right().saturating_sub(1) {
+        return None;
+    }
+    Some(column.saturating_sub(area.x).saturating_sub(1))
+}
+
+fn content_width(area: Rect) -> u16 {
+    area.width.saturating_sub(2)
 }

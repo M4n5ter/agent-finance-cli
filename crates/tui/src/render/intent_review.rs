@@ -7,7 +7,7 @@ use ratatui::widgets::{Cell, Paragraph, Row, Table, Wrap};
 use crate::model::Panel;
 use agent_finance_core::intent::IntentStatus;
 
-use crate::intent_review_view::INTENT_REVIEW_SUMMARY_ROWS;
+use crate::intent_review_view::{INTENT_REVIEW_SUMMARY_ROWS, IntentReviewActionLine, action_line};
 use crate::mouse_target::MouseTarget;
 use crate::state::{AppState, StagedChangeQueueStatus, StagedChangeView, VISIBLE_REVIEW_LIMIT};
 
@@ -59,21 +59,63 @@ pub(super) fn render_intent_review(
                 state.staged_change_count()
             )),
         ]),
-        Line::from(if hidden == 0 {
-            crate::hints::intent_review_panel_hint()
-        } else {
-            format!(
-                "{}  +{hidden} hidden staged change(s)",
-                crate::hints::intent_review_panel_hint()
-            )
-        }),
+        action_line_to_line(state, action_line(hidden, inner.width), mouse_target),
     ];
-    frame.render_widget(Paragraph::new(summary).wrap(Wrap { trim: true }), chunks[0]);
+    frame.render_widget(Paragraph::new(summary), chunks[0]);
 
     frame.render_widget(
         staged_changes_table(state, &changes, mouse_target),
         chunks[1],
     );
+}
+
+fn action_line_to_line(
+    state: &AppState,
+    action_line: IntentReviewActionLine,
+    mouse_target: Option<MouseTarget>,
+) -> Line<'static> {
+    let mut spans = Vec::new();
+    let mut cursor = 0usize;
+    for action in action_line.actions {
+        let start = action.start as usize;
+        let end = action.end as usize;
+        push_text_span(
+            &mut spans,
+            &action_line.text,
+            cursor,
+            start,
+            state.theme.text_style(),
+        );
+        let style = if mouse_target.is_some_and(|target| {
+            target.panel_intent_review_action_hovered(Panel::IntentReview, action.action)
+        }) {
+            state.theme.selected_style().add_modifier(Modifier::BOLD)
+        } else {
+            state.theme.accent_style().add_modifier(Modifier::BOLD)
+        };
+        push_text_span(&mut spans, &action_line.text, start, end, style);
+        cursor = end;
+    }
+    push_text_span(
+        &mut spans,
+        &action_line.text,
+        cursor,
+        action_line.text.len(),
+        state.theme.text_style(),
+    );
+    Line::from(spans)
+}
+
+fn push_text_span(
+    spans: &mut Vec<Span<'static>>,
+    text: &str,
+    start: usize,
+    end: usize,
+    style: Style,
+) {
+    if start < end {
+        spans.push(Span::styled(text[start..end].to_string(), style));
+    }
 }
 
 fn render_empty_intent_review(frame: &mut Frame<'_>, state: &AppState, area: Rect) {

@@ -1,6 +1,7 @@
 use super::*;
 use crate::command::ActionId;
 use crate::confirmation_dialog::{self, ConfirmationButtonAction, ConfirmationRow};
+use crate::intent_review_view::{IntentReviewAction, action_line};
 use crate::layout::{self, DockedColumnSplit, LayoutHit};
 use crate::model::{FloatingKind, Panel, WorkspaceKind};
 use crate::mouse_target::{self, MousePosition, MouseTarget, PanelMouseAction};
@@ -308,6 +309,143 @@ fn mouse_click_on_intent_review_row_selects_staged_change() {
     assert!(!changes[1].selected);
     assert_eq!(state.panels.focused(), Panel::IntentReview);
     assert_eq!(drag, MouseDrag::default());
+}
+
+#[test]
+fn mouse_movement_tracks_intent_review_summary_action_hover() {
+    let area = Rect::new(0, 0, 160, 48);
+    let mut state = staged_review_state();
+    let mut drag = MouseDrag::default();
+    let (column, row) =
+        intent_review_action_cell(area, &state, IntentReviewAction::ExecuteSelected);
+
+    handle_mouse_event(
+        area,
+        &mut state,
+        &mut drag,
+        mouse_event(MouseEventKind::Moved, column, row),
+    );
+
+    assert_eq!(
+        current_mouse_target(area, &state),
+        Some(MouseTarget::PanelAction {
+            panel: Panel::IntentReview,
+            action: PanelMouseAction::IntentReviewAction {
+                action: IntentReviewAction::ExecuteSelected,
+            },
+        })
+    );
+}
+
+#[test]
+fn mouse_click_on_intent_review_execute_action_opens_confirmation() {
+    let area = Rect::new(0, 0, 160, 48);
+    let mut state = staged_review_state();
+    let mut drag = MouseDrag::default();
+    let (column, row) =
+        intent_review_action_cell(area, &state, IntentReviewAction::ExecuteSelected);
+
+    handle_mouse_event(
+        area,
+        &mut state,
+        &mut drag,
+        mouse_event(MouseEventKind::Down(MouseButton::Left), column, row),
+    );
+
+    assert_eq!(
+        state.floating.last().map(|pane| pane.kind),
+        Some(FloatingKind::StagedExecutionConfirmation)
+    );
+    assert_eq!(drag, MouseDrag::default());
+}
+
+#[test]
+fn mouse_click_on_intent_review_close_action_closes_selected_change() {
+    let area = Rect::new(0, 0, 160, 48);
+    let mut state = staged_review_state();
+    let mut drag = MouseDrag::default();
+    assert_eq!(state.staged_change_count(), 2);
+    assert_eq!(
+        state
+            .staged_change_views()
+            .iter()
+            .filter(|change| change.selected)
+            .count(),
+        1
+    );
+    let (column, row) = intent_review_action_cell(area, &state, IntentReviewAction::CloseSelected);
+
+    handle_mouse_event(
+        area,
+        &mut state,
+        &mut drag,
+        mouse_event(MouseEventKind::Down(MouseButton::Left), column, row),
+    );
+
+    assert_eq!(state.staged_change_count(), 1);
+    assert_eq!(state.panels.focused(), Panel::IntentReview);
+    assert_eq!(drag, MouseDrag::default());
+}
+
+#[test]
+fn narrow_intent_review_does_not_click_hidden_summary_action() {
+    let area = Rect::new(0, 0, 72, 30);
+    let mut state = staged_review_state();
+    let mut drag = MouseDrag::default();
+    let panel = layout::build(
+        area,
+        &state.layout,
+        &state.floating,
+        &state.visible_panels(),
+    )
+    .panel_rect(Panel::IntentReview)
+    .expect("intent review panel is visible");
+
+    handle_mouse_event(
+        area,
+        &mut state,
+        &mut drag,
+        mouse_event(
+            MouseEventKind::Down(MouseButton::Left),
+            panel.right().saturating_sub(2),
+            panel.y + 2,
+        ),
+    );
+
+    assert_ne!(
+        state.floating.last().map(|pane| pane.kind),
+        Some(FloatingKind::StagedExecutionConfirmation)
+    );
+    assert_eq!(state.staged_change_count(), 2);
+}
+
+#[test]
+fn intent_review_row_selection_works_when_click_column_is_outside_inner_content() {
+    let area = Rect::new(0, 0, 160, 48);
+    let mut state = staged_review_state();
+    let mut drag = MouseDrag::default();
+    assert!(state.staged_change_views()[1].selected);
+    let panel = layout::build(
+        area,
+        &state.layout,
+        &state.floating,
+        &state.visible_panels(),
+    )
+    .panel_rect(Panel::IntentReview)
+    .expect("intent review panel is visible");
+
+    handle_mouse_event(
+        area,
+        &mut state,
+        &mut drag,
+        mouse_event(
+            MouseEventKind::Down(MouseButton::Left),
+            panel.right().saturating_sub(1),
+            panel.y + 4,
+        ),
+    );
+
+    assert!(state.staged_change_views()[0].selected);
 }
 
 #[test]
@@ -1000,6 +1138,13 @@ fn account_snapshot_with_open_orders(profile: &str) -> crate::AccountSnapshot {
 }
 
 fn staged_execution_confirmation_state() -> AppState {
+    let mut state = staged_review_state();
+    state.reduce(Action::Execute(ActionId::OpenFloating(FloatingKind::Help)));
+    state.reduce(Action::ExecuteStagedChange);
+    state
+}
+
+fn staged_review_state() -> AppState {
     let mut state = AppState::from_config(crate::config::TuiConfig {
         watchlist: vec!["CRDO".to_string()],
         workspace: crate::config::WorkspaceConfig {
@@ -1010,14 +1155,39 @@ fn staged_execution_confirmation_state() -> AppState {
         },
         ..crate::config::TuiConfig::default()
     });
-    state.reduce(Action::Execute(ActionId::OpenFloating(FloatingKind::Help)));
     state
         .order_ticket
         .set_quantity_text(Some("0.05".to_string()));
     state.order_ticket.set_price_text(Some("204".to_string()));
     state.reduce(Action::StageOrderTicket);
-    state.reduce(Action::ExecuteStagedChange);
+    state.order_ticket.set_price_text(Some("198".to_string()));
+    state.reduce(Action::StageOrderTicket);
     state
+}
+
+fn intent_review_action_cell(
+    area: Rect,
+    state: &AppState,
+    action: IntentReviewAction,
+) -> (u16, u16) {
+    let panel = layout::build(
+        area,
+        &state.layout,
+        &state.floating,
+        &state.visible_panels(),
+    )
+    .panel_rect(Panel::IntentReview)
+    .expect("intent review panel is visible");
+    let hidden = state
+        .staged_change_count()
+        .saturating_sub(crate::state::VISIBLE_REVIEW_LIMIT);
+    let line = action_line(hidden, panel.width.saturating_sub(2));
+    let span = line
+        .actions
+        .into_iter()
+        .find(|span| span.action == action)
+        .expect("intent review action is visible");
+    (panel.x + 1 + span.start, panel.y + 2)
 }
 
 fn mouse_event(kind: MouseEventKind, column: u16, row: u16) -> MouseEvent {
