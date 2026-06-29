@@ -574,12 +574,14 @@ impl FloatingSize {
                 width_ratio: 70,
                 height_ratio: 40,
             },
-            FloatingKind::LiveWritesConfirmation | FloatingKind::StagedExecutionConfirmation => {
-                Self {
-                    width_ratio: 56,
-                    height_ratio: 34,
-                }
-            }
+            FloatingKind::LiveWritesConfirmation => Self {
+                width_ratio: 56,
+                height_ratio: 34,
+            },
+            FloatingKind::StagedExecutionConfirmation => Self {
+                width_ratio: 56,
+                height_ratio: 46,
+            },
             FloatingKind::Help => Self {
                 width_ratio: 64,
                 height_ratio: 70,

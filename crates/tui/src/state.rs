@@ -30,6 +30,7 @@ mod lifecycle;
 mod load;
 mod profile;
 mod staged_change;
+mod staged_confirmation;
 mod workspace;
 
 pub(super) use config_undo::LocalConfigEdit;
@@ -48,12 +49,14 @@ pub use staged_change::{
     CancelReview, FuturesStateReview, OrderTicketReview, ProfileRiskReview, StagedChangeEvent,
     StagedChangeRequest, StagedChangeSubject, StagedChangeView, StagedExecution,
     StagedExecutionRequest, StagedLocalCommitSubject, StagedSubmitRequest, StagedSubmitSubject,
-    TransferReview,
+    TransferReview, TypedConfirmation,
 };
 use staged_change::{
     CloseStagedChangeResult, OpenStagedChangeResult, QueueExecutionResult, StagedChanges,
     TransitionResult,
 };
+use staged_confirmation::PendingStagedConfirmation;
+pub(crate) use staged_confirmation::{PendingStagedConfirmationView, TypedConfirmationGateView};
 
 #[derive(Debug, Clone)]
 pub struct AppState {
@@ -97,7 +100,7 @@ pub struct AppState {
     pub futures_state_ticket: FuturesStateTicket,
     pub mouse_position: Option<MousePosition>,
     staged_changes: StagedChanges,
-    pending_staged_confirmation: Option<StagedExecutionRequest>,
+    pending_staged_confirmation: Option<PendingStagedConfirmation>,
     pending_staged_execution: Option<StagedExecutionRequest>,
     pending_provider_preferences_update: bool,
     pending_config_save: bool,
@@ -229,7 +232,29 @@ impl AppState {
     }
 
     pub fn pending_staged_confirmation(&self) -> Option<&StagedExecutionRequest> {
-        self.pending_staged_confirmation.as_ref()
+        self.pending_staged_confirmation
+            .as_ref()
+            .map(PendingStagedConfirmation::request)
+    }
+
+    pub(crate) fn pending_staged_confirmation_view(
+        &self,
+    ) -> Option<PendingStagedConfirmationView<'_>> {
+        self.pending_staged_confirmation
+            .as_ref()
+            .map(PendingStagedConfirmation::view)
+    }
+
+    pub(crate) fn pending_staged_confirmation_gate(&self) -> Option<TypedConfirmationGateView<'_>> {
+        self.pending_staged_confirmation
+            .as_ref()
+            .and_then(PendingStagedConfirmation::typed_gate)
+    }
+
+    pub(crate) fn pending_staged_confirmation_accepts_text_input(&self) -> bool {
+        self.pending_staged_confirmation
+            .as_ref()
+            .is_some_and(PendingStagedConfirmation::accepts_text_input)
     }
 
     pub fn take_pending_staged_execution(&mut self) -> Option<StagedExecutionRequest> {
@@ -705,6 +730,9 @@ impl AppState {
             Action::EditTradingProfileQuery(request) => {
                 self.profile_editor.edit_query(request);
             }
+            Action::EditStagedExecutionConfirmation(request) => {
+                self.edit_staged_execution_confirmation(request);
+            }
             Action::AcceptSymbolSearch => {
                 if let Some(index) = self.symbol_search.selected_symbol_index() {
                     self.select_symbol_search_symbol(index);
@@ -981,7 +1009,7 @@ impl AppState {
                     request.summary(),
                     request.id
                 ));
-                self.pending_staged_confirmation = Some(request);
+                self.pending_staged_confirmation = Some(PendingStagedConfirmation::new(request));
                 self.open_floating(FloatingKind::StagedExecutionConfirmation);
             }
             QueueExecutionResult::Missing => self
@@ -994,12 +1022,24 @@ impl AppState {
     }
 
     fn confirm_staged_execution(&mut self) {
-        let Some(request) = self.pending_staged_confirmation.take() else {
+        let Some(pending) = self.pending_staged_confirmation.as_ref() else {
             self.task_log
                 .warning_event("no staged execution confirmation is pending".to_string());
             self.close_floating(FloatingKind::StagedExecutionConfirmation);
             return;
         };
+        if !pending.can_confirm() {
+            if let Some(message) = pending.missing_confirmation_message() {
+                self.task_log.warning_event(message);
+            }
+            self.open_floating(FloatingKind::StagedExecutionConfirmation);
+            return;
+        }
+        let request = self
+            .pending_staged_confirmation
+            .take()
+            .expect("pending staged confirmation was checked")
+            .into_request();
         match self.staged_changes.queue_execution_request(&request) {
             QueueExecutionResult::Queued(request) => {
                 self.task_log.info(format!(
@@ -1020,15 +1060,22 @@ impl AppState {
     }
 
     fn cancel_staged_execution_confirmation(&mut self) {
-        let Some(request) = self.pending_staged_confirmation.take() else {
+        let Some(pending) = self.pending_staged_confirmation.take() else {
             self.close_floating(FloatingKind::StagedExecutionConfirmation);
             return;
         };
+        let request = pending.request();
         self.task_log.info(format!(
             "cancelled staged execution confirmation for {}",
             request.id
         ));
         self.close_floating(FloatingKind::StagedExecutionConfirmation);
+    }
+
+    fn edit_staged_execution_confirmation(&mut self, request: tui_input::InputRequest) {
+        if let Some(pending) = self.pending_staged_confirmation.as_mut() {
+            pending.edit(request);
+        }
     }
 
     fn apply_profile_risk_commit_success(
@@ -1175,6 +1222,7 @@ pub enum Action {
     EditSymbolSearchQuery(tui_input::InputRequest),
     EditWatchlistAddQuery(tui_input::InputRequest),
     EditTradingProfileQuery(tui_input::InputRequest),
+    EditStagedExecutionConfirmation(tui_input::InputRequest),
     AcceptSymbolSearch,
     SelectSymbolSearchSymbol(usize),
     AcceptWatchlistAdd,

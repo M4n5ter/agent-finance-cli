@@ -122,6 +122,82 @@ fn mouse_click_confirms_staged_execution_confirmation() {
 }
 
 #[test]
+fn mouse_cannot_confirm_typed_staged_execution_before_phrase_matches() {
+    let area = Rect::new(0, 0, 160, 48);
+    let mut state = AppState::from_config(crate::config::TuiConfig {
+        workspace: crate::config::WorkspaceConfig {
+            current: WorkspaceKind::Account,
+        },
+        trading: crate::config::TradingConfig {
+            default_profile: Some("mainnet".to_string()),
+        },
+        ..crate::config::TuiConfig::default()
+    });
+    state.transfer_ticket.set_amount_text(Some("5".to_string()));
+    state.reduce(Action::StageTransferTicket);
+    state.reduce(Action::ExecuteStagedChange);
+    let modal = floating_rect(area, &state, FloatingKind::StagedExecutionConfirmation);
+    let attempted_primary = maybe_clickable_confirmation_button(
+        &mut state,
+        area,
+        FloatingKind::StagedExecutionConfirmation,
+        modal,
+        ConfirmationButtonAction::Primary,
+    );
+
+    assert!(attempted_primary.is_none());
+
+    assert!(state.pending_staged_confirmation().is_some());
+    assert!(state.take_pending_staged_execution().is_none());
+    assert_eq!(
+        state.floating.last().map(|pane| pane.kind),
+        Some(FloatingKind::StagedExecutionConfirmation)
+    );
+}
+
+#[test]
+fn mouse_confirms_typed_staged_execution_after_phrase_matches() {
+    let area = Rect::new(0, 0, 160, 48);
+    let mut state = AppState::from_config(crate::config::TuiConfig {
+        workspace: crate::config::WorkspaceConfig {
+            current: WorkspaceKind::Account,
+        },
+        trading: crate::config::TradingConfig {
+            default_profile: Some("mainnet".to_string()),
+        },
+        ..crate::config::TuiConfig::default()
+    });
+    state.transfer_ticket.set_amount_text(Some("5".to_string()));
+    state.reduce(Action::StageTransferTicket);
+    state.reduce(Action::ExecuteStagedChange);
+    for character in "TRANSFER".chars() {
+        state.reduce(Action::EditStagedExecutionConfirmation(
+            tui_input::InputRequest::InsertChar(character),
+        ));
+    }
+    assert!(
+        state
+            .pending_staged_confirmation_gate()
+            .is_some_and(|gate| gate.matched)
+    );
+    let mut drag = MouseDrag::default();
+    let modal = floating_rect(area, &state, FloatingKind::StagedExecutionConfirmation);
+    let click = clickable_confirmation_button(
+        &mut state,
+        area,
+        FloatingKind::StagedExecutionConfirmation,
+        modal,
+        ConfirmationButtonAction::Primary,
+    );
+
+    handle_mouse_event(area, &mut state, &mut drag, click);
+
+    assert!(state.pending_staged_confirmation().is_none());
+    assert!(state.take_pending_staged_execution().is_some());
+    assert_eq!(drag, MouseDrag::default());
+}
+
+#[test]
 fn mouse_click_cancels_staged_execution_confirmation() {
     let area = Rect::new(0, 0, 160, 48);
     let mut state = staged_execution_confirmation_state();
@@ -1469,9 +1545,18 @@ fn confirmation_click(
     floating: Rect,
     action: ConfirmationButtonAction,
 ) -> MouseEvent {
+    maybe_confirmation_click(state, kind, floating, action).expect("button action is present")
+}
+
+fn maybe_confirmation_click(
+    state: &AppState,
+    kind: FloatingKind,
+    floating: Rect,
+    action: ConfirmationButtonAction,
+) -> Option<MouseEvent> {
     let rows = confirmation_dialog::rows_for(
         kind,
-        state.pending_staged_confirmation(),
+        state.pending_staged_confirmation_view(),
         floating.width.saturating_sub(2) as usize,
     );
     let (row, buttons) = rows
@@ -1484,10 +1569,53 @@ fn confirmation_click(
         .expect("confirmation button row is present");
     let button = confirmation_dialog::button_segments(buttons)
         .into_iter()
-        .find(|segment| segment.action == Some(action))
-        .expect("button action is present");
+        .find(|segment| segment.action == Some(action))?;
     let column = button.start.saturating_add(1) as u16;
-    floating_click(floating, column, row)
+    Some(floating_click(floating, column, row))
+}
+
+fn clickable_confirmation_button(
+    state: &mut AppState,
+    area: Rect,
+    kind: FloatingKind,
+    floating: Rect,
+    action: ConfirmationButtonAction,
+) -> MouseEvent {
+    maybe_clickable_confirmation_button(state, area, kind, floating, action)
+        .expect("clickable confirmation button was not found")
+}
+
+fn maybe_clickable_confirmation_button(
+    state: &mut AppState,
+    area: Rect,
+    kind: FloatingKind,
+    floating: Rect,
+    action: ConfirmationButtonAction,
+) -> Option<MouseEvent> {
+    let mut drag = MouseDrag::default();
+    for content_row in 0..floating.height.saturating_sub(2) {
+        for content_column in 0..floating.width.saturating_sub(2) {
+            let column = floating.x + content_column + 1;
+            let row = floating.y + content_row + 1;
+            handle_mouse_event(
+                area,
+                state,
+                &mut drag,
+                mouse_event(MouseEventKind::Moved, column, row),
+            );
+            if current_mouse_target(area, state)
+                .and_then(|target| target.confirmation_button_hovered(kind))
+                == Some(action)
+            {
+                return Some(mouse_event(
+                    MouseEventKind::Down(MouseButton::Left),
+                    column,
+                    row,
+                ));
+            }
+        }
+    }
+    None
 }
 
 fn floating_rect(area: Rect, state: &AppState, kind: FloatingKind) -> Rect {

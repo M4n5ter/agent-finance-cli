@@ -12,7 +12,7 @@ pub(crate) use collection::{
 pub use subject::{
     CancelReview, FuturesStateReview, OrderTicketReview, ProfileRiskReview, StagedChangeRequest,
     StagedChangeSubject, StagedExecution, StagedExecutionRequest, StagedLocalCommitSubject,
-    StagedSubmitRequest, StagedSubmitSubject, TransferReview,
+    StagedSubmitRequest, StagedSubmitSubject, TransferReview, TypedConfirmation,
 };
 #[cfg(test)]
 pub use subject::{ProfileRiskChange, StagedChangeKind};

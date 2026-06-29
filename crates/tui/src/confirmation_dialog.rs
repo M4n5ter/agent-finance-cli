@@ -1,5 +1,5 @@
 use crate::model::FloatingKind;
-use crate::state::{StagedExecution, StagedExecutionRequest};
+use crate::state::{PendingStagedConfirmationView, StagedExecution};
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub(crate) enum ConfirmationButtonAction {
@@ -10,6 +10,11 @@ pub(crate) enum ConfirmationButtonAction {
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub(crate) enum ConfirmationRow {
     Text(String),
+    Input {
+        label: String,
+        value: String,
+        matched: bool,
+    },
     Blank,
     Buttons(ConfirmationButtons),
 }
@@ -30,7 +35,7 @@ pub(crate) struct ConfirmationButtonSegment {
 
 pub(crate) fn rows_for(
     kind: FloatingKind,
-    pending_staged_confirmation: Option<&StagedExecutionRequest>,
+    pending_staged_confirmation: Option<PendingStagedConfirmationView<'_>>,
     content_width: usize,
 ) -> Vec<ConfirmationRow> {
     let rows = match kind {
@@ -109,8 +114,10 @@ fn live_writes_rows() -> Vec<ConfirmationRow> {
     ]
 }
 
-fn staged_execution_rows(request: Option<&StagedExecutionRequest>) -> Vec<ConfirmationRow> {
-    let Some(request) = request else {
+fn staged_execution_rows(
+    pending: Option<PendingStagedConfirmationView<'_>>,
+) -> Vec<ConfirmationRow> {
+    let Some(pending) = pending else {
         return vec![
             ConfirmationRow::Text("No staged execution is waiting for confirmation.".into()),
             ConfirmationRow::Blank,
@@ -120,6 +127,7 @@ fn staged_execution_rows(request: Option<&StagedExecutionRequest>) -> Vec<Confir
             }),
         ];
     };
+    let request = pending.request;
 
     let mut rows = vec![
         ConfirmationRow::Text("Review the selected staged change before executing it.".into()),
@@ -139,9 +147,22 @@ fn staged_execution_rows(request: Option<&StagedExecutionRequest>) -> Vec<Confir
             rows.push(ConfirmationRow::Text(
                 "Live mode still requires profile permissions, risk policy, intent claim lock, and audit logging.".into(),
             ));
+            if let Some(gate) = pending.typed_gate {
+                rows.push(ConfirmationRow::Blank);
+                rows.push(ConfirmationRow::Text(gate.reason.into()));
+                rows.push(ConfirmationRow::Text(format!(
+                    "Type {} exactly before submitting.",
+                    gate.phrase
+                )));
+                rows.push(ConfirmationRow::Input {
+                    label: "confirmation".into(),
+                    value: gate.input.into(),
+                    matched: gate.matched,
+                });
+            }
             rows.push(ConfirmationRow::Blank);
             rows.push(ConfirmationRow::Buttons(ConfirmationButtons {
-                primary: Some("Confirm submit".into()),
+                primary: pending.can_confirm.then(|| "Confirm submit".into()),
                 cancel: "Cancel".into(),
             }));
         }
@@ -232,6 +253,9 @@ fn split_long_word(word: &str, width: usize) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::state::{StagedExecutionRequest, TypedConfirmationGateView};
+    use agent_finance_core::{DecimalValue, TransferDirection, submit::SubmitMode};
+    use std::str::FromStr;
 
     #[test]
     fn live_writes_buttons_hit_primary_and_cancel_ranges() {
@@ -281,5 +305,105 @@ mod tests {
                 .count(),
             1
         );
+    }
+
+    #[test]
+    fn transfer_submit_requires_typed_confirmation_before_primary_button() {
+        let request = transfer_execution_request();
+        let rows = rows_for(
+            FloatingKind::StagedExecutionConfirmation,
+            Some(typed_confirmation_view(&request, "", false)),
+            80,
+        );
+        let button_row = rows
+            .iter()
+            .position(|row| matches!(row, ConfirmationRow::Buttons(_)))
+            .expect("button row is present");
+
+        assert!(rows.iter().any(|row| matches!(
+            row,
+            ConfirmationRow::Input {
+                value,
+                matched: false,
+                ..
+            } if value.is_empty()
+        )));
+        assert_eq!(
+            click_action_at(&rows, 1, button_row),
+            Some(ConfirmationButtonAction::Cancel)
+        );
+
+        let whitespace_rows = rows_for(
+            FloatingKind::StagedExecutionConfirmation,
+            Some(typed_confirmation_view(&request, " TRANSFER ", false)),
+            80,
+        );
+        let whitespace_button_row = whitespace_rows
+            .iter()
+            .position(|row| matches!(row, ConfirmationRow::Buttons(_)))
+            .expect("button row is present");
+        assert_eq!(
+            click_action_at(&whitespace_rows, 1, whitespace_button_row),
+            Some(ConfirmationButtonAction::Cancel)
+        );
+
+        let matched_rows = rows_for(
+            FloatingKind::StagedExecutionConfirmation,
+            Some(typed_confirmation_view(&request, "TRANSFER", true)),
+            80,
+        );
+        let matched_button_row = matched_rows
+            .iter()
+            .position(|row| matches!(row, ConfirmationRow::Buttons(_)))
+            .expect("button row is present");
+
+        assert!(matched_rows.iter().any(|row| matches!(
+            row,
+            ConfirmationRow::Input {
+                value,
+                matched: true,
+                ..
+            } if value == "TRANSFER"
+        )));
+        assert_eq!(
+            click_action_at(&matched_rows, 1, matched_button_row),
+            Some(ConfirmationButtonAction::Primary)
+        );
+    }
+
+    fn typed_confirmation_view<'a>(
+        request: &'a StagedExecutionRequest,
+        input: &'a str,
+        matched: bool,
+    ) -> PendingStagedConfirmationView<'a> {
+        PendingStagedConfirmationView {
+            request,
+            typed_gate: Some(TypedConfirmationGateView {
+                phrase: "TRANSFER",
+                reason: "Transfers move funds between Binance wallets.",
+                input,
+                matched,
+            }),
+            can_confirm: matched,
+        }
+    }
+
+    fn transfer_execution_request() -> StagedExecutionRequest {
+        StagedExecutionRequest {
+            id: "transfer-mainnet".into(),
+            execution: StagedExecution::Submit {
+                subject: crate::state::StagedSubmitSubject::Transfer(
+                    crate::state::TransferReview {
+                        profile: "mainnet".into(),
+                        direction: TransferDirection::SpotToUsdsFutures,
+                        asset: "USDT".into(),
+                        amount: "5".into(),
+                        parsed_amount: DecimalValue::from_str("5").expect("valid decimal"),
+                        effective_mode: SubmitMode::DryRun,
+                    },
+                ),
+                mode: SubmitMode::DryRun,
+            },
+        }
     }
 }

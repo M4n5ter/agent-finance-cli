@@ -34,6 +34,15 @@ fn mode_status_hints(state: &AppState) -> Vec<StatusHint> {
         .last()
         .is_some_and(|pane| pane.kind == FloatingKind::StagedExecutionConfirmation)
     {
+        if let Some(gate) = state.pending_staged_confirmation_gate()
+            && !gate.matched
+        {
+            return text_only_hints([
+                format!("type {}", gate.phrase),
+                "enter check".to_string(),
+                "esc cancel".to_string(),
+            ]);
+        }
         return text_only_hints(["enter confirm", "esc cancel"]);
     }
 

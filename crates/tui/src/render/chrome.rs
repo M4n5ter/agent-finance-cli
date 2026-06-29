@@ -242,12 +242,15 @@ fn render_confirmation_dialog(
     mouse_target: Option<MouseTarget>,
 ) {
     let content_width = area.width.saturating_sub(2) as usize;
-    let lines =
-        confirmation_dialog::rows_for(kind, state.pending_staged_confirmation(), content_width)
-            .into_iter()
-            .enumerate()
-            .map(|(index, row)| confirmation_line(state, kind, row, index == 0, mouse_target))
-            .map(ListItem::new);
+    let lines = confirmation_dialog::rows_for(
+        kind,
+        state.pending_staged_confirmation_view(),
+        content_width,
+    )
+    .into_iter()
+    .enumerate()
+    .map(|(index, row)| confirmation_line(state, kind, row, index == 0, mouse_target))
+    .map(ListItem::new);
     frame.render_widget(
         List::new(lines).block(floating_block(kind.title(), &state.theme)),
         area,
@@ -267,6 +270,23 @@ fn confirmation_line(
             state.theme.accent_style().add_modifier(Modifier::BOLD),
         )),
         ConfirmationRow::Text(text) => Line::from(text),
+        ConfirmationRow::Input {
+            label,
+            value,
+            matched,
+        } => {
+            let status = if matched { "matched" } else { "required" };
+            let style = if matched {
+                state.theme.accent_style()
+            } else {
+                state.theme.warning_style()
+            };
+            Line::from(vec![
+                Span::raw(format!("{label}: ")),
+                Span::styled(value, style.add_modifier(Modifier::BOLD)),
+                Span::raw(format!("  {status}")),
+            ])
+        }
         ConfirmationRow::Blank => Line::from(""),
         ConfirmationRow::Buttons(buttons) => {
             let hovered = mouse_target.and_then(|target| target.confirmation_button_hovered(kind));

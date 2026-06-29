@@ -226,7 +226,7 @@ function assertCoreDumpShape(dump) {
       fail(`dump-state JSON is missing ${key}`);
     }
   }
-  if (dump.schema_version !== 25) {
+  if (dump.schema_version !== 26) {
     fail(`dump-state schema_version mismatch: ${dump.schema_version}`);
   }
   if (

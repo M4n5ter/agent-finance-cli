@@ -66,6 +66,14 @@ fn request_and_confirm_selected_staged_submit(state: &mut AppState) -> StagedSub
         .expect("pending staged submit")
 }
 
+fn type_staged_confirmation(state: &mut AppState, text: &str) {
+    for character in text.chars() {
+        state.reduce(Action::EditStagedExecutionConfirmation(
+            tui_input::InputRequest::InsertChar(character),
+        ));
+    }
+}
+
 #[test]
 fn reducer_wraps_symbol_focus_across_watchlist_boundaries() {
     let mut state = AppState::from_config(TuiConfig {
@@ -355,6 +363,22 @@ fn submitting_ready_transfer_change_queues_transfer_submit_request() {
     state.transfer_ticket.set_amount_text(Some("5".to_string()));
     state.reduce(Action::StageTransferTicket);
 
+    state.reduce(Action::ExecuteStagedChange);
+    assert!(state.pending_staged_confirmation().is_some());
+    state.reduce(Action::ConfirmStagedExecution);
+    assert!(state.pending_staged_confirmation().is_some());
+    assert!(state.take_pending_staged_execution().is_none());
+    type_staged_confirmation(&mut state, " TRANSFER ");
+    state.reduce(Action::ConfirmStagedExecution);
+    assert!(state.pending_staged_confirmation().is_some());
+    assert!(state.take_pending_staged_execution().is_none());
+    for _ in 0.." TRANSFER ".chars().count() {
+        state.reduce(Action::EditStagedExecutionConfirmation(
+            tui_input::InputRequest::DeletePrevChar,
+        ));
+    }
+    type_staged_confirmation(&mut state, "TRANSFER");
+
     let request = request_and_confirm_selected_staged_submit(&mut state);
     let StagedSubmitSubject::Transfer(review) = &request.subject else {
         panic!("expected transfer submit");
@@ -481,6 +505,13 @@ fn submitting_ready_futures_state_change_queues_futures_state_submit_request() {
     });
     state.futures_state_ticket.set_leverage(Some(2));
     state.reduce(Action::StageFuturesStateTicket);
+
+    state.reduce(Action::ExecuteStagedChange);
+    assert!(state.pending_staged_confirmation().is_some());
+    state.reduce(Action::ConfirmStagedExecution);
+    assert!(state.pending_staged_confirmation().is_some());
+    assert!(state.take_pending_staged_execution().is_none());
+    type_staged_confirmation(&mut state, "FUTURES STATE");
 
     let request = request_and_confirm_selected_staged_submit(&mut state);
     let StagedSubmitSubject::FuturesState(review) = &request.subject else {

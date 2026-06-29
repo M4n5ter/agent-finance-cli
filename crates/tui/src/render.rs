@@ -500,6 +500,31 @@ mod tests {
     }
 
     #[test]
+    fn transfer_execution_confirmation_renders_typed_gate() {
+        let mut state = AppState::from_config(TuiConfig {
+            trading: crate::config::TradingConfig {
+                default_profile: Some("mainnet".to_string()),
+            },
+            workspace: crate::config::WorkspaceConfig {
+                current: WorkspaceKind::Account,
+            },
+            ..TuiConfig::default()
+        });
+        state.transfer_ticket.set_amount_text(Some("5".to_string()));
+        state.reduce(crate::state::Action::StageTransferTicket);
+        state.reduce(crate::state::Action::ExecuteStagedChange);
+
+        let text = render_to_text_grid(&state, 160, 60);
+
+        assert!(text.contains("Confirm Staged Execution"));
+        assert!(text.contains("Transfers move funds between Binance wallets."));
+        assert!(text.contains("Type TRANSFER exactly before submitting."));
+        assert!(text.contains("confirmation:   required"));
+        assert!(!text.contains("[Confirm submit]"));
+        assert!(text.contains("[Cancel]"));
+    }
+
+    #[test]
     fn account_workspace_keeps_transfer_ticket_visible_without_snapshot() {
         let state = AppState::from_config(TuiConfig {
             trading: crate::config::TradingConfig {

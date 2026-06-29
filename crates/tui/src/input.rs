@@ -663,6 +663,35 @@ mod tests {
     }
 
     #[test]
+    fn typed_staged_execution_confirmation_routes_text_input() {
+        let mut state = AppState::from_config(crate::config::TuiConfig {
+            workspace: crate::config::WorkspaceConfig {
+                current: WorkspaceKind::Account,
+            },
+            trading: crate::config::TradingConfig {
+                default_profile: Some("mainnet".to_string()),
+            },
+            ..crate::config::TuiConfig::default()
+        });
+        state.transfer_ticket.set_amount_text(Some("5".to_string()));
+        state.reduce(Action::StageTransferTicket);
+        state.reduce(Action::ExecuteStagedChange);
+
+        assert!(matches!(
+            key_action(&state, KeyEvent::from(KeyCode::Char('T'))),
+            Some(Action::EditStagedExecutionConfirmation(_))
+        ));
+        assert_eq!(
+            key_action(&state, KeyEvent::from(KeyCode::Enter)),
+            Some(Action::ConfirmStagedExecution)
+        );
+        assert_eq!(
+            key_action(&state, KeyEvent::from(KeyCode::Esc)),
+            Some(Action::CancelStagedExecutionConfirmation)
+        );
+    }
+
+    #[test]
     fn quit_router_accepts_q_and_control_c_only() {
         let mut state = AppState::from_config(crate::config::TuiConfig::default());
 

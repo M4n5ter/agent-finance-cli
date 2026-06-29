@@ -52,6 +52,22 @@ impl StagedExecutionRequest {
     pub fn queue_event(&self) -> StagedChangeEvent {
         self.execution.queue_event()
     }
+
+    pub fn typed_confirmation(&self) -> Option<TypedConfirmation> {
+        self.execution.typed_confirmation()
+    }
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Serialize)]
+pub struct TypedConfirmation {
+    pub phrase: &'static str,
+    pub reason: &'static str,
+}
+
+impl TypedConfirmation {
+    pub fn satisfied_by(self, input: &str) -> bool {
+        input == self.phrase
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -85,6 +101,13 @@ impl StagedExecution {
         match self {
             Self::Submit { .. } => StagedChangeEvent::SubmitQueued,
             Self::LocalCommit { .. } => StagedChangeEvent::LocalCommitQueued,
+        }
+    }
+
+    pub fn typed_confirmation(&self) -> Option<TypedConfirmation> {
+        match self {
+            Self::Submit { subject, .. } => subject.typed_confirmation(),
+            Self::LocalCommit { .. } => None,
         }
     }
 }
@@ -154,6 +177,22 @@ impl StagedSubmitSubject {
             Self::FuturesState(review) => review.summary(),
             #[cfg(test)]
             Self::Text { summary, .. } => summary.clone(),
+        }
+    }
+
+    pub fn typed_confirmation(&self) -> Option<TypedConfirmation> {
+        match self {
+            Self::Transfer(_) => Some(TypedConfirmation {
+                phrase: "TRANSFER",
+                reason: "Transfers move funds between Binance wallets.",
+            }),
+            Self::FuturesState(_) => Some(TypedConfirmation {
+                phrase: "FUTURES STATE",
+                reason: "Futures state changes can alter leverage, margin type, or position mode.",
+            }),
+            Self::OrderTicket(_) | Self::Cancel(_) => None,
+            #[cfg(test)]
+            Self::Text { .. } => None,
         }
     }
 }

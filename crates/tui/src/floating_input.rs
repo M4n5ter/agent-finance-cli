@@ -50,7 +50,7 @@ pub(crate) fn key_route(state: &AppState, key: KeyEvent) -> FloatingKeyRouting {
         Some(FloatingKind::TradingProfile) => trading_profile_key_action(key),
         Some(FloatingKind::LiveWritesConfirmation) => live_writes_confirmation_key_action(key),
         Some(FloatingKind::StagedExecutionConfirmation) => {
-            staged_execution_confirmation_key_action(key)
+            staged_execution_confirmation_key_action(state, key)
         }
         Some(FloatingKind::Help | FloatingKind::ProviderDetails) | None => {
             return FloatingKeyRouting::pass_through();
@@ -254,10 +254,13 @@ fn live_writes_confirmation_key_action(key: KeyEvent) -> Option<Action> {
     }
 }
 
-fn staged_execution_confirmation_key_action(key: KeyEvent) -> Option<Action> {
+fn staged_execution_confirmation_key_action(state: &AppState, key: KeyEvent) -> Option<Action> {
     match key.code {
         KeyCode::Enter => Some(Action::ConfirmStagedExecution),
         KeyCode::Esc => Some(Action::CancelStagedExecutionConfirmation),
+        _ if state.pending_staged_confirmation_accepts_text_input() => {
+            to_input_request(&Event::Key(key)).map(Action::EditStagedExecutionConfirmation)
+        }
         _ => None,
     }
 }
@@ -271,8 +274,11 @@ fn confirmation_button_at(
 ) -> Option<ConfirmationButtonAction> {
     let (content_column, content_row) = floating_content_position(area, column, row)?;
     let content_width = area.width.saturating_sub(2) as usize;
-    let rows =
-        confirmation_dialog::rows_for(kind, state.pending_staged_confirmation(), content_width);
+    let rows = confirmation_dialog::rows_for(
+        kind,
+        state.pending_staged_confirmation_view(),
+        content_width,
+    );
     confirmation_dialog::click_action_at(&rows, content_column, content_row)
 }
 

@@ -12,11 +12,11 @@ use crate::order_ticket::OrderTicketPreview;
 use crate::pane_status::{TuiPaneStatus, pane_health};
 use crate::profile_snapshot::{ProfileValidationState, TradingProfileSnapshot};
 use crate::provider_health::{ProviderHealthReport, ProviderHealthTask};
-use crate::state::{AppState, StagedChangeView, StagedExecutionRequest};
+use crate::state::{AppState, StagedChangeView, StagedExecutionRequest, TypedConfirmationGateView};
 use crate::theme::ThemeConfig;
 use crate::transfer_ticket::TransferTicketPreview;
 
-const TUI_DUMP_SCHEMA_VERSION: u32 = 25;
+const TUI_DUMP_SCHEMA_VERSION: u32 = 26;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct TuiDump {
@@ -44,6 +44,7 @@ pub struct TuiDump {
     pub futures_state_ticket: FuturesStateTicketPreview,
     pub staged_changes: Vec<StagedChangeView>,
     pub pending_staged_confirmation: Option<StagedExecutionRequest>,
+    pub pending_staged_confirmation_gate: Option<TypedConfirmationGateDump>,
     pub errors: Vec<String>,
     pub key_hints: Vec<String>,
 }
@@ -89,9 +90,31 @@ impl TuiDump {
             futures_state_ticket: state.futures_state_ticket_preview(),
             staged_changes: state.staged_change_views(),
             pending_staged_confirmation: state.pending_staged_confirmation().cloned(),
+            pending_staged_confirmation_gate: state
+                .pending_staged_confirmation_gate()
+                .map(TypedConfirmationGateDump::from),
             errors: dump_errors(state),
             provider_health,
             key_hints: hints::mode_key_hints(state),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct TypedConfirmationGateDump {
+    pub phrase: &'static str,
+    pub reason: &'static str,
+    pub input: String,
+    pub matched: bool,
+}
+
+impl From<TypedConfirmationGateView<'_>> for TypedConfirmationGateDump {
+    fn from(view: TypedConfirmationGateView<'_>) -> Self {
+        Self {
+            phrase: view.phrase,
+            reason: view.reason,
+            input: view.input.to_string(),
+            matched: view.matched,
         }
     }
 }
@@ -681,6 +704,36 @@ mod tests {
             value["pending_staged_confirmation"]["execution"]["subject"]["price"],
             "204"
         );
+        assert!(value["pending_staged_confirmation_gate"].is_null());
+    }
+
+    #[test]
+    fn dump_exposes_typed_staged_execution_confirmation_gate() {
+        let mut state = AppState::from_config(TuiConfig {
+            workspace: WorkspaceConfig {
+                current: WorkspaceKind::Account,
+            },
+            trading: crate::config::TradingConfig {
+                default_profile: Some("mainnet".to_string()),
+            },
+            ..TuiConfig::default()
+        });
+        state.transfer_ticket.set_amount_text(Some("5".to_string()));
+        state.reduce(Action::StageTransferTicket);
+        state.reduce(Action::ExecuteStagedChange);
+
+        let value = serde_json::to_value(TuiDump::from_state(&state, true)).expect("serialize");
+
+        assert_eq!(
+            value["pending_staged_confirmation"]["execution"]["subject"]["type"],
+            "transfer"
+        );
+        assert_eq!(
+            value["pending_staged_confirmation_gate"]["phrase"],
+            "TRANSFER"
+        );
+        assert_eq!(value["pending_staged_confirmation_gate"]["input"], "");
+        assert_eq!(value["pending_staged_confirmation_gate"]["matched"], false);
     }
 
     #[test]
