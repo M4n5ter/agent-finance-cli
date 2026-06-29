@@ -53,13 +53,11 @@ impl OrderTicket {
         self.reduce_only
     }
 
-    #[cfg(test)]
-    pub fn set_quantity_text(&mut self, quantity: Option<String>) {
+    pub(crate) fn set_quantity_text(&mut self, quantity: Option<String>) {
         self.quantity = quantity;
     }
 
-    #[cfg(test)]
-    pub fn set_price_text(&mut self, price: Option<String>) {
+    pub(crate) fn set_price_text(&mut self, price: Option<String>) {
         self.price = price;
     }
 
@@ -182,6 +180,26 @@ impl OrderTicket {
         self.selected_field.label()
     }
 
+    pub(crate) fn selected_field(&self) -> OrderTicketField {
+        self.selected_field
+    }
+
+    pub(crate) fn selected_text_input(&self) -> Option<(OrderTicketField, Option<&str>)> {
+        match self.selected_field {
+            OrderTicketField::Quantity => Some((self.selected_field, self.quantity_text())),
+            OrderTicketField::Price => Some((self.selected_field, self.price_text())),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn quantity_text(&self) -> Option<&str> {
+        self.quantity.as_deref()
+    }
+
+    pub(crate) fn price_text(&self) -> Option<&str> {
+        self.price.as_deref()
+    }
+
     fn effective_price(&self, reference_price: Option<f64>) -> Option<String> {
         self.price
             .clone()
@@ -258,11 +276,15 @@ impl OrderTicketField {
         }
     }
 
-    fn shift(self, direction: isize) -> Self {
-        let index = Self::ALL
+    pub(crate) fn index(self) -> usize {
+        Self::ALL
             .iter()
             .position(|field| *field == self)
-            .unwrap_or(0) as isize;
+            .expect("order ticket field is part of ALL")
+    }
+
+    fn shift(self, direction: isize) -> Self {
+        let index = self.index() as isize;
         let next = (index + direction).rem_euclid(Self::ALL.len() as isize) as usize;
         Self::ALL[next]
     }

@@ -384,6 +384,10 @@ mod tests {
             Some(Action::StageOrderTicket)
         );
         assert_eq!(
+            key_action(&state, KeyEvent::from(KeyCode::Char('e'))),
+            Some(Action::OpenOrderTicketInput)
+        );
+        assert_eq!(
             key_action(
                 &state,
                 KeyEvent::new(KeyCode::Char('s'), KeyModifiers::CONTROL)
@@ -476,6 +480,32 @@ mod tests {
         assert!(matches!(
             key_action(&state, KeyEvent::from(KeyCode::Char('l'))),
             Some(Action::EditWatchlistAddQuery(_))
+        ));
+    }
+
+    #[test]
+    fn order_ticket_input_mode_routes_text_input_and_acceptance() {
+        let mut state = AppState::from_config(crate::config::TuiConfig::default());
+        state.reduce(Action::Execute(ActionId::SetWorkspace(
+            WorkspaceKind::Trade,
+        )));
+        state.reduce(Action::Execute(ActionId::FocusPanel(Panel::OrderTicket)));
+        state.reduce(Action::SelectOrderTicketField(
+            crate::order_ticket::OrderTicketField::Quantity.index(),
+        ));
+        state.reduce(Action::OpenOrderTicketInput);
+
+        assert_eq!(
+            key_action(&state, KeyEvent::from(KeyCode::Enter)),
+            Some(Action::AcceptOrderTicketInput)
+        );
+        assert_eq!(
+            key_action(&state, KeyEvent::from(KeyCode::Esc)),
+            Some(Action::CloseFocusedFloating)
+        );
+        assert!(matches!(
+            key_action(&state, KeyEvent::from(KeyCode::Char('1'))),
+            Some(Action::EditOrderTicketInput(_))
         ));
     }
 

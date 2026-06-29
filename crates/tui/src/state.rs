@@ -14,7 +14,8 @@ use crate::config::{
 use crate::futures_state_ticket::{FuturesStateTicket, FuturesStateTicketPreview};
 use crate::model::{DockedPanels, FloatingKind, FloatingPane, FloatingSize, Panel, WorkspaceKind};
 use crate::mouse_target::MousePosition;
-use crate::order_ticket::{OrderTicket, OrderTicketPreview};
+use crate::order_ticket::{OrderTicket, OrderTicketField, OrderTicketPreview};
+use crate::order_ticket_input::OrderTicketInputState;
 use crate::profile_editor::ProfileEditorState;
 use crate::profile_snapshot::{ProfileValidationSnapshot, ProfileValidationState};
 use crate::search::SymbolSearchState;
@@ -73,6 +74,7 @@ pub struct AppState {
     pub symbol_search: SymbolSearchState,
     pub watchlist_add: WatchlistAddState,
     pub profile_editor: ProfileEditorState,
+    pub order_ticket_input: OrderTicketInputState,
     pub keymap: crate::keymap::KeymapConfig,
     pub providers: ProviderConfig,
     pub settings_editor: SettingsEditorState,
@@ -129,6 +131,7 @@ impl AppState {
             symbol_search: SymbolSearchState::default(),
             watchlist_add: WatchlistAddState::default(),
             profile_editor: ProfileEditorState::default(),
+            order_ticket_input: OrderTicketInputState::default(),
             keymap: config.keymap,
             providers: config.providers,
             settings_editor: SettingsEditorState::default(),
@@ -628,6 +631,46 @@ impl AppState {
         self.close_floating(FloatingKind::WatchlistAdd);
     }
 
+    fn open_order_ticket_input(&mut self) {
+        let field = self.order_ticket.selected_field();
+        if self.order_ticket.selected_text_input().is_none() {
+            self.task_log.warning_event(format!(
+                "order ticket {} cannot be edited as text",
+                field.label()
+            ));
+            return;
+        }
+        self.open_floating(FloatingKind::OrderTicketInput);
+    }
+
+    fn accept_order_ticket_input(&mut self) {
+        let field = self.order_ticket_input.field();
+        let value = self.order_ticket_input.committed_value();
+        match field {
+            OrderTicketField::Quantity => {
+                self.order_ticket.set_quantity_text(value.clone());
+            }
+            OrderTicketField::Price => {
+                self.order_ticket.set_price_text(value.clone());
+            }
+            _ => {
+                self.task_log.warning_event(format!(
+                    "order ticket {} is not text editable",
+                    field.label()
+                ));
+                self.close_floating(FloatingKind::OrderTicketInput);
+                return;
+            }
+        }
+        self.order_ticket.select_field(field.index());
+        self.task_log.info(format!(
+            "updated order ticket {} to {}",
+            field.label(),
+            value.as_deref().unwrap_or("blank")
+        ));
+        self.close_floating(FloatingKind::OrderTicketInput);
+    }
+
     fn delete_selected_watchlist_symbol(&mut self) {
         if self.watchlist.len() <= 1 {
             self.task_log
@@ -748,6 +791,9 @@ impl AppState {
             Action::EditTradingProfileQuery(request) => {
                 self.profile_editor.edit_query(request);
             }
+            Action::EditOrderTicketInput(request) => {
+                self.order_ticket_input.edit_query(request);
+            }
             Action::EditStagedExecutionConfirmation(request) => {
                 self.edit_staged_execution_confirmation(request);
             }
@@ -759,6 +805,7 @@ impl AppState {
             Action::SelectSymbolSearchSymbol(index) => self.select_symbol_search_symbol(index),
             Action::AcceptWatchlistAdd => self.add_watchlist_symbols(),
             Action::AcceptTradingProfile => self.accept_trading_profile(),
+            Action::AcceptOrderTicketInput => self.accept_order_ticket_input(),
             Action::SelectWatchlistSymbol(index) => self.select_watchlist_symbol(index),
             Action::DeleteSelectedWatchlistSymbol => self.delete_selected_watchlist_symbol(),
             Action::MoveSelectedWatchlistSymbol(direction) => {
@@ -773,6 +820,7 @@ impl AppState {
                     .adjust_selected_field(direction, self.selected_quote_price());
             }
             Action::CaptureOrderReferencePrice => self.capture_order_reference_price(),
+            Action::OpenOrderTicketInput => self.open_order_ticket_input(),
             Action::MoveTransferTicketField(direction) => {
                 self.transfer_ticket.move_field(direction);
             }
@@ -1258,11 +1306,13 @@ pub enum Action {
     EditSymbolSearchQuery(tui_input::InputRequest),
     EditWatchlistAddQuery(tui_input::InputRequest),
     EditTradingProfileQuery(tui_input::InputRequest),
+    EditOrderTicketInput(tui_input::InputRequest),
     EditStagedExecutionConfirmation(tui_input::InputRequest),
     AcceptSymbolSearch,
     SelectSymbolSearchSymbol(usize),
     AcceptWatchlistAdd,
     AcceptTradingProfile,
+    AcceptOrderTicketInput,
     SelectWatchlistSymbol(usize),
     DeleteSelectedWatchlistSymbol,
     MoveSelectedWatchlistSymbol(isize),
@@ -1270,6 +1320,7 @@ pub enum Action {
     SelectOrderTicketField(usize),
     AdjustOrderTicketField(isize),
     CaptureOrderReferencePrice,
+    OpenOrderTicketInput,
     MoveTransferTicketField(isize),
     SelectTransferTicketField(usize),
     AdjustTransferTicketField(isize),

@@ -155,6 +155,10 @@ pub(super) fn render_floating(
         render_trading_profile(frame, state, area);
         return;
     }
+    if kind == FloatingKind::OrderTicketInput {
+        render_order_ticket_input(frame, state, area);
+        return;
+    }
     if kind == FloatingKind::StagedExecutionConfirmation {
         render_staged_execution_confirmation(frame, state, area, mouse_target);
         return;
@@ -165,6 +169,7 @@ pub(super) fn render_floating(
         FloatingKind::SymbolSearch => unreachable!("symbol search is rendered separately"),
         FloatingKind::WatchlistAdd => unreachable!("watchlist add is rendered separately"),
         FloatingKind::TradingProfile => unreachable!("trading profile is rendered separately"),
+        FloatingKind::OrderTicketInput => unreachable!("order ticket input is rendered separately"),
         FloatingKind::StagedExecutionConfirmation => {
             unreachable!("staged execution confirmation is rendered separately")
         }
@@ -466,6 +471,46 @@ fn render_trading_profile(frame: &mut Frame<'_>, state: &AppState, area: Rect) {
                     state.profile_editor.profile().as_deref().unwrap_or("none")
                 ),
                 2 => "Enter - set default trading profile".to_string(),
+                _ => return None,
+            };
+            Some(ListItem::new(Line::from(vec![
+                Span::styled(if is_selected { "> " } else { "  " }, style),
+                Span::styled(text, style),
+            ])))
+        },
+    );
+}
+
+fn render_order_ticket_input(frame: &mut Frame<'_>, state: &AppState, area: Rect) {
+    let field_label = state.order_ticket_input.field().label();
+    let next_value = state.order_ticket_input.committed_value();
+    let next_label = next_value.as_deref().unwrap_or("blank");
+
+    render_search_floating(
+        frame,
+        area,
+        SearchFloating {
+            title: "Order Ticket Input",
+            input_title: hints::input_floating_title_for_kind(FloatingKind::OrderTicketInput)
+                .expect("order ticket input has an input title"),
+            placeholder: "0.05 or 204.00",
+            query: state.order_ticket_input.query(),
+            selected: 0,
+            total: 3,
+            noun: "actions",
+            empty: "Enter applies value, Esc cancels",
+        },
+        &state.theme,
+        |index, is_selected| {
+            let style = if is_selected {
+                state.theme.selected_style().add_modifier(Modifier::BOLD)
+            } else {
+                state.theme.text_style()
+            };
+            let text = match index {
+                0 => format!("field - {field_label}"),
+                1 => format!("next - {next_label}"),
+                2 => "Enter - apply to order ticket".to_string(),
                 _ => return None,
             };
             Some(ListItem::new(Line::from(vec![

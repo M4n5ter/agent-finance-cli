@@ -70,7 +70,8 @@ impl AppState {
             Some(
                 FloatingKind::SymbolSearch
                 | FloatingKind::WatchlistAdd
-                | FloatingKind::TradingProfile,
+                | FloatingKind::TradingProfile
+                | FloatingKind::OrderTicketInput,
             ) => InteractionMode::Search,
             None => InteractionMode::Normal,
         }
@@ -126,25 +127,19 @@ impl AppState {
     }
 
     pub(super) fn close_text_input_floatings_except(&mut self, except: FloatingKind) {
-        for kind in [
-            FloatingKind::CommandPalette,
-            FloatingKind::SymbolSearch,
-            FloatingKind::WatchlistAdd,
-            FloatingKind::TradingProfile,
-        ] {
-            if kind != except {
-                self.close_floating(kind);
-            }
+        for kind in FloatingKind::ALL
+            .into_iter()
+            .filter(|kind| kind.text_input() && *kind != except)
+        {
+            self.close_floating(kind);
         }
     }
 
     pub(super) fn close_text_input_floatings(&mut self) {
-        for kind in [
-            FloatingKind::CommandPalette,
-            FloatingKind::SymbolSearch,
-            FloatingKind::WatchlistAdd,
-            FloatingKind::TradingProfile,
-        ] {
+        for kind in FloatingKind::ALL
+            .into_iter()
+            .filter(|kind| kind.text_input())
+        {
             self.close_floating(kind);
         }
     }
@@ -175,6 +170,13 @@ impl AppState {
             FloatingKind::WatchlistAdd => self.watchlist_add.reset(),
             FloatingKind::TradingProfile => {
                 self.profile_editor.reset(self.trading_profile.as_deref())
+            }
+            FloatingKind::OrderTicketInput => {
+                let Some((field, value)) = self.order_ticket.selected_text_input() else {
+                    return;
+                };
+                let value = value.map(ToString::to_string);
+                self.order_ticket_input.reset(field, value.as_deref());
             }
             FloatingKind::Help
             | FloatingKind::LiveWritesConfirmation

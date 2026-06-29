@@ -1039,6 +1039,46 @@ fn mouse_click_on_order_ticket_capture_price_blank_space_does_not_fix_price() {
 }
 
 #[test]
+fn mouse_click_on_order_ticket_edit_field_action_opens_input() {
+    let area = Rect::new(0, 0, 160, 48);
+    let mut state = AppState::from_config(crate::config::TuiConfig {
+        workspace: crate::config::WorkspaceConfig {
+            current: WorkspaceKind::Trade,
+        },
+        ..crate::config::TuiConfig::default()
+    });
+    state.reduce(Action::SelectOrderTicketField(
+        crate::order_ticket::OrderTicketField::Quantity.index(),
+    ));
+    let mut drag = MouseDrag::default();
+    let panel = layout::build(
+        area,
+        &state.layout,
+        &state.floating,
+        &state.visible_panels(),
+    )
+    .panel_rect(Panel::OrderTicket)
+    .expect("order ticket panel is visible");
+
+    let click = clickable_panel_action(
+        &mut state,
+        area,
+        panel,
+        Panel::OrderTicket,
+        ActionId::OpenOrderTicketInput,
+    );
+    handle_mouse_event(area, &mut state, &mut drag, click);
+
+    assert_eq!(state.panels.focused(), Panel::OrderTicket);
+    assert_eq!(
+        state.floating.last().map(|pane| pane.kind),
+        Some(FloatingKind::OrderTicketInput)
+    );
+    assert_eq!(state.order_ticket_input.field().label(), "quantity");
+    assert_eq!(drag, MouseDrag::default());
+}
+
+#[test]
 fn mouse_click_on_ready_order_ticket_stages_review() {
     let area = Rect::new(0, 0, 160, 48);
     let mut state = AppState::from_config(crate::config::TuiConfig {

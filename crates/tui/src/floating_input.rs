@@ -48,6 +48,7 @@ pub(crate) fn key_route(state: &AppState, key: KeyEvent) -> FloatingKeyRouting {
         Some(FloatingKind::SymbolSearch) => symbol_search_key_action(key),
         Some(FloatingKind::WatchlistAdd) => watchlist_add_key_action(key),
         Some(FloatingKind::TradingProfile) => trading_profile_key_action(key),
+        Some(FloatingKind::OrderTicketInput) => order_ticket_input_key_action(key),
         Some(FloatingKind::LiveWritesConfirmation) => live_writes_confirmation_key_action(key),
         Some(FloatingKind::StagedExecutionConfirmation) => {
             staged_execution_confirmation_key_action(state, key)
@@ -66,6 +67,7 @@ pub(crate) fn wheel_route(state: &AppState, direction: isize) -> Option<Option<A
         FloatingKind::Help
         | FloatingKind::WatchlistAdd
         | FloatingKind::TradingProfile
+        | FloatingKind::OrderTicketInput
         | FloatingKind::LiveWritesConfirmation
         | FloatingKind::StagedExecutionConfirmation
         | FloatingKind::ProviderDetails => None,
@@ -186,7 +188,8 @@ fn floating_hit_at(
         FloatingKind::Help
         | FloatingKind::TradingProfile
         | FloatingKind::ProviderDetails
-        | FloatingKind::WatchlistAdd => None,
+        | FloatingKind::WatchlistAdd
+        | FloatingKind::OrderTicketInput => None,
     }
 }
 
@@ -231,18 +234,38 @@ fn symbol_search_key_action(key: KeyEvent) -> Option<Action> {
 }
 
 fn watchlist_add_key_action(key: KeyEvent) -> Option<Action> {
-    match key.code {
-        KeyCode::Enter => Some(Action::AcceptWatchlistAdd),
-        KeyCode::Esc => Some(Action::CloseFocusedFloating),
-        _ => to_input_request(&Event::Key(key)).map(Action::EditWatchlistAddQuery),
-    }
+    simple_text_input_key_action(
+        key,
+        Action::EditWatchlistAddQuery,
+        Action::AcceptWatchlistAdd,
+    )
 }
 
 fn trading_profile_key_action(key: KeyEvent) -> Option<Action> {
+    simple_text_input_key_action(
+        key,
+        Action::EditTradingProfileQuery,
+        Action::AcceptTradingProfile,
+    )
+}
+
+fn order_ticket_input_key_action(key: KeyEvent) -> Option<Action> {
+    simple_text_input_key_action(
+        key,
+        Action::EditOrderTicketInput,
+        Action::AcceptOrderTicketInput,
+    )
+}
+
+fn simple_text_input_key_action(
+    key: KeyEvent,
+    edit: impl FnOnce(tui_input::InputRequest) -> Action,
+    accept: Action,
+) -> Option<Action> {
     match key.code {
-        KeyCode::Enter => Some(Action::AcceptTradingProfile),
+        KeyCode::Enter => Some(accept),
         KeyCode::Esc => Some(Action::CloseFocusedFloating),
-        _ => to_input_request(&Event::Key(key)).map(Action::EditTradingProfileQuery),
+        _ => to_input_request(&Event::Key(key)).map(edit),
     }
 }
 

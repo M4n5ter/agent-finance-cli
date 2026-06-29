@@ -58,6 +58,10 @@ impl AppState {
                 self.close_text_input_floatings();
                 self.reduce(Action::CaptureOrderReferencePrice);
             }
+            ActionId::OpenOrderTicketInput => {
+                self.close_text_input_floatings();
+                self.reduce(Action::OpenOrderTicketInput);
+            }
             ActionId::StageOrderTicket => {
                 self.close_text_input_floatings();
                 self.reduce(Action::StageOrderTicket);

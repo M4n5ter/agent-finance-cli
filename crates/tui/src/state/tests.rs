@@ -176,6 +176,45 @@ fn order_ticket_staging_requires_core_valid_preview_before_review_change() {
 }
 
 #[test]
+fn order_ticket_input_applies_quantity_text_before_staging() {
+    let mut state = AppState::from_config(TuiConfig {
+        watchlist: vec!["CRDO".to_string()],
+        workspace: WorkspaceConfig {
+            current: WorkspaceKind::Trade,
+        },
+        trading: crate::config::TradingConfig {
+            default_profile: Some("mainnet".to_string()),
+        },
+        ..TuiConfig::default()
+    });
+    state.order_ticket.set_price_text(Some("204".to_string()));
+    state.reduce(Action::SelectOrderTicketField(
+        crate::order_ticket::OrderTicketField::Quantity.index(),
+    ));
+
+    state.reduce(Action::OpenOrderTicketInput);
+    for character in "0.05".chars() {
+        state.reduce(Action::EditOrderTicketInput(
+            tui_input::InputRequest::InsertChar(character),
+        ));
+    }
+    state.reduce(Action::AcceptOrderTicketInput);
+    state.reduce(Action::StageOrderTicket);
+
+    assert_eq!(state.floating.last().map(|pane| pane.kind), None);
+    let changes = state.staged_change_views();
+    assert_eq!(changes.len(), 1);
+    let StagedChangeSubject::OrderTicket(review) = &changes[0].subject else {
+        panic!("staged order ticket");
+    };
+    assert_eq!(review.parsed_quantity.to_string(), "0.05");
+    assert!(matches!(
+        review.order_spec,
+        OrderSpec::PostOnlyLimit { ref price } if price.to_string() == "204"
+    ));
+}
+
+#[test]
 fn capture_order_reference_price_fixes_quote_price_without_staging() {
     let mut state = AppState::from_config(TuiConfig {
         watchlist: vec!["CRDO".to_string()],

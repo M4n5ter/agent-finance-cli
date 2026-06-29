@@ -5,6 +5,7 @@ use crate::state::Action;
 use crate::ticket_panel_view::TicketPanelAction;
 
 const ORDER_TICKET_HINTS: &[&str] = &[
+    "e edit field",
     "c capture price",
     "up/down field",
     "left/right adjust",
@@ -12,10 +13,16 @@ const ORDER_TICKET_HINTS: &[&str] = &[
     "s stage order",
 ];
 
-pub(crate) const ORDER_TICKET_ACTIONS: &[TicketPanelAction] = &[TicketPanelAction {
-    label: "[capture price]",
-    action: ActionId::CaptureOrderReferencePrice,
-}];
+pub(crate) const ORDER_TICKET_ACTIONS: &[TicketPanelAction] = &[
+    TicketPanelAction {
+        label: "[edit field]",
+        action: ActionId::OpenOrderTicketInput,
+    },
+    TicketPanelAction {
+        label: "[capture price]",
+        action: ActionId::CaptureOrderReferencePrice,
+    },
+];
 
 pub(crate) fn order_ticket_key_action(key: KeyEvent) -> Option<Action> {
     if !key.modifiers.is_empty() {
@@ -26,6 +33,7 @@ pub(crate) fn order_ticket_key_action(key: KeyEvent) -> Option<Action> {
         KeyCode::Down => Some(Action::MoveOrderTicketField(1)),
         KeyCode::Left => Some(Action::AdjustOrderTicketField(-1)),
         KeyCode::Right | KeyCode::Enter => Some(Action::AdjustOrderTicketField(1)),
+        KeyCode::Char('e') => Some(Action::OpenOrderTicketInput),
         KeyCode::Char('c') => Some(Action::CaptureOrderReferencePrice),
         KeyCode::Char('s') => Some(Action::StageOrderTicket),
         _ => None,

@@ -504,9 +504,22 @@ pub enum FloatingKind {
     ProviderDetails,
     SymbolSearch,
     WatchlistAdd,
+    OrderTicketInput,
 }
 
 impl FloatingKind {
+    pub const ALL: [Self; 9] = [
+        Self::CommandPalette,
+        Self::Help,
+        Self::LiveWritesConfirmation,
+        Self::StagedExecutionConfirmation,
+        Self::TradingProfile,
+        Self::ProviderDetails,
+        Self::SymbolSearch,
+        Self::WatchlistAdd,
+        Self::OrderTicketInput,
+    ];
+
     pub const fn persistent(self) -> bool {
         match self {
             Self::CommandPalette
@@ -514,7 +527,8 @@ impl FloatingKind {
             | Self::StagedExecutionConfirmation
             | Self::TradingProfile
             | Self::SymbolSearch
-            | Self::WatchlistAdd => false,
+            | Self::WatchlistAdd
+            | Self::OrderTicketInput => false,
             Self::Help | Self::ProviderDetails => true,
         }
     }
@@ -522,7 +536,11 @@ impl FloatingKind {
     pub const fn text_input(self) -> bool {
         matches!(
             self,
-            Self::CommandPalette | Self::TradingProfile | Self::SymbolSearch | Self::WatchlistAdd
+            Self::CommandPalette
+                | Self::TradingProfile
+                | Self::SymbolSearch
+                | Self::WatchlistAdd
+                | Self::OrderTicketInput
         )
     }
 
@@ -536,6 +554,7 @@ impl FloatingKind {
             Self::ProviderDetails => "Provider Details",
             Self::SymbolSearch => "Symbol Search",
             Self::WatchlistAdd => "Add Symbols",
+            Self::OrderTicketInput => "Order Ticket Input",
         }
     }
 }
@@ -570,7 +589,8 @@ impl FloatingSize {
             FloatingKind::CommandPalette
             | FloatingKind::TradingProfile
             | FloatingKind::SymbolSearch
-            | FloatingKind::WatchlistAdd => Self {
+            | FloatingKind::WatchlistAdd
+            | FloatingKind::OrderTicketInput => Self {
                 width_ratio: 70,
                 height_ratio: 40,
             },

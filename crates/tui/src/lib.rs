@@ -24,6 +24,7 @@ mod open_order_controls;
 mod open_order_view;
 mod order_ticket;
 mod order_ticket_controls;
+mod order_ticket_input;
 mod pane_status;
 mod panel_action_line_view;
 mod panel_input;

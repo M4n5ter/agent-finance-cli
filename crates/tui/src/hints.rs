@@ -253,6 +253,10 @@ fn input_mode_spec_for_kind(kind: FloatingKind) -> Option<InputModeSpec> {
             title: "Trading Profile",
             hints: &["type profile", "enter set", "blank clears", "esc close"],
         }),
+        FloatingKind::OrderTicketInput => Some(InputModeSpec {
+            title: "Order Ticket Input",
+            hints: &["type value", "enter apply", "blank clears", "esc close"],
+        }),
         FloatingKind::Help
         | FloatingKind::LiveWritesConfirmation
         | FloatingKind::StagedExecutionConfirmation
@@ -464,6 +468,7 @@ mod tests {
         assert_eq!(
             mode_key_hints(&state),
             vec![
+                "e edit field",
                 "c capture price",
                 "up/down field",
                 "left/right adjust",
