@@ -533,6 +533,8 @@ mod tests {
         assert!(text.contains("Review the selected staged change before executing it."));
         assert!(text.contains("mode: dry-run"));
         assert!(text.contains("summary: buy 0.05 CRDO spot limit-maker @ 204"));
+        assert!(text.contains("gate preview:"));
+        assert!(text.contains("profile gate: unavailable until profile validation completes"));
         assert!(text.contains("[Confirm submit]"));
         assert!(text.contains("[Cancel]"));
     }

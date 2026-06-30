@@ -600,7 +600,7 @@ impl FloatingSize {
             },
             FloatingKind::StagedExecutionConfirmation => Self {
                 width_ratio: 56,
-                height_ratio: 46,
+                height_ratio: 60,
             },
             FloatingKind::Help => Self {
                 width_ratio: 64,

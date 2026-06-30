@@ -7,6 +7,7 @@ use crate::confirmation_dialog::{self, ConfirmationButtonAction};
 use crate::model::FloatingKind;
 use crate::mouse_target::{FloatingMouseAction, MouseTarget};
 use crate::search_floating_view::SearchFloatingLayout;
+use crate::staged_gate_preview::confirmation_gate_preview;
 use crate::state::{Action, AppState};
 
 pub(crate) struct FloatingKeyRouting {
@@ -300,6 +301,7 @@ fn confirmation_button_at(
     let rows = confirmation_dialog::rows_for(
         kind,
         state.pending_staged_confirmation_view(),
+        confirmation_gate_preview(kind, state, state.pending_staged_confirmation_view()),
         content_width,
     );
     confirmation_dialog::click_action_at(&rows, content_column, content_row)

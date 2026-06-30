@@ -6,6 +6,7 @@ use crate::layout::{self, DockedColumnSplit, LayoutHit};
 use crate::model::{FloatingKind, Panel, WorkspaceKind};
 use crate::mouse_target::{self, MousePosition, MouseTarget, PanelMouseAction};
 use crate::search_floating_view::SearchFloatingLayout;
+use crate::staged_gate_preview::confirmation_gate_preview;
 use crate::status_bar::StatusAction;
 use agent_finance_core::{Environment, Market, Provider, SignedReadRequest, SignedReadSnapshot};
 use agent_finance_market::snapshot::{MarketSnapshot, QuoteSnapshot, RegularBasisSnapshot};
@@ -2196,6 +2197,7 @@ fn maybe_confirmation_click(
     let rows = confirmation_dialog::rows_for(
         kind,
         state.pending_staged_confirmation_view(),
+        confirmation_gate_preview(kind, state, state.pending_staged_confirmation_view()),
         floating.width.saturating_sub(2) as usize,
     );
     let (row, buttons) = rows

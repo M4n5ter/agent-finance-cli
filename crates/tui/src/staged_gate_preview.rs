@@ -1,13 +1,18 @@
 use agent_finance_core::Profile;
 use agent_finance_core::risk::RiskSeverity;
-use agent_finance_core::submit::SubmitMode;
+use agent_finance_core::submit::{SubmitIntentKind, SubmitMode};
 
+use crate::model::FloatingKind;
 use crate::profile_snapshot::ProfileValidationState;
 use crate::staged_intent::{
     cancel_intent_from_review, futures_state_intent_from_review, order_intent_from_review,
     transfer_intent_from_review,
 };
-use crate::state::{AppState, ProfileRiskReview, StagedChangeSubject, StagedChangeView};
+use crate::state::{
+    AppState, PendingStagedConfirmationView, ProfileRiskReview, StagedChangeSubject,
+    StagedChangeView, StagedExecution, StagedExecutionRequest, StagedLocalCommitSubject,
+    StagedSubmitSubject,
+};
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct GatePreview {
@@ -17,29 +22,7 @@ pub(crate) struct GatePreview {
 
 impl GatePreview {
     pub(crate) fn compact_rows(&self) -> Vec<&GatePreviewRow> {
-        let Some(outcome) = self.core_outcome_row() else {
-            return self
-                .most_severe_row()
-                .into_iter()
-                .collect::<Vec<&GatePreviewRow>>();
-        };
-        let caveat = self
-            .most_severe_row()
-            .filter(|row| !std::ptr::eq(*row, outcome))
-            .filter(|row| row.severity != GatePreviewSeverity::Info);
-        std::iter::once(outcome).chain(caveat).collect()
-    }
-
-    fn core_outcome_row(&self) -> Option<&GatePreviewRow> {
-        self.rows
-            .iter()
-            .find(|row| row.text.starts_with("core risk preview:"))
-    }
-
-    fn most_severe_row(&self) -> Option<&GatePreviewRow> {
-        self.rows
-            .iter()
-            .max_by_key(|row| row.severity.compact_rank())
+        compact_row_refs(&self.rows)
     }
 }
 
@@ -98,21 +81,107 @@ pub(crate) fn selected_gate_preview(state: &AppState) -> Option<GatePreview> {
     Some(GatePreview { change, rows })
 }
 
+pub(crate) fn confirmation_gate_preview(
+    kind: FloatingKind,
+    state: &AppState,
+    pending: Option<PendingStagedConfirmationView<'_>>,
+) -> Vec<GatePreviewRow> {
+    match kind {
+        FloatingKind::StagedExecutionConfirmation => pending
+            .map(|pending| compact_rows(execution_request_gate_rows(state, pending.request)))
+            .unwrap_or_default(),
+        _ => Vec::new(),
+    }
+}
+
 fn selected_gate_rows(state: &AppState, change: &StagedChangeView) -> Vec<GatePreviewRow> {
-    let Some(mode) = change.mode else {
-        return local_commit_gate_rows(&change.subject);
+    gate_rows_for_subject(
+        state,
+        change.mode,
+        change.intent_kind,
+        &change.profile,
+        &change.subject,
+    )
+}
+
+fn execution_request_gate_rows(
+    state: &AppState,
+    request: &StagedExecutionRequest,
+) -> Vec<GatePreviewRow> {
+    let (subject, mode) = execution_request_subject_and_mode(request);
+    gate_rows_for_subject(
+        state,
+        mode,
+        subject.submit_intent_kind(),
+        subject.profile_label(),
+        &subject,
+    )
+}
+
+fn execution_request_subject_and_mode(
+    request: &StagedExecutionRequest,
+) -> (StagedChangeSubject, Option<SubmitMode>) {
+    match &request.execution {
+        StagedExecution::Submit { subject, mode } => {
+            (submit_subject_to_change_subject(subject), Some(*mode))
+        }
+        StagedExecution::LocalCommit { subject } => {
+            (local_commit_subject_to_change_subject(subject), None)
+        }
+    }
+}
+
+fn submit_subject_to_change_subject(subject: &StagedSubmitSubject) -> StagedChangeSubject {
+    match subject {
+        StagedSubmitSubject::OrderTicket(review) => {
+            StagedChangeSubject::OrderTicket(review.clone())
+        }
+        StagedSubmitSubject::Cancel(review) => StagedChangeSubject::Cancel(review.clone()),
+        StagedSubmitSubject::Transfer(review) => StagedChangeSubject::Transfer(review.clone()),
+        StagedSubmitSubject::FuturesState(review) => {
+            StagedChangeSubject::FuturesState(review.clone())
+        }
+        #[cfg(test)]
+        StagedSubmitSubject::Text {
+            intent_kind,
+            summary,
+        } => StagedChangeSubject::Text {
+            intent_kind: *intent_kind,
+            summary: summary.clone(),
+        },
+    }
+}
+
+fn local_commit_subject_to_change_subject(
+    subject: &StagedLocalCommitSubject,
+) -> StagedChangeSubject {
+    match subject {
+        StagedLocalCommitSubject::ProfileRisk(review) => {
+            StagedChangeSubject::ProfileRisk(review.clone())
+        }
+    }
+}
+
+fn gate_rows_for_subject(
+    state: &AppState,
+    mode: Option<SubmitMode>,
+    intent_kind: Option<SubmitIntentKind>,
+    profile_label: &str,
+    subject: &StagedChangeSubject,
+) -> Vec<GatePreviewRow> {
+    let Some(mode) = mode else {
+        return local_commit_gate_rows(subject);
     };
     let live = mode == SubmitMode::Live;
     let mut rows = vec![GatePreviewRow::info(format!(
         "runtime preview: {}  mode:{}  profile:{}",
-        change
-            .intent_kind
+        intent_kind
             .map(|kind| kind.to_string())
             .unwrap_or_else(|| "local-commit".to_string()),
         mode,
-        change.profile
+        profile_label
     ))];
-    let profile = match profile_for_change(state, change) {
+    let profile = match profile_for_label(state, profile_label) {
         ProfileGate::Ready(profile) => profile,
         ProfileGate::NoProfileValidation => {
             rows.push(GatePreviewRow::warning(
@@ -123,7 +192,7 @@ fn selected_gate_rows(state: &AppState, change: &StagedChangeView) -> Vec<GatePr
         ProfileGate::ProfileMismatch { validated } => {
             rows.push(GatePreviewRow::block(format!(
                 "profile gate: selected change uses {}, validated profile is {}",
-                change.profile, validated
+                profile_label, validated
             )));
             return rows;
         }
@@ -136,7 +205,7 @@ fn selected_gate_rows(state: &AppState, change: &StagedChangeView) -> Vec<GatePr
     };
 
     rows.push(live_gate_row(live, profile));
-    rows.extend(subject_gate_rows(&change.subject, profile, live));
+    rows.extend(subject_gate_rows(subject, profile, live));
     rows
 }
 
@@ -147,17 +216,17 @@ enum ProfileGate<'a> {
     ValidationFailed { error: String },
 }
 
-fn profile_for_change<'a>(state: &'a AppState, change: &StagedChangeView) -> ProfileGate<'a> {
+fn profile_for_label<'a>(state: &'a AppState, profile_label: &str) -> ProfileGate<'a> {
     match &state.profile_validation {
         ProfileValidationState::Ready {
             profile,
             profile_config,
             ..
-        } if profile == &change.profile => ProfileGate::Ready(profile_config),
+        } if profile == profile_label => ProfileGate::Ready(profile_config),
         ProfileValidationState::Ready { profile, .. } => ProfileGate::ProfileMismatch {
             validated: profile.clone(),
         },
-        ProfileValidationState::Failed { profile, error } if profile == &change.profile => {
+        ProfileValidationState::Failed { profile, error } if profile == profile_label => {
             ProfileGate::ValidationFailed {
                 error: error.clone(),
             }
@@ -169,6 +238,31 @@ fn profile_for_change<'a>(state: &'a AppState, change: &StagedChangeView) -> Pro
             ProfileGate::NoProfileValidation
         }
     }
+}
+
+fn compact_rows(rows: Vec<GatePreviewRow>) -> Vec<GatePreviewRow> {
+    compact_row_refs(&rows).into_iter().cloned().collect()
+}
+
+fn compact_row_refs(rows: &[GatePreviewRow]) -> Vec<&GatePreviewRow> {
+    let Some(outcome) = core_outcome_row(rows) else {
+        return most_severe_row(rows)
+            .into_iter()
+            .collect::<Vec<&GatePreviewRow>>();
+    };
+    let caveat = most_severe_row(rows)
+        .filter(|row| !std::ptr::eq(*row, outcome))
+        .filter(|row| row.severity != GatePreviewSeverity::Info);
+    std::iter::once(outcome).chain(caveat).collect()
+}
+
+fn core_outcome_row(rows: &[GatePreviewRow]) -> Option<&GatePreviewRow> {
+    rows.iter()
+        .find(|row| row.text.starts_with("core risk preview:"))
+}
+
+fn most_severe_row(rows: &[GatePreviewRow]) -> Option<&GatePreviewRow> {
+    rows.iter().max_by_key(|row| row.severity.compact_rank())
 }
 
 fn live_gate_row(live: bool, profile: &Profile) -> GatePreviewRow {
@@ -300,8 +394,9 @@ fn profile_risk_rows(review: &ProfileRiskReview) -> Vec<GatePreviewRow> {
 mod tests {
     use super::*;
 
+    use crate::command::ActionId;
     use crate::config::{TradingConfig, TuiConfig, WorkspaceConfig};
-    use crate::model::WorkspaceKind;
+    use crate::model::{FloatingKind, WorkspaceKind};
     use crate::profile_snapshot::{
         ProfileValidationSnapshot, ProfileValidationState, test_profile,
     };
@@ -364,6 +459,34 @@ mod tests {
         );
     }
 
+    #[test]
+    fn confirmation_preview_follows_pending_request_not_later_selection() {
+        let mut state =
+            trade_state_with_watchlist(vec!["BTCUSDT".to_string(), "ETHUSDT".to_string()]);
+        load_test_profile(&mut state);
+        stage_order(&mut state);
+        state.reduce(Action::ExecuteStagedChange);
+        assert!(state.pending_staged_confirmation().is_some());
+
+        state.reduce(Action::Execute(ActionId::SelectSymbolBy(1)));
+        stage_order(&mut state);
+        state.reduce(Action::SelectStagedChange(1));
+        let selected_preview = selected_gate_preview(&state).expect("selected gate preview");
+        assert_eq!(
+            compact_text(&selected_preview)[0],
+            "core risk preview: blocked",
+            "test setup should make the selected non-pending change visibly different"
+        );
+
+        let compact = confirmation_gate_preview(
+            FloatingKind::StagedExecutionConfirmation,
+            &state,
+            state.pending_staged_confirmation_view(),
+        );
+
+        assert_eq!(compact[0].text, "core risk preview: allowed");
+    }
+
     fn compact_text(preview: &GatePreview) -> Vec<String> {
         preview
             .compact_rows()
@@ -373,8 +496,12 @@ mod tests {
     }
 
     fn trade_state(symbol: &str) -> AppState {
+        trade_state_with_watchlist(vec![symbol.to_string()])
+    }
+
+    fn trade_state_with_watchlist(watchlist: Vec<String>) -> AppState {
         AppState::from_config(TuiConfig {
-            watchlist: vec![symbol.to_string()],
+            watchlist,
             trading: TradingConfig {
                 default_profile: Some("mainnet".to_string()),
             },
@@ -393,6 +520,12 @@ mod tests {
         let mut profile_config = test_profile(profile);
         if let Some(policy) = profile_config.risk.allowed_symbols.get_mut("btcusdt") {
             policy.order_kinds.push(OrderKind::PostOnlyLimit);
+        }
+        if let Some(policy) = profile_config.risk.allowed_symbols.get("btcusdt").cloned() {
+            profile_config
+                .risk
+                .allowed_symbols
+                .insert("BTCUSDT".to_string(), policy);
         }
         state.reduce(Action::ProfileValidationStarted {
             generation: 1,

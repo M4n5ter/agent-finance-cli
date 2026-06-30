@@ -9,6 +9,7 @@ use crate::hints;
 use crate::model::FloatingKind;
 use crate::mouse_target::MouseTarget;
 use crate::search_floating_view::SearchFloatingLayout;
+use crate::staged_gate_preview::{GatePreviewSeverity, confirmation_gate_preview};
 use crate::state::AppState;
 use crate::status_bar::{StatusDetail, status_symbol_and_errors};
 use crate::theme::ThemeConfig;
@@ -250,6 +251,7 @@ fn render_confirmation_dialog(
     let lines = confirmation_dialog::rows_for(
         kind,
         state.pending_staged_confirmation_view(),
+        confirmation_gate_preview(kind, state, state.pending_staged_confirmation_view()),
         content_width,
     )
     .into_iter()
@@ -275,6 +277,13 @@ fn confirmation_line(
             state.theme.accent_style().add_modifier(Modifier::BOLD),
         )),
         ConfirmationRow::Text(text) => Line::from(text),
+        ConfirmationRow::Gate(row) => Line::from(vec![
+            Span::styled(
+                confirmation_dialog::GATE_ROW_PREFIX,
+                state.theme.muted_style(),
+            ),
+            Span::styled(row.text, gate_preview_style(state, row.severity)),
+        ]),
         ConfirmationRow::Input {
             label,
             value,
@@ -311,6 +320,14 @@ fn confirmation_line(
                     .collect::<Vec<_>>(),
             )
         }
+    }
+}
+
+fn gate_preview_style(state: &AppState, severity: GatePreviewSeverity) -> Style {
+    match severity {
+        GatePreviewSeverity::Info => state.theme.text_style(),
+        GatePreviewSeverity::Warning => state.theme.warning_style(),
+        GatePreviewSeverity::Block => state.theme.danger_style().add_modifier(Modifier::BOLD),
     }
 }
 
