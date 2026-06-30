@@ -138,6 +138,24 @@ pub(crate) fn chart_price_at_row(
         .then(|| PriceBounds::from_buckets(&buckets).price_at_row(areas.price, row))
 }
 
+pub(crate) fn chart_bps_at_column(area: Rect, window: ChartWindow, column: u16) -> Option<u16> {
+    if column < area.x || column >= area.right() {
+        return None;
+    }
+    if area.width <= 1 {
+        return Some(window.start_bps());
+    }
+    let local_column = column.saturating_sub(area.x);
+    let span = u32::from(window.end_bps().saturating_sub(window.start_bps()));
+    let relative = (u32::from(local_column) * span) / u32::from(area.width - 1);
+    Some(
+        window
+            .start_bps()
+            .saturating_add(relative as u16)
+            .min(10_000),
+    )
+}
+
 pub(crate) fn visible_bars(
     bars: &[HistoryBarSnapshot],
     window: ChartWindow,
@@ -191,5 +209,21 @@ mod tests {
         assert!(top <= 111.0);
         assert!(bottom >= 89.0);
         assert_eq!(chart_price_at_row(&bars, ChartWindow::FULL, area, 19), None);
+    }
+
+    #[test]
+    fn chart_column_hit_test_maps_to_active_window_bps() {
+        let area = Rect::new(10, 0, 101, 20);
+
+        assert_eq!(chart_bps_at_column(area, ChartWindow::FULL, 10), Some(0));
+        assert_eq!(
+            chart_bps_at_column(area, ChartWindow::FULL, 60),
+            Some(5_000)
+        );
+        assert_eq!(
+            chart_bps_at_column(area, ChartWindow::FULL, 110),
+            Some(10_000)
+        );
+        assert_eq!(chart_bps_at_column(area, ChartWindow::FULL, 111), None);
     }
 }

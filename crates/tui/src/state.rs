@@ -1053,6 +1053,9 @@ impl AppState {
             Action::ShiftChartPreset(direction) => self.shift_chart_preset(direction),
             Action::MoveChartCursor(direction) => self.chart.move_cursor(direction),
             Action::ZoomChartWindow(direction) => self.chart.zoom_window(direction),
+            Action::SelectChartWindow { start_bps, end_bps } => {
+                self.chart.select_window(start_bps, end_bps);
+            }
             Action::ResetChartView => self.chart.reset_view(),
             Action::RequestAccountRefresh => self.request_account_refresh(),
             Action::MoveStagedChangeSelection(direction) => {
@@ -1589,6 +1592,10 @@ pub enum Action {
     ShiftChartPreset(isize),
     MoveChartCursor(isize),
     ZoomChartWindow(isize),
+    SelectChartWindow {
+        start_bps: u16,
+        end_bps: u16,
+    },
     ResetChartView,
     RefreshStarted(u64),
     SnapshotLoaded {

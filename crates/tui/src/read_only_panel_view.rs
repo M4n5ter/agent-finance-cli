@@ -377,7 +377,7 @@ fn history_workbench_lines(
             ohlc_warning
         )),
         Line::from(format!(
-            "{view}  {cursor}  h/l cursor  wheel/[ ] zoom  0-6 preset  r refresh  z exit"
+            "{view}  {cursor}  h/l cursor  wheel/[ ]/drag zoom  0-6 preset  r refresh  z exit"
         )),
     ]
 }

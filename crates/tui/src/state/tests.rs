@@ -1680,6 +1680,20 @@ fn selected_symbol_changes_reset_chart_session_view() {
 }
 
 #[test]
+fn chart_window_selection_is_reducer_state() {
+    let mut state = AppState::from_config(TuiConfig::default());
+
+    state.reduce(Action::SelectChartWindow {
+        start_bps: 8_000,
+        end_bps: 2_000,
+    });
+
+    assert_eq!(state.chart.window().start_bps(), 2_000);
+    assert_eq!(state.chart.window().end_bps(), 8_000);
+    assert_eq!(state.chart.cursor_bps(), Some(5_000));
+}
+
+#[test]
 fn watchlist_add_symbol_selection_resets_chart_session_view() {
     let mut state = AppState::from_config(TuiConfig {
         watchlist: vec!["CRDO".to_string()],

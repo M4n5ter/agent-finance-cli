@@ -239,6 +239,15 @@ impl ChartState {
         self.cursor_bps = Some(self.window.clamp_bps(anchor));
     }
 
+    pub fn select_window(&mut self, start_bps: u16, end_bps: u16) -> bool {
+        let Some(window) = ChartWindow::from_selection(start_bps, end_bps) else {
+            return false;
+        };
+        self.window = window;
+        self.cursor_bps = Some(window.midpoint());
+        true
+    }
+
     pub fn reset_view(&mut self) {
         self.window = ChartWindow::FULL;
         self.cursor_bps = None;
@@ -251,7 +260,7 @@ impl ChartWindow {
         end_bps: 10_000,
     };
 
-    const MIN_SPAN_BPS: u16 = 500;
+    pub const MIN_SELECTION_SPAN_BPS: u16 = 500;
 
     pub const fn full(self) -> bool {
         self.start_bps == Self::FULL.start_bps && self.end_bps == Self::FULL.end_bps
@@ -313,7 +322,7 @@ impl ChartWindow {
         }
         let span = u32::from(self.span());
         let next_span = if direction > 0 {
-            (span * 3 / 4).max(u32::from(Self::MIN_SPAN_BPS))
+            (span * 3 / 4).max(u32::from(Self::MIN_SELECTION_SPAN_BPS))
         } else {
             (span * 4 / 3).min(u32::from(Self::FULL.end_bps))
         } as u16;
@@ -330,6 +339,15 @@ impl ChartWindow {
             start_bps: start,
             end_bps: start + next_span,
         }
+    }
+
+    fn from_selection(start_bps: u16, end_bps: u16) -> Option<Self> {
+        let start = start_bps.min(end_bps).min(Self::FULL.end_bps);
+        let end = start_bps.max(end_bps).min(Self::FULL.end_bps);
+        (end.saturating_sub(start) >= Self::MIN_SELECTION_SPAN_BPS).then_some(Self {
+            start_bps: start,
+            end_bps: end,
+        })
     }
 }
 
@@ -404,5 +422,24 @@ mod tests {
         assert!(state.set_preset(ChartPreset::OneDay));
         assert_eq!(state.window(), ChartWindow::FULL);
         assert_eq!(state.cursor_bps(), None);
+    }
+
+    #[test]
+    fn chart_window_selection_ignores_tiny_drags_and_sets_midpoint_cursor() {
+        let mut state = ChartState::new(ChartPreset::Auto);
+
+        assert!(!state.select_window(1_000, 1_200));
+        assert_eq!(state.window(), ChartWindow::FULL);
+        assert_eq!(state.cursor_bps(), None);
+
+        assert!(state.select_window(7_000, 2_000));
+        assert_eq!(
+            state.window(),
+            ChartWindow {
+                start_bps: 2_000,
+                end_bps: 7_000
+            }
+        );
+        assert_eq!(state.cursor_bps(), Some(4_500));
     }
 }

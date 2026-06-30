@@ -10,7 +10,7 @@ expression: "render_to_text_grid(state, width, height)"
 │latest: 109.16 at 13:25  return=10.04%                                                                                │
 │volume: 15.81K  freshness: 2026-06-25 09:30:00                                                                        │
 │range: 9:30 -> 13:30  O=98.8000 H=113.18 L=94.7200 C=109.16                                                           │
-│view=25-100%  cursor=95%  h/l cursor  wheel/[ ] zoom  0-6 preset  r refresh  z exit                                   │
+│view=25-100%  cursor=95%  h/l cursor  wheel/[ ]/drag zoom  0-6 preset  r refresh  z exit                              │
 │                                                                                                                      │
 │O 100.96  H 113.18  L 94.7200  C 109.16·········································⡀··························┃····114.10│
 │change +8.12%  volume 528.50K  overlays MA20 MA50 VWAP                          ⡇                          ┃     ⡀    │

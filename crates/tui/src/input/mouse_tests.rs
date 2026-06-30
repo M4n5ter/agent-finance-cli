@@ -2118,6 +2118,21 @@ fn mouse_click_on_history_chart_price_fills_order_ticket_without_staging() {
         ),
     );
 
+    assert_eq!(state.panels.focused(), Panel::History);
+    assert_eq!(state.order_ticket.price_text(), None);
+    assert_ne!(drag, MouseDrag::default());
+
+    handle_mouse_event(
+        area,
+        &mut state,
+        &mut drag,
+        mouse_event(
+            MouseEventKind::Up(MouseButton::Left),
+            click_position.column,
+            click_position.row,
+        ),
+    );
+
     assert_eq!(state.panels.focused(), Panel::OrderTicket);
     assert_eq!(state.mouse_position, Some(click_position));
     let price = state
@@ -2131,6 +2146,185 @@ fn mouse_click_on_history_chart_price_fills_order_ticket_without_staging() {
     assert!(state.pending_staged_confirmation().is_none());
     assert!(state.take_pending_staged_execution().is_none());
     assert_eq!(state.floating.last().map(|pane| pane.kind), None);
+    assert_eq!(drag, MouseDrag::default());
+}
+
+#[test]
+fn mouse_drag_on_history_chart_selects_window_without_filling_order_ticket() {
+    let area = Rect::new(0, 0, 120, 32);
+    let mut state = AppState::from_config(crate::config::TuiConfig {
+        watchlist: vec!["CRDO".to_string()],
+        ..crate::config::TuiConfig::default()
+    });
+    state.reduce(Action::HistoryStarted {
+        generation: 1,
+        symbol: "CRDO".to_string(),
+    });
+    state.reduce(Action::HistoryLoaded {
+        generation: 1,
+        snapshot: history_snapshot("CRDO"),
+    });
+    let panel = layout::build(
+        area,
+        &state.layout,
+        &state.floating,
+        &state.visible_panels(),
+    )
+    .panel_rect(Panel::History)
+    .expect("history panel is visible");
+    let chart = crate::read_only_panel_view::history_chart_area(panel, false);
+    let start = MousePosition::new(chart.x + chart.width / 5, chart.y + chart.height / 2);
+    let end = MousePosition::new(chart.x + chart.width * 4 / 5, start.row);
+    let mut drag = MouseDrag::default();
+
+    handle_mouse_event(
+        area,
+        &mut state,
+        &mut drag,
+        mouse_event(
+            MouseEventKind::Down(MouseButton::Left),
+            start.column,
+            start.row,
+        ),
+    );
+    handle_mouse_event(
+        area,
+        &mut state,
+        &mut drag,
+        mouse_event(MouseEventKind::Drag(MouseButton::Left), end.column, end.row),
+    );
+
+    assert_ne!(drag, MouseDrag::default());
+    assert!(!state.chart.window().full());
+    assert!(state.chart.window().start_bps() < state.chart.window().end_bps());
+    assert_eq!(state.order_ticket.price_text(), None);
+    assert_eq!(state.staged_change_count(), 0);
+
+    handle_mouse_event(
+        area,
+        &mut state,
+        &mut drag,
+        mouse_event(MouseEventKind::Up(MouseButton::Left), end.column, end.row),
+    );
+
+    assert_eq!(drag, MouseDrag::default());
+    assert_eq!(state.order_ticket.price_text(), None);
+    assert_eq!(state.staged_change_count(), 0);
+}
+
+#[test]
+fn mouse_tiny_drag_on_zoomed_history_chart_keeps_click_semantics() {
+    let area = Rect::new(0, 0, 120, 32);
+    let mut state = AppState::from_config(crate::config::TuiConfig {
+        watchlist: vec!["CRDO".to_string()],
+        ..crate::config::TuiConfig::default()
+    });
+    state.reduce(Action::HistoryStarted {
+        generation: 1,
+        symbol: "CRDO".to_string(),
+    });
+    state.reduce(Action::HistoryLoaded {
+        generation: 1,
+        snapshot: history_snapshot("CRDO"),
+    });
+    state.reduce(Action::SelectChartWindow {
+        start_bps: 2_000,
+        end_bps: 8_000,
+    });
+    let original_window = state.chart.window();
+    let panel = layout::build(
+        area,
+        &state.layout,
+        &state.floating,
+        &state.visible_panels(),
+    )
+    .panel_rect(Panel::History)
+    .expect("history panel is visible");
+    let chart = crate::read_only_panel_view::history_chart_area(panel, false);
+    let start = MousePosition::new(chart.x + chart.width / 2, chart.y + chart.height / 2);
+    let end = MousePosition::new(start.column + 1, start.row);
+    let mut drag = MouseDrag::default();
+
+    handle_mouse_event(
+        area,
+        &mut state,
+        &mut drag,
+        mouse_event(
+            MouseEventKind::Down(MouseButton::Left),
+            start.column,
+            start.row,
+        ),
+    );
+    handle_mouse_event(
+        area,
+        &mut state,
+        &mut drag,
+        mouse_event(MouseEventKind::Drag(MouseButton::Left), end.column, end.row),
+    );
+    handle_mouse_event(
+        area,
+        &mut state,
+        &mut drag,
+        mouse_event(MouseEventKind::Up(MouseButton::Left), end.column, end.row),
+    );
+
+    assert_eq!(state.chart.window(), original_window);
+    assert!(state.order_ticket.price_text().is_some());
+    assert_eq!(state.staged_change_count(), 0);
+    assert_eq!(drag, MouseDrag::default());
+}
+
+#[test]
+fn mouse_click_on_history_volume_row_does_not_fill_order_ticket() {
+    let area = Rect::new(0, 0, 120, 32);
+    let mut state = AppState::from_config(crate::config::TuiConfig {
+        watchlist: vec!["CRDO".to_string()],
+        ..crate::config::TuiConfig::default()
+    });
+    state.reduce(Action::HistoryStarted {
+        generation: 1,
+        symbol: "CRDO".to_string(),
+    });
+    state.reduce(Action::HistoryLoaded {
+        generation: 1,
+        snapshot: history_snapshot("CRDO"),
+    });
+    let panel = layout::build(
+        area,
+        &state.layout,
+        &state.floating,
+        &state.visible_panels(),
+    )
+    .panel_rect(Panel::History)
+    .expect("history panel is visible");
+    let chart = crate::read_only_panel_view::history_chart_area(panel, false);
+    let volume = crate::history_chart::ChartAreas::from(chart).volume;
+    let click = MousePosition::new(volume.x + volume.width / 2, volume.y);
+    let mut drag = MouseDrag::default();
+
+    handle_mouse_event(
+        area,
+        &mut state,
+        &mut drag,
+        mouse_event(
+            MouseEventKind::Down(MouseButton::Left),
+            click.column,
+            click.row,
+        ),
+    );
+    handle_mouse_event(
+        area,
+        &mut state,
+        &mut drag,
+        mouse_event(
+            MouseEventKind::Up(MouseButton::Left),
+            click.column,
+            click.row,
+        ),
+    );
+
+    assert_eq!(state.order_ticket.price_text(), None);
+    assert_eq!(state.staged_change_count(), 0);
     assert_eq!(drag, MouseDrag::default());
 }
 

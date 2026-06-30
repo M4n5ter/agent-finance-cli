@@ -1,8 +1,9 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use ratatui::layout::Rect;
 
+use crate::chart::ChartWindow;
 use crate::layout::{self, DockedColumnSplit, LayoutHit};
-use crate::model::FloatingKind;
+use crate::model::{FloatingKind, Panel};
 use crate::mouse_target::MousePosition;
 use crate::state::{Action, AppState};
 use crate::workspace_tabs::workspace_tab_at;
@@ -16,6 +17,11 @@ pub struct MouseDrag {
 enum MouseDragTarget {
     DockedSplit(DockedColumnSplit),
     FloatingResize(FloatingKind),
+    HistoryChart {
+        start_bps: u16,
+        start_window: ChartWindow,
+        zoomed: bool,
+    },
 }
 
 pub fn key_action(state: &AppState, key: KeyEvent) -> Option<Action> {
@@ -71,16 +77,27 @@ pub fn handle_mouse_event(
             match layout.hit_test(mouse.column, mouse.row) {
                 Some(LayoutHit::Panel(panel)) => {
                     state.reduce(Action::Focus(panel));
-                    if let Some(area) = layout.panel_rect(panel)
-                        && let Some(action) = crate::panel_mouse::click_action(
+                    if let Some(area) = layout.panel_rect(panel) {
+                        if panel == Panel::History
+                            && let Some(start_bps) =
+                                history_chart_bps_at(state, area, state.chart.window(), mouse)
+                        {
+                            drag.target = Some(MouseDragTarget::HistoryChart {
+                                start_bps,
+                                start_window: state.chart.window(),
+                                zoomed: false,
+                            });
+                            return;
+                        }
+                        if let Some(action) = crate::panel_mouse::click_action(
                             state,
                             panel,
                             area,
                             mouse.column,
                             mouse.row,
-                        )
-                    {
-                        state.reduce(action);
+                        ) {
+                            state.reduce(action);
+                        }
                     }
                 }
                 Some(LayoutHit::DockedSplit(split)) => {
@@ -169,10 +186,50 @@ pub fn handle_mouse_event(
                     let size = layout::resize_floating(terminal_area, mouse.column, mouse.row);
                     state.reduce(Action::ResizeFloating { kind, size });
                 }
+                Some(MouseDragTarget::HistoryChart {
+                    start_bps,
+                    start_window,
+                    zoomed: _,
+                }) => {
+                    if let Some(end_bps) =
+                        history_chart_drag_bps_at(terminal_area, state, start_window, mouse)
+                        && start_bps.abs_diff(end_bps) >= ChartWindow::MIN_SELECTION_SPAN_BPS
+                    {
+                        state.reduce(Action::SelectChartWindow { start_bps, end_bps });
+                        drag.target = Some(MouseDragTarget::HistoryChart {
+                            start_bps,
+                            start_window,
+                            zoomed: true,
+                        });
+                    }
+                }
                 None => {}
             }
         }
         MouseEventKind::Up(MouseButton::Left) => {
+            if let Some(MouseDragTarget::HistoryChart { zoomed, .. }) = drag.target
+                && !zoomed
+            {
+                let layout = layout::build(
+                    terminal_area,
+                    &state.layout,
+                    &state.floating,
+                    &state.visible_panels(),
+                );
+                if let Some(LayoutHit::Panel(Panel::History)) =
+                    layout.hit_test(mouse.column, mouse.row)
+                    && let Some(area) = layout.panel_rect(Panel::History)
+                    && let Some(action) = crate::panel_mouse::click_action(
+                        state,
+                        Panel::History,
+                        area,
+                        mouse.column,
+                        mouse.row,
+                    )
+                {
+                    state.reduce(action);
+                }
+            }
             drag.target = None;
         }
         _ => {}
@@ -237,6 +294,45 @@ fn route_mouse_wheel(
     if let Some(action) = crate::panel_input::wheel_action(state, direction) {
         state.reduce(action);
     }
+}
+
+fn history_chart_drag_bps_at(
+    terminal_area: Rect,
+    state: &AppState,
+    window: ChartWindow,
+    mouse: MouseEvent,
+) -> Option<u16> {
+    let layout = layout::build(
+        terminal_area,
+        &state.layout,
+        &state.floating,
+        &state.visible_panels(),
+    );
+    let area = layout.panel_rect(Panel::History)?;
+    history_chart_bps_at(state, area, window, mouse)
+}
+
+fn history_chart_bps_at(
+    state: &AppState,
+    panel_area: Rect,
+    window: ChartWindow,
+    mouse: MouseEvent,
+) -> Option<u16> {
+    let symbol = state.selected_symbol()?;
+    let snapshot = state.history.selected_snapshot(symbol)?;
+    if snapshot.bars.is_empty() {
+        return None;
+    }
+    let workbench = crate::read_only_panel_view::history_workbench_active(state);
+    let chart_area = crate::read_only_panel_view::history_chart_area(panel_area, workbench);
+    if mouse.column < chart_area.x
+        || mouse.column >= chart_area.right()
+        || mouse.row < chart_area.y
+        || mouse.row >= chart_area.bottom()
+    {
+        return None;
+    }
+    crate::history_chart::chart_bps_at_column(chart_area, window, mouse.column)
 }
 
 #[cfg(test)]
