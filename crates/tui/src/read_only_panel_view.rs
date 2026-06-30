@@ -125,6 +125,24 @@ pub(crate) fn panel_action_at_content_cell(
     .find(|span| (span.start..span.end).contains(&content_column))
 }
 
+pub(crate) fn history_toolbar_action_at_content_cell(
+    state: &AppState,
+    area: Rect,
+    content_row: usize,
+    content_column: u16,
+) -> Option<PanelActionSpan> {
+    let row = content_row.checked_sub(action_row_count(
+        Panel::History,
+        area.height.saturating_sub(2),
+    ))?;
+    if row >= history_visible_summary_height(area, history_workbench_active(state)) {
+        return None;
+    }
+    let rows = history_summary_rows(state, area.width.saturating_sub(2), None);
+    history_summary_row_at(&rows, area, row)
+        .and_then(|summary_row| summary_row.action_at(content_column))
+}
+
 fn history_info_row_at_content_row(
     state: &AppState,
     area: Rect,
@@ -134,11 +152,12 @@ fn history_info_row_at_content_row(
         Panel::History,
         area.height.saturating_sub(2),
     ))?;
-    let text_height = history_text_area_height(area, history_workbench_active(state));
-    if content_row >= text_height {
+    if content_row >= history_visible_summary_height(area, history_workbench_active(state)) {
         return None;
     }
-    info_line_at_content_row(&history_summary_lines(state), area, content_row)
+    let rows = history_summary_rows(state, area.width.saturating_sub(2), None);
+    let row = history_summary_row_at(&rows, area, content_row)?;
+    row.info_index()
 }
 
 pub(crate) fn history_chart_area(panel_area: Rect, workbench: bool) -> Rect {
@@ -211,9 +230,9 @@ pub(crate) fn quote_lines(state: &AppState) -> Vec<Line<'_>> {
         .as_ref()
         .and_then(|snapshot| snapshot.quote_for(symbol));
 
-    let mut lines = vec![Line::from(vec![
+    let mut lines: Vec<Line<'static>> = vec![Line::from(vec![
         Span::styled(
-            symbol,
+            symbol.to_string(),
             state
                 .theme
                 .accent_style()
@@ -245,76 +264,193 @@ pub(crate) fn quote_lines(state: &AppState) -> Vec<Line<'_>> {
     lines
 }
 
-pub(crate) fn history_summary_lines(state: &AppState) -> Vec<Line<'_>> {
+pub(crate) fn history_summary_lines(
+    state: &AppState,
+    width: u16,
+    mouse_target: Option<MouseTarget>,
+) -> Vec<Line<'static>> {
+    history_summary_rows(state, width, mouse_target)
+        .into_iter()
+        .map(HistorySummaryRow::line)
+        .collect()
+}
+
+fn history_summary_rows(
+    state: &AppState,
+    width: u16,
+    mouse_target: Option<MouseTarget>,
+) -> Vec<HistorySummaryRow> {
     let symbol = state.selected_symbol().unwrap_or("N/A");
     let snapshot = state.history.selected_snapshot(symbol);
     let workbench = history_workbench_active(state);
-    let mut lines = vec![Line::from(vec![
-        Span::styled(
-            symbol,
-            state
-                .theme
-                .accent_style()
-                .add_modifier(ratatui::style::Modifier::BOLD),
-        ),
-        Span::raw(if state.history.loading() {
-            " history loading..."
-        } else {
-            " history"
-        }),
-    ])];
+    let loading_text = if state.history.loading() {
+        " history loading..."
+    } else {
+        " history"
+    };
+    let mut rows = Vec::new();
+    push_history_info_row(
+        &mut rows,
+        Line::from(vec![
+            Span::styled(
+                symbol.to_string(),
+                state
+                    .theme
+                    .accent_style()
+                    .add_modifier(ratatui::style::Modifier::BOLD),
+            ),
+            Span::raw(loading_text.to_string()),
+        ]),
+    );
 
     match snapshot {
         Some(snapshot) => {
-            lines.push(Line::from(format!(
-                "source: {} {} {}/{}  preset={}  bars={}",
-                snapshot.provider,
-                snapshot.session,
-                snapshot.range,
-                snapshot.interval,
-                state.chart.preset(),
-                snapshot.bars.len()
-            )));
-            lines.push(Line::from(format!(
-                "latest: {} at {}  return={}",
-                snapshot
-                    .latest_close
-                    .map(format_price)
-                    .unwrap_or_else(|| "-".to_string()),
-                snapshot.latest_time.as_deref().unwrap_or("-"),
-                snapshot
-                    .return_pct
-                    .map(|value| format!("{value:.2}%"))
-                    .unwrap_or_else(|| "-".to_string())
-            )));
-            lines.push(Line::from(format!(
-                "volume: {}  freshness: {}",
-                snapshot
-                    .volume
-                    .map(format_volume)
-                    .unwrap_or_else(|| "-".to_string()),
-                snapshot.fetched_at_local.as_deref().unwrap_or("-")
+            push_history_info_row(
+                &mut rows,
+                Line::from(format!(
+                    "source: {} {} {}/{}  preset={}  bars={}",
+                    snapshot.provider,
+                    snapshot.session,
+                    snapshot.range,
+                    snapshot.interval,
+                    state.chart.preset(),
+                    snapshot.bars.len()
+                )),
+            );
+            push_history_info_row(
+                &mut rows,
+                Line::from(format!(
+                    "latest: {} at {}  return={}",
+                    snapshot
+                        .latest_close
+                        .map(format_price)
+                        .unwrap_or_else(|| "-".to_string()),
+                    snapshot.latest_time.as_deref().unwrap_or("-"),
+                    snapshot
+                        .return_pct
+                        .map(|value| format!("{value:.2}%"))
+                        .unwrap_or_else(|| "-".to_string())
+                )),
+            );
+            push_history_info_row(
+                &mut rows,
+                Line::from(format!(
+                    "volume: {}  freshness: {}",
+                    snapshot
+                        .volume
+                        .map(format_volume)
+                        .unwrap_or_else(|| "-".to_string()),
+                    snapshot.fetched_at_local.as_deref().unwrap_or("-")
+                )),
+            );
+            rows.push(HistorySummaryRow::Action(history_toolbar_line(
+                state,
+                width,
+                mouse_target,
             )));
             if workbench {
-                lines.extend(history_workbench_lines(
-                    snapshot,
-                    &state.chart,
-                    &state.theme,
-                ));
+                for line in history_workbench_lines(snapshot, &state.chart, &state.theme) {
+                    push_history_info_row(&mut rows, line);
+                }
             }
             for error in snapshot.errors.iter().take(1) {
-                lines.push(Line::from(Span::styled(
-                    format!("history warning: {error}"),
-                    state.theme.warning_style(),
-                )));
+                push_history_info_row(
+                    &mut rows,
+                    Line::from(Span::styled(
+                        format!("history warning: {error}"),
+                        state.theme.warning_style(),
+                    )),
+                );
             }
         }
-        None => lines.push(Line::from(
-            "No history loaded yet. Waiting for the selected symbol.",
-        )),
+        None => push_history_info_row(
+            &mut rows,
+            Line::from("No history loaded yet. Waiting for the selected symbol."),
+        ),
     }
 
-    lines
+    rows
+}
+
+#[derive(Debug, Clone)]
+enum HistorySummaryRow {
+    Info { line: Line<'static>, index: usize },
+    Action(RenderedPanelActionLine),
+}
+
+impl HistorySummaryRow {
+    fn line(self) -> Line<'static> {
+        match self {
+            Self::Info { line, .. } => line,
+            Self::Action(action) => action.line,
+        }
+    }
+
+    fn display_line(&self) -> Line<'static> {
+        match self {
+            Self::Info { line, .. } => line.clone(),
+            Self::Action(action) => action.line.clone(),
+        }
+    }
+
+    fn action_at(&self, content_column: u16) -> Option<PanelActionSpan> {
+        match self {
+            Self::Info { .. } => None,
+            Self::Action(action) => action
+                .actions
+                .iter()
+                .copied()
+                .find(|span| (span.start..span.end).contains(&content_column)),
+        }
+    }
+
+    fn info_index(&self) -> Option<usize> {
+        match self {
+            Self::Info { index, .. } => Some(*index),
+            Self::Action(_) => None,
+        }
+    }
+}
+
+fn push_history_info_row(rows: &mut Vec<HistorySummaryRow>, line: Line<'static>) {
+    rows.push(HistorySummaryRow::Info {
+        index: rows.len(),
+        line,
+    });
+}
+
+fn history_summary_row_at(
+    rows: &[HistorySummaryRow],
+    area: Rect,
+    content_row: usize,
+) -> Option<&HistorySummaryRow> {
+    let width = panel_text_width(area);
+    let mut visual_row = 0;
+    for row in rows {
+        let line_height = wrapped_line_height(&row.display_line(), width);
+        if content_row < visual_row + line_height {
+            return Some(row);
+        }
+        visual_row += line_height;
+    }
+    None
+}
+
+fn history_toolbar_line(
+    state: &AppState,
+    width: u16,
+    mouse_target: Option<MouseTarget>,
+) -> RenderedPanelActionLine {
+    let mut line = PanelActionLine::new(format!("range={}  ", state.chart.preset()), width);
+    for preset in crate::chart::ChartPreset::ALL {
+        line.push_visible_action(preset.action_label(), ActionId::SetChartPreset(preset));
+        line.push_visible_text(" ");
+    }
+    line.push_visible_text("tools ");
+    line.push_visible_action("[reset]", ActionId::ResetChartView);
+    line.push_visible_text(" ");
+    line.push_visible_action("[overlays]", ActionId::ToggleChartOverlays);
+    render_panel_action_line(&line, &state.theme, Panel::History, mouse_target)
 }
 
 fn history_workbench_lines(
@@ -385,8 +521,15 @@ fn history_workbench_lines(
 }
 
 fn history_text_area_height(area: Rect, workbench: bool) -> usize {
-    let max = if workbench { 8 } else { 5 };
+    let max = if workbench { 9 } else { 6 };
     area.height.saturating_sub(2).min(max).into()
+}
+
+fn history_visible_summary_height(area: Rect, workbench: bool) -> usize {
+    history_text_area_height(area, workbench).saturating_sub(action_row_count(
+        Panel::History,
+        area.height.saturating_sub(2),
+    ))
 }
 
 pub(crate) fn evidence_panel_lines(state: &AppState) -> Vec<Line<'static>> {

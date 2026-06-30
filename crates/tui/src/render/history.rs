@@ -8,13 +8,16 @@ use crate::chart::ChartWindow;
 use crate::chart::series::{CandleBucket, compressed_bars, moving_average, vwap};
 use crate::chart_overlay::{ChartOverlayKind, ChartOverlayLine};
 use crate::history_chart::{
-    ChartAreas, ChartWarning, PriceBounds, PricePoint, bucket_capacity, visible_bars,
+    CandleLayout, ChartAreas, ChartWarning, PriceBounds, bucket_capacity, visible_bars,
 };
 use crate::mouse_target::MousePosition;
 use crate::theme::ThemeConfig;
 
 use super::history_annotations::render_warning_band;
 use super::history_annotations::{render_crosshair, render_hover_tooltip};
+use super::history_glyphs::{
+    CandleShape, render_close_only_candle, render_dense_candle, render_split_candle,
+};
 
 pub(super) fn chart<'a>(props: ChartProps<'a>) -> CandlestickChart<'a> {
     CandlestickChart { props }
@@ -142,16 +145,15 @@ impl Widget for CandlestickChart<'_> {
 struct ChartGeometry {
     area: Rect,
     bucket_count: usize,
-    candle_width: u16,
+    candle_layout: CandleLayout,
 }
 
 impl ChartGeometry {
     fn for_buckets(area: Rect, bucket_count: usize) -> Self {
-        let candle_width = if area.width >= 48 { 2 } else { 1 };
         Self {
             area,
             bucket_count: bucket_count.max(1),
-            candle_width,
+            candle_layout: CandleLayout::for_area(area),
         }
     }
 
@@ -175,7 +177,7 @@ impl ChartGeometry {
 
     fn body_x(self, index: usize) -> Option<u16> {
         self.candle_x(index).map(|x| {
-            if self.candle_width > 1 && x + 1 < self.area.right() {
+            if self.candle_layout == CandleLayout::Split && x + 1 < self.area.right() {
                 x + 1
             } else {
                 x
@@ -217,38 +219,25 @@ fn render_candles(
         let low = bounds.point(area, bucket.low);
         let open = bounds.point(area, bucket.open);
         let close = bounds.point(area, bucket.close);
-        render_vertical_segment(buffer, wick_x, high, low, wick_symbol, style);
+        let shape = CandleShape {
+            high,
+            low,
+            open,
+            close,
+        };
         if bucket.close_only {
-            buffer.set_string(body_x, close.row, close_only_symbol(geometry), style);
+            render_close_only_candle(
+                buffer,
+                wick_x,
+                body_x,
+                shape,
+                geometry.candle_layout.candle_width(),
+                style,
+            );
+        } else if geometry.candle_layout == CandleLayout::Dense {
+            render_dense_candle(buffer, body_x, shape, style);
         } else {
-            render_vertical_segment(buffer, body_x, open, close, body_symbol, style);
-        }
-    }
-}
-
-fn render_vertical_segment(
-    buffer: &mut Buffer,
-    x: u16,
-    start: PricePoint,
-    end: PricePoint,
-    symbol: fn(u8) -> &'static str,
-    style: Style,
-) {
-    let top_slot = start.slot().min(end.slot());
-    let bottom_slot = start.slot().max(end.slot());
-    let top_row = start.row.min(end.row);
-    let bottom_row = start.row.max(end.row);
-    for row in top_row..=bottom_row {
-        let row_top = u32::from(row) * 4;
-        let mask = (0..4).fold(0u8, |mask, slot| {
-            if (top_slot..=bottom_slot).contains(&(row_top + slot)) {
-                mask | (1 << slot)
-            } else {
-                mask
-            }
-        });
-        if mask != 0 {
-            buffer.set_string(x, row, symbol(mask), style);
+            render_split_candle(buffer, wick_x, body_x, shape, style);
         }
     }
 }
@@ -451,6 +440,9 @@ fn render_overlays(
     geometry: ChartGeometry,
     theme: &ThemeConfig,
 ) {
+    if !geometry.candle_layout.shows_overlays() {
+        return;
+    }
     render_series(
         buffer,
         area,
@@ -679,7 +671,15 @@ fn render_hover(
     };
     let column = geometry.body_x(index).unwrap_or(hover.column);
     render_crosshair(buffer, area, column, theme);
-    render_hover_tooltip(buffer, area, column, bucket, context, theme);
+    render_hover_tooltip(
+        buffer,
+        ChartAreas::from(area).price,
+        hover.row,
+        column,
+        bucket,
+        context,
+        theme,
+    );
 }
 
 fn write_right(buffer: &mut Buffer, x: u16, y: u16, width: u16, text: &str, style: Style) {
@@ -719,33 +719,6 @@ fn candle_style(bucket: &CandleBucket, theme: &ThemeConfig) -> Style {
 
 fn bucket_end_time(bucket: &CandleBucket) -> &str {
     bucket.close_time.as_deref().unwrap_or(&bucket.open_time)
-}
-
-fn body_symbol(mask: u8) -> &'static str {
-    match mask {
-        0b0001 => "▔",
-        0b0010 | 0b0100 | 0b0110 => "━",
-        0b1000 => "▁",
-        0b0011 | 0b0111 => "▀",
-        0b1100 | 0b1110 => "▄",
-        0b1111 => "█",
-        _ => "█",
-    }
-}
-
-fn wick_symbol(mask: u8) -> &'static str {
-    const SYMBOLS: [&str; 16] = [
-        " ", "⠁", "⠂", "⠃", "⠄", "⠅", "⠆", "⠇", "⡀", "⡁", "⡂", "⡃", "⡄", "⡅", "⡆", "⡇",
-    ];
-    SYMBOLS[usize::from(mask & 0b1111)]
-}
-
-fn close_only_symbol(geometry: ChartGeometry) -> &'static str {
-    if geometry.candle_width > 1 {
-        "◆"
-    } else {
-        "•"
-    }
 }
 
 fn clipped_prefix(text: &str, max_chars: usize) -> &str {
@@ -815,7 +788,7 @@ mod tests {
         let geometry = ChartGeometry {
             area,
             bucket_count: 1,
-            candle_width: 2,
+            candle_layout: CandleLayout::Split,
         };
 
         render_candles(
@@ -833,6 +806,75 @@ mod tests {
         assert_eq!(buffer[(2, 3)].symbol(), "⡇");
         assert_eq!(buffer[(3, 1)].symbol(), "▁");
         assert_eq!(buffer[(3, 2)].symbol(), "▔");
+    }
+
+    #[test]
+    fn dense_candle_renderer_combines_wick_and_body_in_one_cell() {
+        let mut buffer = Buffer::empty(Rect::new(0, 0, 4, 4));
+        let area = Rect::new(0, 0, 4, 4);
+        let bucket = CandleBucket {
+            open_time: "09:30".to_string(),
+            close_time: Some("09:35".to_string()),
+            open: 100.0,
+            high: 110.0,
+            low: 90.0,
+            close: 105.0,
+            volume: Some(1_000.0),
+            close_only: false,
+        };
+        let geometry = ChartGeometry {
+            area,
+            bucket_count: 1,
+            candle_layout: CandleLayout::Dense,
+        };
+
+        render_candles(
+            &mut buffer,
+            area,
+            PriceBounds::new(90.0, 110.0),
+            &[bucket],
+            geometry,
+            &ThemeConfig::default(),
+        );
+
+        assert_eq!(buffer[(2, 0)].symbol(), "⡇");
+        assert_eq!(buffer[(2, 1)].symbol(), "⣿");
+        assert_eq!(buffer[(2, 2)].symbol(), "⡏");
+        assert_eq!(buffer[(2, 3)].symbol(), "⡇");
+    }
+
+    #[test]
+    fn close_only_candle_renderer_keeps_intrabar_range_visible() {
+        let mut buffer = Buffer::empty(Rect::new(0, 0, 4, 4));
+        let area = Rect::new(0, 0, 4, 4);
+        let bucket = CandleBucket {
+            open_time: "09:30".to_string(),
+            close_time: Some("09:35".to_string()),
+            open: 100.0,
+            high: 110.0,
+            low: 90.0,
+            close: 100.0,
+            volume: Some(1_000.0),
+            close_only: true,
+        };
+        let geometry = ChartGeometry {
+            area,
+            bucket_count: 1,
+            candle_layout: CandleLayout::Split,
+        };
+
+        render_candles(
+            &mut buffer,
+            area,
+            PriceBounds::new(90.0, 110.0),
+            &[bucket],
+            geometry,
+            &ThemeConfig::default(),
+        );
+
+        assert_eq!(buffer[(2, 0)].symbol(), "⡇");
+        assert_eq!(buffer[(2, 3)].symbol(), "⡇");
+        assert_eq!(buffer[(3, 2)].symbol(), "◆");
     }
 
     #[test]

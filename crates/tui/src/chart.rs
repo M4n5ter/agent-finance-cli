@@ -84,6 +84,18 @@ impl ChartPreset {
         }
     }
 
+    pub const fn action_label(self) -> &'static str {
+        match self {
+            Self::Auto => "[auto]",
+            Self::OneDay => "[1d]",
+            Self::FiveDays => "[5d]",
+            Self::OneMonth => "[1mo]",
+            Self::ThreeMonths => "[3mo]",
+            Self::SixMonths => "[6mo]",
+            Self::OneYear => "[1y]",
+        }
+    }
+
     pub fn shift(self, direction: isize) -> Self {
         let index = Self::ALL
             .iter()

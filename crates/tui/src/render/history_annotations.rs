@@ -53,6 +53,7 @@ pub(super) fn render_crosshair(buffer: &mut Buffer, area: Rect, column: u16, the
 pub(super) fn render_hover_tooltip(
     buffer: &mut Buffer,
     area: Rect,
+    hover_row: u16,
     column: u16,
     bucket: &CandleBucket,
     context: ChartContext<'_>,
@@ -79,11 +80,25 @@ pub(super) fn render_hover_tooltip(
             .saturating_sub(2)
             .max(area.x)
     };
+    let y = tooltip_y(area, hover_row, lines.len() as u16);
     let style = theme.selected_style();
     for (offset, line) in lines.iter().enumerate().take(area.height as usize) {
-        let y = area.y + offset as u16;
+        let y = y + offset as u16;
         let clipped = clipped_prefix(line, width);
         buffer.set_string(x, y, format!("{clipped:<width$}"), style);
+    }
+}
+
+fn tooltip_y(area: Rect, hover_row: u16, tooltip_height: u16) -> u16 {
+    if tooltip_height >= area.height {
+        return area.y;
+    }
+    let top = area.y;
+    let bottom = area.bottom().saturating_sub(tooltip_height);
+    if (top..top + tooltip_height).contains(&hover_row) {
+        bottom
+    } else {
+        top
     }
 }
 
@@ -237,6 +252,40 @@ mod tests {
 
         assert!(lines[1].contains("chg +2.50%"));
         assert_eq!(lines[2], "yahoo extended 5d 5m @09:30:00");
+    }
+
+    #[test]
+    fn hover_tooltip_avoids_the_hovered_top_rows() {
+        let bucket = CandleBucket {
+            open_time: "09:30".to_string(),
+            close_time: Some("09:35".to_string()),
+            open: 100.0,
+            high: 105.0,
+            low: 98.0,
+            close: 102.5,
+            volume: Some(12_000.0),
+            close_only: false,
+        };
+        let mut buffer = Buffer::empty(Rect::new(0, 0, 40, 8));
+
+        render_hover_tooltip(
+            &mut buffer,
+            Rect::new(0, 0, 40, 8),
+            1,
+            1,
+            &bucket,
+            ChartContext {
+                provider: "yahoo",
+                session: "extended",
+                interval: "5m",
+                range: "5d",
+                fetched_at: Some("2026-06-25T09:30:00+08:00"),
+            },
+            &ThemeConfig::default(),
+        );
+
+        assert!(row_text(&buffer, 0).trim().is_empty());
+        assert!(row_text(&buffer, 5).contains("09:30-09:35"));
     }
 
     #[test]

@@ -321,10 +321,12 @@ fn read_only_panel_lines(
             .into_iter()
             .map(owned_line)
             .collect::<Vec<_>>(),
-        Panel::History => read_only_panel_view::history_summary_lines(state)
-            .into_iter()
-            .map(owned_line)
-            .collect::<Vec<_>>(),
+        Panel::History => {
+            read_only_panel_view::history_summary_lines(state, content_width, mouse_target)
+                .into_iter()
+                .map(owned_line)
+                .collect::<Vec<_>>()
+        }
         Panel::Evidence => read_only_panel_view::evidence_panel_lines(state),
         Panel::Polymarket => read_only_panel_view::polymarket_panel_lines(state),
         Panel::Research => read_only_panel_view::research_panel_lines(state),

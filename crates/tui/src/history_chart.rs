@@ -232,10 +232,40 @@ pub(crate) fn chart_warnings(
 }
 
 pub(crate) fn bucket_capacity(area: Rect) -> usize {
-    if area.width >= 48 {
-        usize::from(area.width / 2).max(1)
-    } else {
-        usize::from(area.width).max(1)
+    CandleLayout::for_area(area).bucket_capacity(area)
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub(crate) enum CandleLayout {
+    Dense,
+    Split,
+}
+
+impl CandleLayout {
+    pub(crate) fn for_area(area: Rect) -> Self {
+        if area.width >= 64 {
+            Self::Split
+        } else {
+            Self::Dense
+        }
+    }
+
+    pub(crate) const fn candle_width(self) -> u16 {
+        match self {
+            Self::Dense => 1,
+            Self::Split => 2,
+        }
+    }
+
+    pub(crate) const fn shows_overlays(self) -> bool {
+        matches!(self, Self::Split)
+    }
+
+    fn bucket_capacity(self, area: Rect) -> usize {
+        match self {
+            Self::Dense => usize::from(area.width).max(1),
+            Self::Split => usize::from(area.width / 2).max(1),
+        }
     }
 }
 
@@ -293,6 +323,20 @@ mod tests {
             Some(10_000)
         );
         assert_eq!(chart_bps_at_column(area, ChartWindow::FULL, 111), None);
+    }
+
+    #[test]
+    fn candle_layout_switches_from_dense_to_split_at_chart_width_boundary() {
+        let narrow = Rect::new(0, 0, 63, 20);
+        let wide = Rect::new(0, 0, 64, 20);
+
+        assert_eq!(CandleLayout::for_area(narrow), CandleLayout::Dense);
+        assert_eq!(bucket_capacity(narrow), 63);
+        assert!(!CandleLayout::for_area(narrow).shows_overlays());
+
+        assert_eq!(CandleLayout::for_area(wide), CandleLayout::Split);
+        assert_eq!(bucket_capacity(wide), 32);
+        assert!(CandleLayout::for_area(wide).shows_overlays());
     }
 
     #[test]
