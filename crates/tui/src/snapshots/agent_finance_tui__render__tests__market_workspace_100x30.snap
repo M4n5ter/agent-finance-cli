@@ -1,21 +1,20 @@
 ---
-source: crates/tui/src/render.rs
-assertion_line: 395
+source: crates/tui/src/render/tests.rs
 expression: "render_to_text_grid(&state, 100, 30)"
 ---
 ┌Watchlist [fresh]───────────────┐┌Quote / Sessions [partial]──────────────────────────────────────┐
-│> CRDO -                        ││CRDO market snapshot                                            │
-│  BTCUSDT -                     ││No quote loaded yet. Waiting for the next refresh.              │
-│                                ││                                                                │
+│> CRDO -                        ││actions  [refresh]                                              │
+│  BTCUSDT -                     ││CRDO market snapshot                                            │
+│                                ││No quote loaded yet. Waiting for the next refresh.              │
 │a add  d delete  left/right move││                                                                │
 │                                ││                                                                │
 │                                ││                                                                │
 │                                ││                                                                │
 │                                │└────────────────────────────────────────────────────────────────┘
 │                                │┌History Chart [partial]─────────────────────────────────────────┐
+│                                ││actions  [refresh]                                              │
 │                                ││CRDO history                                                    │
 │                                ││No history loaded yet. Waiting for the selected symbol.         │
-│                                ││                                                                │
 │                                ││                                                                │
 │                                ││                                                                │
 └────────────────────────────────┘│                                                         ┌─────┐│

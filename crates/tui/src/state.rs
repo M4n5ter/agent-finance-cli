@@ -1,6 +1,7 @@
 use agent_finance_core::submit::SubmitMode;
 use agent_finance_market::crypto_evidence_snapshot::CryptoQuoteEvidenceSnapshot;
 use agent_finance_market::history_snapshot::HistorySnapshot;
+use agent_finance_market::is_likely_crypto_pair;
 use agent_finance_market::model::ProviderProfile;
 use agent_finance_market::research_snapshot::ResearchContextSnapshot;
 use agent_finance_market::service;
@@ -17,6 +18,7 @@ use crate::mouse_target::MousePosition;
 use crate::order_ticket::{OrderTicket, OrderTicketPreview};
 use crate::profile_editor::ProfileEditorState;
 use crate::profile_snapshot::{ProfileValidationSnapshot, ProfileValidationState};
+use crate::scheduler::SymbolTaskKind;
 use crate::search::SymbolSearchState;
 use crate::settings_editor::SettingsEditorState;
 use crate::task_failure::TaskFailures;
@@ -104,9 +106,19 @@ pub struct AppState {
     staged_changes: StagedChanges,
     pending_staged_confirmation: Option<PendingStagedConfirmation>,
     pending_staged_execution: Option<StagedExecutionRequest>,
+    pending_market_refresh: bool,
+    pending_symbol_data_refreshes: Vec<SymbolTaskKind>,
     pending_account_refresh: bool,
     pending_provider_preferences_update: bool,
     pending_config_save: bool,
+}
+
+fn symbol_task_label(kind: SymbolTaskKind) -> &'static str {
+    match kind {
+        SymbolTaskKind::History => "history",
+        SymbolTaskKind::Evidence => "evidence",
+        SymbolTaskKind::Research => "research",
+    }
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -162,6 +174,8 @@ impl AppState {
             staged_changes: StagedChanges::default(),
             pending_staged_confirmation: None,
             pending_staged_execution: None,
+            pending_market_refresh: false,
+            pending_symbol_data_refreshes: Vec::new(),
             pending_account_refresh: false,
             pending_provider_preferences_update: false,
             pending_config_save: false,
@@ -264,6 +278,14 @@ impl AppState {
 
     pub fn take_pending_staged_execution(&mut self) -> Option<StagedExecutionRequest> {
         self.pending_staged_execution.take()
+    }
+
+    pub fn take_pending_market_refresh(&mut self) -> bool {
+        std::mem::take(&mut self.pending_market_refresh)
+    }
+
+    pub fn take_pending_symbol_data_refreshes(&mut self) -> Vec<SymbolTaskKind> {
+        std::mem::take(&mut self.pending_symbol_data_refreshes)
     }
 
     pub fn take_pending_account_refresh(&mut self) -> bool {
@@ -558,6 +580,45 @@ impl AppState {
 
     fn request_account_refresh(&mut self) {
         self.pending_account_refresh = true;
+    }
+
+    fn request_market_refresh(&mut self) {
+        if self.refresh_loading() {
+            self.task_log.info("market snapshot is already refreshing");
+            return;
+        }
+        self.pending_market_refresh = true;
+        self.task_log.info("market snapshot refresh requested");
+    }
+
+    fn request_symbol_data_refresh(&mut self, kind: SymbolTaskKind) {
+        let label = symbol_task_label(kind);
+        let Some(symbol) = self.selected_symbol().map(ToString::to_string) else {
+            self.task_log
+                .warning_event(format!("no selected symbol for {label} refresh"));
+            return;
+        };
+        if kind == SymbolTaskKind::Evidence && !is_likely_crypto_pair(&symbol) {
+            self.task_log.warning_event(format!(
+                "crypto evidence refresh is only available for crypto pairs; selected {symbol}"
+            ));
+            return;
+        }
+        let already_loading = match kind {
+            SymbolTaskKind::History => self.history.loading(),
+            SymbolTaskKind::Evidence => self.evidence.loading(),
+            SymbolTaskKind::Research => self.research.loading(),
+        };
+        if already_loading {
+            self.task_log
+                .info(format!("{label} for {symbol} is already loading"));
+            return;
+        }
+        if !self.pending_symbol_data_refreshes.contains(&kind) {
+            self.pending_symbol_data_refreshes.push(kind);
+        }
+        self.task_log
+            .info(format!("{label} refresh requested for {symbol}"));
     }
 
     fn config_saved(&mut self) {
@@ -925,6 +986,8 @@ impl AppState {
             Action::StageTransferTicket => self.stage_transfer_ticket(),
             Action::StageFuturesStateTicket => self.stage_futures_state_ticket(),
             Action::StageSelectedOpenOrderCancel => self.stage_selected_open_order_cancel(),
+            Action::RequestMarketRefresh => self.request_market_refresh(),
+            Action::RequestSymbolDataRefresh(kind) => self.request_symbol_data_refresh(kind),
             Action::RequestAccountRefresh => self.request_account_refresh(),
             Action::MoveStagedChangeSelection(direction) => {
                 self.staged_changes.move_selection(direction);
@@ -1414,6 +1477,8 @@ pub enum Action {
     StageTransferTicket,
     StageFuturesStateTicket,
     StageSelectedOpenOrderCancel,
+    RequestMarketRefresh,
+    RequestSymbolDataRefresh(SymbolTaskKind),
     RequestAccountRefresh,
     MoveStagedChangeSelection(isize),
     SelectStagedChange(usize),

@@ -134,14 +134,17 @@ fn render_quote(
     area: Rect,
     mouse_target: Option<MouseTarget>,
 ) {
+    let block = panel_block(Panel::Quote, state);
+    let inner = block.inner(area);
     frame.render_widget(
-        Paragraph::new(hover_info_lines(
-            read_only_panel_view::quote_lines(state),
-            mouse_target,
+        Paragraph::new(read_only_panel_lines(
+            state,
             Panel::Quote,
-            state.theme.selected_style(),
+            inner.width,
+            inner.height,
+            mouse_target,
         ))
-        .block(panel_block(Panel::Quote, state))
+        .block(block)
         .wrap(Wrap { trim: true }),
         area,
     );
@@ -163,11 +166,12 @@ fn render_history(
         .split(inner);
 
     frame.render_widget(
-        Paragraph::new(hover_info_lines(
-            read_only_panel_view::history_summary_lines(state),
-            mouse_target,
+        Paragraph::new(read_only_panel_lines(
+            state,
             Panel::History,
-            state.theme.selected_style(),
+            chunks[0].width,
+            chunks[0].height,
+            mouse_target,
         ))
         .wrap(Wrap { trim: true }),
         chunks[0],
@@ -195,14 +199,17 @@ fn render_evidence(
     area: Rect,
     mouse_target: Option<MouseTarget>,
 ) {
+    let block = panel_block(Panel::Evidence, state);
+    let inner = block.inner(area);
     frame.render_widget(
-        Paragraph::new(hover_info_lines(
-            read_only_panel_view::evidence_panel_lines(state),
-            mouse_target,
+        Paragraph::new(read_only_panel_lines(
+            state,
             Panel::Evidence,
-            state.theme.selected_style(),
+            inner.width,
+            inner.height,
+            mouse_target,
         ))
-        .block(panel_block(Panel::Evidence, state))
+        .block(block)
         .wrap(Wrap { trim: true }),
         area,
     );
@@ -214,14 +221,17 @@ fn render_research(
     area: Rect,
     mouse_target: Option<MouseTarget>,
 ) {
+    let block = panel_block(Panel::Research, state);
+    let inner = block.inner(area);
     frame.render_widget(
-        Paragraph::new(hover_info_lines(
-            read_only_panel_view::research_panel_lines(state),
-            mouse_target,
+        Paragraph::new(read_only_panel_lines(
+            state,
             Panel::Research,
-            state.theme.selected_style(),
+            inner.width,
+            inner.height,
+            mouse_target,
         ))
-        .block(panel_block(Panel::Research, state))
+        .block(block)
         .wrap(Wrap { trim: true }),
         area,
     );
@@ -233,17 +243,71 @@ fn render_polymarket(
     area: Rect,
     mouse_target: Option<MouseTarget>,
 ) {
+    let block = panel_block(Panel::Polymarket, state);
+    let inner = block.inner(area);
     frame.render_widget(
-        Paragraph::new(hover_info_lines(
-            read_only_panel_view::polymarket_panel_lines(state),
-            mouse_target,
+        Paragraph::new(read_only_panel_lines(
+            state,
             Panel::Polymarket,
-            state.theme.selected_style(),
+            inner.width,
+            inner.height,
+            mouse_target,
         ))
-        .block(panel_block(Panel::Polymarket, state))
+        .block(block)
         .wrap(Wrap { trim: true }),
         area,
     );
+}
+
+fn read_only_panel_lines(
+    state: &AppState,
+    panel: Panel,
+    content_width: u16,
+    content_height: u16,
+    mouse_target: Option<MouseTarget>,
+) -> Vec<Line<'static>> {
+    let mut lines = read_only_panel_view::panel_action_line(
+        state,
+        panel,
+        content_width,
+        content_height,
+        mouse_target,
+    )
+    .map(|action_line| vec![action_line.line])
+    .unwrap_or_default();
+    let content = match panel {
+        Panel::Quote => read_only_panel_view::quote_lines(state)
+            .into_iter()
+            .map(owned_line)
+            .collect::<Vec<_>>(),
+        Panel::History => read_only_panel_view::history_summary_lines(state)
+            .into_iter()
+            .map(owned_line)
+            .collect::<Vec<_>>(),
+        Panel::Evidence => read_only_panel_view::evidence_panel_lines(state),
+        Panel::Polymarket => read_only_panel_view::polymarket_panel_lines(state),
+        Panel::Research => read_only_panel_view::research_panel_lines(state),
+        _ => Vec::new(),
+    };
+    lines.extend(hover_info_lines(
+        content,
+        mouse_target,
+        panel,
+        state.theme.selected_style(),
+    ));
+    lines
+}
+
+fn owned_line(line: Line<'_>) -> Line<'static> {
+    let mut owned = Line::from(
+        line.spans
+            .into_iter()
+            .map(|span| Span::styled(span.content.into_owned(), span.style))
+            .collect::<Vec<_>>(),
+    );
+    owned.style = line.style;
+    owned.alignment = line.alignment;
+    owned
 }
 
 fn render_provider_health(

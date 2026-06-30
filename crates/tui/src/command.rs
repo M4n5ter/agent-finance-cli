@@ -104,6 +104,10 @@ pub enum ActionId {
     FocusPanel(Panel),
     TogglePanel(Panel),
     ToggleLiveWrites,
+    RefreshMarketSnapshot,
+    RefreshSelectedHistory,
+    RefreshSelectedEvidence,
+    RefreshSelectedResearch,
     CaptureOrderReferencePrice,
     OpenTicketTextInput,
     StageOrderTicket,
@@ -401,6 +405,30 @@ pub static ACTION_REGISTRY: LazyLock<Vec<ActionSpec>> = LazyLock::new(|| {
             WorkspaceKind::Settings.command_title(),
             WorkspaceKind::Settings.command_description()
         ),
+        action!(
+            "refresh-market-snapshot",
+            ActionId::RefreshMarketSnapshot,
+            "Refresh market snapshot",
+            "Reload watchlist quotes and market session data now"
+        ),
+        action!(
+            "refresh-selected-history",
+            ActionId::RefreshSelectedHistory,
+            "Refresh selected history",
+            "Reload historical bars for the selected symbol now"
+        ),
+        action!(
+            "refresh-selected-evidence",
+            ActionId::RefreshSelectedEvidence,
+            "Refresh selected evidence",
+            "Reload crypto evidence for the selected symbol now"
+        ),
+        action!(
+            "refresh-selected-research",
+            ActionId::RefreshSelectedResearch,
+            "Refresh selected research",
+            "Reload research context and prediction signals for the selected symbol now"
+        ),
     ];
     actions.extend(panel_action_specs());
     actions.push(action!(
@@ -561,6 +589,30 @@ mod tests {
         }
 
         assert_eq!(palette.selected_action(), Some(ActionId::UndoConfigChange));
+    }
+
+    #[test]
+    fn command_palette_can_find_market_data_refresh_actions() {
+        for (query, expected) in [
+            ("refresh market", ActionId::RefreshMarketSnapshot),
+            ("refresh selected history", ActionId::RefreshSelectedHistory),
+            (
+                "refresh selected evidence",
+                ActionId::RefreshSelectedEvidence,
+            ),
+            (
+                "refresh selected research",
+                ActionId::RefreshSelectedResearch,
+            ),
+        ] {
+            let mut palette = CommandPaletteState::default();
+
+            for character in query.chars() {
+                palette.edit_query(InputRequest::InsertChar(character));
+            }
+
+            assert_eq!(palette.selected_action(), Some(expected), "{query}");
+        }
     }
 
     #[test]

@@ -2324,6 +2324,60 @@ fn account_refresh_action_records_a_single_load_request_intent() {
 }
 
 #[test]
+fn market_refresh_action_records_a_single_load_request_intent() {
+    let mut state = AppState::from_config(TuiConfig::default());
+
+    state.reduce(Action::Execute(ActionId::RefreshMarketSnapshot));
+    state.reduce(Action::Execute(ActionId::RefreshMarketSnapshot));
+
+    assert!(
+        state
+            .task_log
+            .iter()
+            .any(|entry| { entry.message == "market snapshot refresh requested" })
+    );
+}
+
+#[test]
+fn selected_symbol_refresh_actions_are_user_visible() {
+    let mut state = AppState::from_config(TuiConfig {
+        watchlist: vec!["BTCUSDT".to_string()],
+        ..TuiConfig::default()
+    });
+
+    state.reduce(Action::Execute(ActionId::RefreshSelectedHistory));
+    state.reduce(Action::Execute(ActionId::RefreshSelectedEvidence));
+    state.reduce(Action::Execute(ActionId::RefreshSelectedResearch));
+
+    for expected in [
+        "history refresh requested for BTCUSDT",
+        "evidence refresh requested for BTCUSDT",
+        "research refresh requested for BTCUSDT",
+    ] {
+        assert!(
+            state.task_log.iter().any(|entry| entry.message == expected),
+            "{expected}"
+        );
+    }
+}
+
+#[test]
+fn selected_evidence_refresh_rejects_non_crypto_symbols() {
+    let mut state = AppState::from_config(TuiConfig {
+        watchlist: vec!["CRDO".to_string()],
+        ..TuiConfig::default()
+    });
+
+    state.reduce(Action::Execute(ActionId::RefreshSelectedEvidence));
+
+    assert!(state.task_log.iter().any(|entry| {
+        entry
+            .message
+            .contains("crypto evidence refresh is only available for crypto pairs")
+    }));
+}
+
+#[test]
 fn profile_live_toggle_stages_validated_profile_risk_review_for_local_commit_confirmation() {
     let mut state = AppState::from_config(TuiConfig {
         trading: crate::config::TradingConfig {

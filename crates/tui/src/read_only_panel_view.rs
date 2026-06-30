@@ -5,7 +5,12 @@ use ratatui::layout::Rect;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Paragraph, Wrap};
 
+use crate::command::ActionId;
 use crate::model::Panel;
+use crate::mouse_target::MouseTarget;
+use crate::panel_action_line_view::{
+    PanelActionLine, PanelActionSpan, RenderedPanelActionLine, render_panel_action_line,
+};
 use crate::provider_health::ProviderHealthReport;
 use crate::state::AppState;
 use crate::theme::ThemeConfig;
@@ -19,17 +24,28 @@ pub(crate) fn info_row_at_content_row(
     content_row: usize,
 ) -> Option<usize> {
     match panel {
-        Panel::Quote => info_line_at_content_row(&quote_lines(state), area, content_row),
+        Panel::Quote => {
+            info_line_at_content_row_after_actions(panel, &quote_lines(state), area, content_row)
+        }
         Panel::History => history_info_row_at_content_row(state, area, content_row),
-        Panel::Evidence => {
-            info_line_at_content_row(&evidence_panel_lines(state), area, content_row)
-        }
-        Panel::Polymarket => {
-            info_line_at_content_row(&polymarket_panel_lines(state), area, content_row)
-        }
-        Panel::Research => {
-            info_line_at_content_row(&research_panel_lines(state), area, content_row)
-        }
+        Panel::Evidence => info_line_at_content_row_after_actions(
+            panel,
+            &evidence_panel_lines(state),
+            area,
+            content_row,
+        ),
+        Panel::Polymarket => info_line_at_content_row_after_actions(
+            panel,
+            &polymarket_panel_lines(state),
+            area,
+            content_row,
+        ),
+        Panel::Research => info_line_at_content_row_after_actions(
+            panel,
+            &research_panel_lines(state),
+            area,
+            content_row,
+        ),
         Panel::RiskAudit => info_line_at_content_row(
             &crate::render::risk_audit::risk_audit_lines(state),
             area,
@@ -51,16 +67,96 @@ pub(crate) fn info_row_at_content_row(
     }
 }
 
+pub(crate) fn panel_action_line(
+    state: &AppState,
+    panel: Panel,
+    width: u16,
+    content_height: u16,
+    mouse_target: Option<MouseTarget>,
+) -> Option<RenderedPanelActionLine> {
+    if action_row_count(panel, content_height) == 0 {
+        return None;
+    }
+    let mut action_line = PanelActionLine::new("actions", width);
+    action_line.push_visible_text("  ");
+    match panel {
+        Panel::Quote => {
+            action_line.push_visible_action("[refresh]", ActionId::RefreshMarketSnapshot)
+        }
+        Panel::History => {
+            action_line.push_visible_action("[refresh]", ActionId::RefreshSelectedHistory)
+        }
+        Panel::Evidence => {
+            action_line.push_visible_action("[refresh]", ActionId::RefreshSelectedEvidence)
+        }
+        Panel::Polymarket | Panel::Research => {
+            action_line.push_visible_action("[refresh]", ActionId::RefreshSelectedResearch)
+        }
+        _ => return None,
+    }
+    Some(render_panel_action_line(
+        &action_line,
+        &state.theme,
+        panel,
+        mouse_target,
+    ))
+}
+
+pub(crate) fn panel_action_at_content_cell(
+    state: &AppState,
+    panel: Panel,
+    area: Rect,
+    content_row: usize,
+    content_column: u16,
+) -> Option<PanelActionSpan> {
+    if content_row != 0 {
+        return None;
+    }
+    panel_action_line(
+        state,
+        panel,
+        area.width.saturating_sub(2),
+        area.height.saturating_sub(2),
+        None,
+    )?
+    .actions
+    .into_iter()
+    .find(|span| (span.start..span.end).contains(&content_column))
+}
+
 fn history_info_row_at_content_row(
     state: &AppState,
     area: Rect,
     content_row: usize,
 ) -> Option<usize> {
+    let content_row = content_row.checked_sub(action_row_count(
+        Panel::History,
+        area.height.saturating_sub(2),
+    ))?;
     let text_height = history_text_area_height(area);
     if content_row >= text_height {
         return None;
     }
     info_line_at_content_row(&history_summary_lines(state), area, content_row)
+}
+
+fn info_line_at_content_row_after_actions(
+    panel: Panel,
+    lines: &[Line<'_>],
+    area: Rect,
+    content_row: usize,
+) -> Option<usize> {
+    let content_row =
+        content_row.checked_sub(action_row_count(panel, area.height.saturating_sub(2)))?;
+    info_line_at_content_row(lines, area, content_row)
+}
+
+fn action_row_count(panel: Panel, content_height: u16) -> usize {
+    (content_height >= 3
+        && matches!(
+            panel,
+            Panel::Quote | Panel::History | Panel::Evidence | Panel::Polymarket | Panel::Research
+        )) as usize
 }
 
 fn info_line_at_content_row(lines: &[Line<'_>], area: Rect, content_row: usize) -> Option<usize> {
@@ -576,8 +672,9 @@ mod tests {
         let state = AppState::from_config(crate::config::TuiConfig::default());
         let area = Rect::new(0, 0, 80, 20);
 
+        assert_eq!(info_row_at_content_row(&state, Panel::Quote, area, 0), None);
         assert_eq!(
-            info_row_at_content_row(&state, Panel::Quote, area, 0),
+            info_row_at_content_row(&state, Panel::Quote, area, 1),
             Some(0)
         );
     }
@@ -588,11 +685,11 @@ mod tests {
         let area = Rect::new(0, 0, 24, 20);
 
         assert_eq!(
-            info_row_at_content_row(&state, Panel::Quote, area, 1),
+            info_row_at_content_row(&state, Panel::Quote, area, 2),
             Some(1)
         );
         assert_eq!(
-            info_row_at_content_row(&state, Panel::Quote, area, 2),
+            info_row_at_content_row(&state, Panel::Quote, area, 3),
             Some(1)
         );
     }

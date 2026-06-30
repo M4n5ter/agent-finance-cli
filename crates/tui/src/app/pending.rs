@@ -6,6 +6,7 @@ use crate::state::{
     StagedSubmitRequest,
 };
 
+use super::request_symbol_load;
 use super::{SymbolLoadRuntimes, request_provider_backed_symbol_loads, request_refresh};
 
 pub(super) struct PendingAppRequests<'a> {
@@ -22,8 +23,25 @@ pub(super) fn drain_pending_app_requests(
     state: &mut AppState,
 ) {
     execute_pending_staged_change(context.scheduler, state);
+    apply_pending_market_data_requests(&mut context, state);
     apply_pending_provider_preferences(&mut context, state);
     persist_pending_config_save(&context, state);
+}
+
+fn apply_pending_market_data_requests(context: &mut PendingAppRequests<'_>, state: &mut AppState) {
+    if state.take_pending_market_refresh() {
+        request_refresh(context.scheduler, state, context.next_refresh_generation);
+    }
+
+    for kind in state.take_pending_symbol_data_refreshes() {
+        request_symbol_load(
+            context.scheduler,
+            state,
+            context.symbol_loads.runtime_mut(kind),
+            kind,
+            true,
+        );
+    }
 }
 
 fn execute_pending_staged_change(scheduler: &Scheduler, state: &mut AppState) {
@@ -301,6 +319,51 @@ mod tests {
 
         assert_eq!(state.config_changes, ["layout"]);
         assert!(!path.exists());
+    }
+
+    #[test]
+    fn pending_market_data_requests_enqueue_scheduler_loads() {
+        let launch = TuiLaunch::new(Vec::new(), None, true);
+        let runtime_config = TuiConfig {
+            watchlist: vec!["BTCUSDT".to_string()],
+            ..TuiConfig::default()
+        };
+        let persisted_config = runtime_config.clone();
+        let scheduler = Scheduler::start(&launch, runtime_config.providers.clone());
+        let mut state = AppState::from_config(runtime_config.clone());
+        let mut next_refresh_generation = 1;
+        let mut symbol_loads = SymbolLoadRuntimes::new();
+
+        state.reduce(Action::Execute(
+            crate::command::ActionId::RefreshMarketSnapshot,
+        ));
+        state.reduce(Action::Execute(
+            crate::command::ActionId::RefreshSelectedHistory,
+        ));
+        state.reduce(Action::Execute(
+            crate::command::ActionId::RefreshSelectedEvidence,
+        ));
+        state.reduce(Action::Execute(
+            crate::command::ActionId::RefreshSelectedResearch,
+        ));
+
+        drain_pending_app_requests(
+            PendingAppRequests {
+                scheduler: &scheduler,
+                launch: &launch,
+                runtime_config: &runtime_config,
+                persisted_config: &persisted_config,
+                next_refresh_generation: &mut next_refresh_generation,
+                symbol_loads: &mut symbol_loads,
+            },
+            &mut state,
+        );
+
+        assert_eq!(next_refresh_generation, 2);
+        assert!(state.refresh_loading());
+        assert!(state.history.loading());
+        assert!(state.evidence.loading());
+        assert!(state.research.loading());
     }
 
     #[test]

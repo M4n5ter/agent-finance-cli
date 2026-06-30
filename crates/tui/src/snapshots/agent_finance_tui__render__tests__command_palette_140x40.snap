@@ -1,20 +1,19 @@
 ---
-source: crates/tui/src/render.rs
-assertion_line: 537
+source: crates/tui/src/render/tests.rs
 expression: "render_to_text_grid(&state, 140, 40)"
 ---
 ┌Watchlist [fresh]─────────────────────────────┐┌Quote / Sessions [partial]────────────────────────────────────────────────────────────────┐
-│> CRDO -                                      ││CRDO market snapshot                                                                      │
-│  BTCUSDT -                                   ││No quote loaded yet. Waiting for the next refresh.                                        │
-│                                              ││                                                                                          │
+│> CRDO -                                      ││actions  [refresh]                                                                        │
+│  BTCUSDT -                                   ││CRDO market snapshot                                                                      │
+│                                              ││No quote loaded yet. Waiting for the next refresh.                                        │
 │a add  d delete  left/right move  u undo      ││                                                                                          │
 │                                              ││                                                                                          │
 │                                              ││                                                                                          │
 │                                              ││                                                                                          │
 │                                              │└──────────────────────────────────────────────────────────────────────────────────────────┘
 │                                              │┌History Chart [partial]───────────────────────────────────────────────────────────────────┐
+│                                              ││actions  [refresh]                                                                        │
 │                                              ││CRDO history                                                                              │
-│                                              ││No history loaded yet. Waiting for the selected symbol.                                   │
 │                    ┌Command Palette  type filter  enter run  up/down move  esc close────────────────────────────────┐                    │
 │                    │help                                                                                            │▓                   │
 │                    └────────────────────────────────────────────────────────────────────────────────────────────────┘▓                   │

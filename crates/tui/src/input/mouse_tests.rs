@@ -810,6 +810,74 @@ fn mouse_click_on_account_refresh_action_requests_snapshot_reload() {
 }
 
 #[test]
+fn mouse_click_on_quote_refresh_action_requests_market_refresh() {
+    let area = Rect::new(0, 0, 120, 32);
+    let mut state = AppState::from_config(crate::config::TuiConfig::default());
+    let mut drag = MouseDrag::default();
+    let panel = layout::build(
+        area,
+        &state.layout,
+        &state.floating,
+        &state.visible_panels(),
+    )
+    .panel_rect(Panel::Quote)
+    .expect("quote panel is visible");
+
+    let click = clickable_panel_action(
+        &mut state,
+        area,
+        panel,
+        Panel::Quote,
+        ActionId::RefreshMarketSnapshot,
+    );
+    handle_mouse_event(area, &mut state, &mut drag, click);
+
+    assert!(
+        state
+            .task_log
+            .iter()
+            .any(|entry| entry.message == "market snapshot refresh requested")
+    );
+    assert_eq!(state.panels.focused(), Panel::Quote);
+    assert_eq!(drag, MouseDrag::default());
+}
+
+#[test]
+fn mouse_click_on_history_refresh_action_requests_history_refresh() {
+    let area = Rect::new(0, 0, 120, 32);
+    let mut state = AppState::from_config(crate::config::TuiConfig::default());
+    let mut drag = MouseDrag::default();
+    let panel = layout::build(
+        area,
+        &state.layout,
+        &state.floating,
+        &state.visible_panels(),
+    )
+    .panel_rect(Panel::History)
+    .expect("history panel is visible");
+
+    let click = clickable_panel_action(
+        &mut state,
+        area,
+        panel,
+        Panel::History,
+        ActionId::RefreshSelectedHistory,
+    );
+    let previous_log_count = state.task_log.iter().count();
+    handle_mouse_event(area, &mut state, &mut drag, click);
+
+    assert!(
+        state
+            .task_log
+            .iter()
+            .skip(previous_log_count)
+            .any(|entry| entry.message.contains("history"))
+    );
+    assert_eq!(state.panels.focused(), Panel::History);
+    assert_eq!(drag, MouseDrag::default());
+}
+
+#[test]
 fn mouse_click_on_account_holding_prefills_transfer_ticket() {
     let area = Rect::new(0, 0, 200, 80);
     let mut state = AppState::from_config(crate::config::TuiConfig {
@@ -1965,7 +2033,7 @@ fn mouse_movement_tracks_read_only_panel_row_hover() {
         area,
         &mut state,
         &mut drag,
-        mouse_event(MouseEventKind::Moved, panel.x + 2, panel.y + 1),
+        mouse_event(MouseEventKind::Moved, panel.x + 2, panel.y + 2),
     );
 
     assert_eq!(

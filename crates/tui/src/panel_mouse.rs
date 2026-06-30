@@ -262,13 +262,21 @@ fn panel_hit_at(
         | Panel::Research
         | Panel::RiskAudit
         | Panel::ProviderHealth
-        | Panel::TaskLog => crate::read_only_panel_view::info_row_at_content_row(
-            state,
-            panel,
-            area,
-            content_row(area, row)?,
-        )
-        .map(PanelHit::InfoRow),
+        | Panel::TaskLog => {
+            let content_row = content_row(area, row)?;
+            let content_column = content_column(area, column).unwrap_or(u16::MAX);
+            if let Some(action) = crate::read_only_panel_view::panel_action_at_content_cell(
+                state,
+                panel,
+                area,
+                content_row,
+                content_column,
+            ) {
+                return Some(PanelHit::from_panel_action(action));
+            }
+            crate::read_only_panel_view::info_row_at_content_row(state, panel, area, content_row)
+                .map(PanelHit::InfoRow)
+        }
     }
 }
 

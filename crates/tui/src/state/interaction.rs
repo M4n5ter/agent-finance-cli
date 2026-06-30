@@ -1,5 +1,6 @@
 use crate::command::ActionId;
 use crate::model::{FloatingKind, Panel, WorkspaceKind};
+use crate::scheduler::SymbolTaskKind;
 use crate::state::{Action, AppState};
 
 impl AppState {
@@ -53,6 +54,22 @@ impl AppState {
                 } else {
                     self.open_floating(FloatingKind::LiveWritesConfirmation);
                 }
+            }
+            ActionId::RefreshMarketSnapshot => {
+                self.close_text_input_floatings();
+                self.reduce(Action::RequestMarketRefresh);
+            }
+            ActionId::RefreshSelectedHistory => {
+                self.close_text_input_floatings();
+                self.reduce(Action::RequestSymbolDataRefresh(SymbolTaskKind::History));
+            }
+            ActionId::RefreshSelectedEvidence => {
+                self.close_text_input_floatings();
+                self.reduce(Action::RequestSymbolDataRefresh(SymbolTaskKind::Evidence));
+            }
+            ActionId::RefreshSelectedResearch => {
+                self.close_text_input_floatings();
+                self.reduce(Action::RequestSymbolDataRefresh(SymbolTaskKind::Research));
             }
             ActionId::CaptureOrderReferencePrice => {
                 self.close_text_input_floatings();
