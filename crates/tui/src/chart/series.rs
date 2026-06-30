@@ -3,6 +3,7 @@ use agent_finance_market::history_snapshot::HistoryBarSnapshot;
 #[derive(Debug, Clone, PartialEq)]
 pub struct CandleBucket {
     pub open_time: String,
+    pub close_time: Option<String>,
     pub open: f64,
     pub high: f64,
     pub low: f64,
@@ -30,6 +31,10 @@ pub fn compressed_bars(bars: &[HistoryBarSnapshot], max_columns: usize) -> Vec<C
             let last = chunk.last()?;
             Some(CandleBucket {
                 open_time: first.open_time.clone(),
+                close_time: last
+                    .close_time
+                    .clone()
+                    .or_else(|| Some(last.open_time.clone())),
                 open: first.open,
                 high: chunk
                     .iter()
@@ -82,6 +87,7 @@ pub fn vwap(buckets: &[CandleBucket]) -> Vec<Option<f64>> {
 #[derive(Debug, Clone)]
 struct NormalizedBar {
     open_time: String,
+    close_time: Option<String>,
     open: f64,
     high: f64,
     low: f64,
@@ -94,6 +100,7 @@ impl From<NormalizedBar> for CandleBucket {
     fn from(bar: NormalizedBar) -> Self {
         Self {
             open_time: bar.open_time,
+            close_time: bar.close_time,
             open: bar.open,
             high: bar.high,
             low: bar.low,
@@ -117,6 +124,7 @@ fn normalize_bar(bar: &HistoryBarSnapshot) -> Option<NormalizedBar> {
     let low = low.unwrap_or(open.min(bar.close));
     Some(NormalizedBar {
         open_time: bar.open_time.clone(),
+        close_time: bar.close_time.clone(),
         open,
         high: high.max(open).max(bar.close),
         low: low.min(open).min(bar.close),
@@ -148,6 +156,7 @@ mod tests {
 
         assert_eq!(buckets.len(), 2);
         assert_eq!(buckets[0].open, 10.0);
+        assert_eq!(buckets[0].close_time.as_deref(), Some("2"));
         assert_eq!(buckets[0].high, 15.0);
         assert_eq!(buckets[0].low, 8.0);
         assert_eq!(buckets[0].close, 14.0);
@@ -160,7 +169,7 @@ mod tests {
         let buckets = compressed_bars(
             &[HistoryBarSnapshot {
                 open_time: "t".to_string(),
-                close_time: None,
+                close_time: Some("t+1".to_string()),
                 open: None,
                 high: None,
                 low: None,
@@ -174,6 +183,7 @@ mod tests {
         );
 
         assert_eq!(buckets[0].open, 42.0);
+        assert_eq!(buckets[0].close_time.as_deref(), Some("t+1"));
         assert_eq!(buckets[0].high, 42.0);
         assert_eq!(buckets[0].low, 42.0);
         assert!(buckets[0].close_only);
@@ -214,7 +224,7 @@ mod tests {
     ) -> HistoryBarSnapshot {
         HistoryBarSnapshot {
             open_time: open_time.to_string(),
-            close_time: None,
+            close_time: Some(open_time.to_string()),
             open: Some(open),
             high: Some(high),
             low: Some(low),

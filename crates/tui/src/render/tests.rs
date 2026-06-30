@@ -711,6 +711,35 @@ fn market_workspace_matches_snapshot_at_100x30() {
 }
 
 #[test]
+fn market_workspace_history_hover_matches_snapshot_at_100x30() {
+    let mut state = snapshot_state();
+    state.reduce(crate::state::Action::HistoryStarted {
+        generation: 1,
+        symbol: "CRDO".to_string(),
+    });
+    state.reduce(crate::state::Action::HistoryLoaded {
+        generation: 1,
+        snapshot: history_snapshot("CRDO"),
+    });
+    state.reduce(crate::state::Action::Execute(ActionId::SetWorkspace(
+        WorkspaceKind::Market,
+    )));
+    let layout = crate::layout::build(
+        ratatui::layout::Rect::new(0, 0, 100, 30),
+        &state.layout,
+        &state.floating,
+        &state.visible_panels(),
+    );
+    let history = layout
+        .panel_rect(Panel::History)
+        .expect("history panel is visible");
+    let chart = crate::read_only_panel_view::history_chart_area(history);
+    state.mouse_position = Some(MousePosition::new(chart.x + chart.width / 2, chart.y + 2));
+
+    assert_workspace_snapshot("market_workspace_history_hover_100x30", &state, 100, 30);
+}
+
+#[test]
 fn trade_workspace_matches_snapshot_at_140x36() {
     let mut state = snapshot_state();
     state.reduce(crate::state::Action::Execute(ActionId::SetWorkspace(

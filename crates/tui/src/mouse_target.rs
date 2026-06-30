@@ -152,6 +152,16 @@ impl MouseTarget {
         )
     }
 
+    pub fn panel_chart_hovered(self, panel: Panel) -> Option<MousePosition> {
+        match self {
+            Self::PanelAction {
+                panel: hover_panel,
+                action: PanelMouseAction::InspectChart { position },
+            } if hover_panel == panel => Some(position),
+            _ => None,
+        }
+    }
+
     pub fn floating_result_hovered(self, kind: FloatingKind, index: usize) -> bool {
         matches!(
             self,
@@ -214,6 +224,9 @@ pub enum PanelMouseAction {
     },
     InspectRow {
         index: usize,
+    },
+    InspectChart {
+        position: MousePosition,
     },
 }
 

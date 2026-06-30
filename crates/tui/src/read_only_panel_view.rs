@@ -140,6 +140,25 @@ fn history_info_row_at_content_row(
     info_line_at_content_row(&history_summary_lines(state), area, content_row)
 }
 
+pub(crate) fn history_chart_area(panel_area: Rect) -> Rect {
+    let inner = Rect {
+        x: panel_area.x.saturating_add(1),
+        y: panel_area.y.saturating_add(1),
+        width: panel_area.width.saturating_sub(2),
+        height: panel_area.height.saturating_sub(2),
+    };
+    Rect {
+        x: inner.x,
+        y: inner
+            .y
+            .saturating_add(history_text_area_height(panel_area) as u16),
+        width: inner.width,
+        height: inner
+            .height
+            .saturating_sub(history_text_area_height(panel_area) as u16),
+    }
+}
+
 fn info_line_at_content_row_after_actions(
     panel: Panel,
     lines: &[Line<'_>],

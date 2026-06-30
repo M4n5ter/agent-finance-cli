@@ -1,5 +1,5 @@
 use ratatui::Frame;
-use ratatui::layout::{Constraint, Direction, Layout, Rect};
+use ratatui::layout::{Constraint, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Cell, List, ListItem, Paragraph, Row, Table, Wrap};
@@ -160,21 +160,22 @@ fn render_history(
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Length(5), Constraint::Min(1)])
-        .split(inner);
+    let chart_area = read_only_panel_view::history_chart_area(area);
+    let text_area = Rect {
+        height: chart_area.y.saturating_sub(inner.y),
+        ..inner
+    };
 
     frame.render_widget(
         Paragraph::new(read_only_panel_lines(
             state,
             Panel::History,
-            chunks[0].width,
-            chunks[0].height,
+            text_area.width,
+            text_area.height,
             mouse_target,
         ))
         .wrap(Wrap { trim: true }),
-        chunks[0],
+        text_area,
     );
 
     let symbol = state.selected_symbol().unwrap_or("N/A");
@@ -182,8 +183,9 @@ fn render_history(
     let bars = snapshot
         .map(|snapshot| snapshot.bars.as_slice())
         .unwrap_or_default();
-    let chart = history::chart(bars, &state.theme);
-    frame.render_widget(chart, chunks[1]);
+    let hover = mouse_target.and_then(|target| target.panel_chart_hovered(Panel::History));
+    let chart = history::chart(bars, &state.theme, hover);
+    frame.render_widget(chart, chart_area);
 }
 
 fn render_evidence(

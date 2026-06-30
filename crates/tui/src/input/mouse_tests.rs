@@ -2046,7 +2046,7 @@ fn mouse_movement_tracks_read_only_panel_row_hover() {
 }
 
 #[test]
-fn mouse_movement_over_history_chart_does_not_report_info_row_hover() {
+fn mouse_movement_over_history_chart_reports_chart_hover() {
     let area = Rect::new(0, 0, 120, 32);
     let mut state = AppState::from_config(crate::config::TuiConfig::default());
     state.reduce(Action::Focus(Panel::History));
@@ -2069,8 +2069,52 @@ fn mouse_movement_over_history_chart_does_not_report_info_row_hover() {
 
     assert_eq!(
         current_mouse_target(area, &state),
-        Some(MouseTarget::Panel(Panel::History))
+        Some(MouseTarget::PanelAction {
+            panel: Panel::History,
+            action: PanelMouseAction::InspectChart {
+                position: MousePosition::new(panel.x + 2, panel.y + 8),
+            },
+        })
     );
+}
+
+#[test]
+fn mouse_click_on_history_chart_only_focuses_and_tracks_hover() {
+    let area = Rect::new(0, 0, 120, 32);
+    let mut state = AppState::from_config(crate::config::TuiConfig::default());
+    state.reduce(Action::Focus(Panel::Quote));
+    let panel = layout::build(
+        area,
+        &state.layout,
+        &state.floating,
+        &state.visible_panels(),
+    )
+    .panel_rect(Panel::History)
+    .expect("history panel is visible");
+    let chart = crate::read_only_panel_view::history_chart_area(panel);
+    let click_position = MousePosition::new(chart.x + 2, chart.y + 2);
+    let previous_log_count = state.task_log.iter().count();
+    let mut drag = MouseDrag::default();
+
+    handle_mouse_event(
+        area,
+        &mut state,
+        &mut drag,
+        mouse_event(
+            MouseEventKind::Down(MouseButton::Left),
+            click_position.column,
+            click_position.row,
+        ),
+    );
+
+    assert_eq!(state.panels.focused(), Panel::History);
+    assert_eq!(state.mouse_position, Some(click_position));
+    assert_eq!(state.task_log.iter().count(), previous_log_count);
+    assert_eq!(state.staged_change_count(), 0);
+    assert!(state.pending_staged_confirmation().is_none());
+    assert!(state.take_pending_staged_execution().is_none());
+    assert_eq!(state.floating.last().map(|pane| pane.kind), None);
+    assert_eq!(drag, MouseDrag::default());
 }
 
 #[test]

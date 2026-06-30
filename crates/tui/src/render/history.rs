@@ -5,19 +5,22 @@ use ratatui::style::Style;
 use ratatui::widgets::Widget;
 
 use crate::chart::series::{CandleBucket, compressed_bars, moving_average, vwap};
+use crate::mouse_target::MousePosition;
 use crate::theme::ThemeConfig;
 
 pub(super) fn chart<'a>(
     bars: &'a [HistoryBarSnapshot],
     theme: &'a ThemeConfig,
+    hover: Option<MousePosition>,
 ) -> CandlestickChart<'a> {
-    CandlestickChart { bars, theme }
+    CandlestickChart { bars, theme, hover }
 }
 
 #[derive(Debug, Clone, Copy)]
 pub(super) struct CandlestickChart<'a> {
     bars: &'a [HistoryBarSnapshot],
     theme: &'a ThemeConfig,
+    hover: Option<MousePosition>,
 }
 
 impl Widget for CandlestickChart<'_> {
@@ -25,7 +28,8 @@ impl Widget for CandlestickChart<'_> {
         if area.width < 8 || area.height < 4 {
             return;
         }
-        let buckets = compressed_bars(self.bars, area.width as usize);
+        let geometry = ChartGeometry::for_area(area);
+        let buckets = compressed_bars(self.bars, geometry.bucket_capacity());
         if buckets.is_empty() {
             return;
         }
@@ -52,11 +56,56 @@ impl Widget for CandlestickChart<'_> {
         };
         let bounds = PriceBounds::from_buckets(&buckets);
         render_current_price_line(buffer, price_area, bounds, &buckets, self.theme);
-        render_overlays(buffer, price_area, bounds, &buckets, self.theme);
-        render_candles(buffer, price_area, bounds, &buckets, self.theme);
-        render_volume(buffer, volume_area, &buckets, self.theme);
+        render_overlays(buffer, price_area, bounds, &buckets, geometry, self.theme);
+        render_candles(buffer, price_area, bounds, &buckets, geometry, self.theme);
+        render_volume(buffer, volume_area, &buckets, geometry, self.theme);
         render_price_labels(buffer, price_area, bounds, self.theme);
         render_time_labels(buffer, time_area, &buckets, self.theme);
+        render_hover(buffer, area, self.hover, &buckets, geometry, self.theme);
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct ChartGeometry {
+    area: Rect,
+    candle_width: u16,
+}
+
+impl ChartGeometry {
+    fn for_area(area: Rect) -> Self {
+        let candle_width = if area.width >= 48 { 2 } else { 1 };
+        Self { area, candle_width }
+    }
+
+    fn bucket_capacity(self) -> usize {
+        usize::from(self.area.width / self.candle_width).max(1)
+    }
+
+    fn candle_x(self, index: usize) -> Option<u16> {
+        let offset = index.checked_mul(usize::from(self.candle_width))?;
+        let x = self.area.x.checked_add(offset as u16)?;
+        (x < self.area.right()).then_some(x)
+    }
+
+    fn wick_x(self, index: usize) -> Option<u16> {
+        self.candle_x(index)
+    }
+
+    fn body_x(self, index: usize) -> Option<u16> {
+        self.candle_x(index).map(|x| {
+            if self.candle_width > 1 && x + 1 < self.area.right() {
+                x + 1
+            } else {
+                x
+            }
+        })
+    }
+
+    fn bucket_index_at(self, column: u16) -> Option<usize> {
+        if column < self.area.x || column >= self.area.right() {
+            return None;
+        }
+        Some(usize::from((column - self.area.x) / self.candle_width))
     }
 }
 
@@ -88,15 +137,6 @@ impl PriceBounds {
         let ratio = ((price - self.min) / (self.max - self.min)).clamp(0.0, 1.0);
         area.y + area.height - 1 - (ratio * f64::from(area.height - 1)).round() as u16
     }
-
-    fn subrow(self, area: Rect, price: f64) -> u32 {
-        if area.height <= 1 || (self.max - self.min).abs() <= f64::EPSILON {
-            return 0;
-        }
-        let subrows = u32::from(area.height) * 4;
-        let ratio = ((price - self.min) / (self.max - self.min)).clamp(0.0, 1.0);
-        subrows - 1 - (ratio * f64::from(subrows - 1)).round() as u32
-    }
 }
 
 fn volume_height(height: u16) -> u16 {
@@ -112,16 +152,29 @@ fn render_candles(
     area: Rect,
     bounds: PriceBounds,
     buckets: &[CandleBucket],
+    geometry: ChartGeometry,
     theme: &ThemeConfig,
 ) {
-    for (index, bucket) in buckets.iter().enumerate().take(area.width as usize) {
-        let x = area.x + index as u16;
+    for (index, bucket) in buckets.iter().enumerate() {
+        let Some(wick_x) = geometry.wick_x(index) else {
+            break;
+        };
+        let Some(body_x) = geometry.body_x(index) else {
+            break;
+        };
         let style = candle_style(bucket, theme);
         let high = bounds.row(area, bucket.high);
         let low = bounds.row(area, bucket.low);
+        let open = bounds.row(area, bucket.open);
+        let close = bounds.row(area, bucket.close);
         for row in high.min(low)..=high.max(low) {
-            if let Some(symbol) = braille_candle_symbol(bucket, bounds, area, row) {
-                buffer.set_string(x, row, symbol.as_str(), style);
+            buffer.set_string(wick_x, row, "│", style);
+        }
+        if bucket.close_only {
+            buffer.set_string(body_x, close, close_only_symbol(geometry), style);
+        } else {
+            for row in open.min(close)..=open.max(close) {
+                buffer.set_string(body_x, row, body_symbol(bucket, geometry), style);
             }
         }
     }
@@ -150,6 +203,7 @@ fn render_overlays(
     area: Rect,
     bounds: PriceBounds,
     buckets: &[CandleBucket],
+    geometry: ChartGeometry,
     theme: &ThemeConfig,
 ) {
     render_series(
@@ -158,6 +212,7 @@ fn render_overlays(
         bounds,
         &moving_average(buckets, 20),
         "∙",
+        geometry,
         theme.accent_style(),
     );
     render_series(
@@ -166,6 +221,7 @@ fn render_overlays(
         bounds,
         &moving_average(buckets, 50),
         "·",
+        geometry,
         theme.warning_style(),
     );
     render_series(
@@ -174,6 +230,7 @@ fn render_overlays(
         bounds,
         &vwap(buckets),
         "×",
+        geometry,
         theme.prediction_style(),
     );
 }
@@ -184,18 +241,28 @@ fn render_series(
     bounds: PriceBounds,
     series: &[Option<f64>],
     marker: &str,
+    geometry: ChartGeometry,
     style: Style,
 ) {
-    for (index, value) in series.iter().enumerate().take(area.width as usize) {
+    for (index, value) in series.iter().enumerate() {
         let Some(value) = value else {
             continue;
         };
+        let Some(x) = geometry.body_x(index) else {
+            break;
+        };
         let row = bounds.row(area, *value);
-        buffer.set_string(area.x + index as u16, row, marker, style);
+        buffer.set_string(x, row, marker, style);
     }
 }
 
-fn render_volume(buffer: &mut Buffer, area: Rect, buckets: &[CandleBucket], theme: &ThemeConfig) {
+fn render_volume(
+    buffer: &mut Buffer,
+    area: Rect,
+    buckets: &[CandleBucket],
+    geometry: ChartGeometry,
+    theme: &ThemeConfig,
+) {
     if area.height == 0 {
         return;
     }
@@ -206,19 +273,17 @@ fn render_volume(buffer: &mut Buffer, area: Rect, buckets: &[CandleBucket], them
     if max_volume <= 0.0 {
         return;
     }
-    for (index, bucket) in buckets.iter().enumerate().take(area.width as usize) {
+    for (index, bucket) in buckets.iter().enumerate() {
         let Some(volume) = bucket.volume else {
             continue;
+        };
+        let Some(x) = geometry.body_x(index) else {
+            break;
         };
         let height = ((volume / max_volume) * f64::from(area.height)).ceil() as u16;
         let style = candle_style(bucket, theme);
         for offset in 0..height.max(1).min(area.height) {
-            buffer.set_string(
-                area.x + index as u16,
-                area.y + area.height - 1 - offset,
-                "█",
-                style,
-            );
+            buffer.set_string(x, area.y + area.height - 1 - offset, "█", style);
         }
     }
 }
@@ -254,7 +319,95 @@ fn render_time_labels(
         write_left_clipped(buffer, area, &first.open_time, theme.muted_style());
     }
     if let Some(last) = buckets.last() {
-        write_right_clipped(buffer, area, &last.open_time, theme.muted_style());
+        write_right_clipped(buffer, area, bucket_end_time(last), theme.muted_style());
+    }
+}
+
+fn render_hover(
+    buffer: &mut Buffer,
+    area: Rect,
+    hover: Option<MousePosition>,
+    buckets: &[CandleBucket],
+    geometry: ChartGeometry,
+    theme: &ThemeConfig,
+) {
+    let Some(hover) = hover else {
+        return;
+    };
+    if hover.column < area.x
+        || hover.column >= area.right()
+        || hover.row < area.y
+        || hover.row >= area.bottom()
+    {
+        return;
+    }
+    let Some(index) = geometry.bucket_index_at(hover.column) else {
+        return;
+    };
+    let Some(bucket) = buckets.get(index) else {
+        return;
+    };
+    let column = geometry.body_x(index).unwrap_or(hover.column);
+    render_crosshair(buffer, area, column, theme);
+    render_hover_tooltip(buffer, area, column, bucket, theme);
+}
+
+fn render_crosshair(buffer: &mut Buffer, area: Rect, column: u16, theme: &ThemeConfig) {
+    for row in area.y..area.bottom() {
+        buffer.set_string(column, row, "┊", theme.muted_style());
+    }
+}
+
+fn render_hover_tooltip(
+    buffer: &mut Buffer,
+    area: Rect,
+    column: u16,
+    bucket: &CandleBucket,
+    theme: &ThemeConfig,
+) {
+    if area.width < 24 || area.height < 3 {
+        return;
+    }
+    let volume = bucket
+        .volume
+        .map(super::widgets::format_volume)
+        .unwrap_or_else(|| "-".to_string());
+    let lines = [
+        format!(
+            "{} O{} H{}",
+            bucket_time_range(bucket),
+            super::widgets::format_price(bucket.open),
+            super::widgets::format_price(bucket.high)
+        ),
+        format!(
+            "L{} C{} V{}",
+            super::widgets::format_price(bucket.low),
+            super::widgets::format_price(bucket.close),
+            volume
+        ),
+    ];
+    let width = lines
+        .iter()
+        .map(|line| line.chars().count())
+        .max()
+        .unwrap_or_default()
+        .min(area.width as usize);
+    let right_start = column.saturating_add(2);
+    let axis_reserved = 8;
+    let usable_right = area.right().saturating_sub(axis_reserved);
+    let x = if right_start + width as u16 <= usable_right {
+        right_start
+    } else {
+        column
+            .saturating_sub(width as u16)
+            .saturating_sub(2)
+            .max(area.x)
+    };
+    let style = theme.selected_style();
+    for (offset, line) in lines.iter().enumerate() {
+        let y = area.y + offset as u16;
+        let clipped = clipped_prefix(line, width);
+        buffer.set_string(x, y, format!("{clipped:<width$}"), style);
     }
 }
 
@@ -293,65 +446,35 @@ fn candle_style(bucket: &CandleBucket, theme: &ThemeConfig) -> Style {
     }
 }
 
-fn braille_candle_symbol(
-    bucket: &CandleBucket,
-    bounds: PriceBounds,
-    area: Rect,
-    row: u16,
-) -> Option<String> {
-    let bits = braille_candle_bits(bucket, bounds, area, row);
-    (bits != 0).then(|| {
-        char::from_u32(0x2800 + u32::from(bits))
-            .unwrap_or(' ')
-            .to_string()
-    })
-}
-
-fn braille_candle_bits(bucket: &CandleBucket, bounds: PriceBounds, area: Rect, row: u16) -> u8 {
-    let high = bounds.subrow(area, bucket.high);
-    let low = bounds.subrow(area, bucket.low);
-    let open = bounds.subrow(area, bucket.open);
-    let close = bounds.subrow(area, bucket.close);
-    let wick = high.min(low)..=high.max(low);
-    let body = open.min(close)..=open.max(close);
-    let row_base = u32::from(row.saturating_sub(area.y)) * 4;
-    let mut bits = 0;
-
-    for offset in 0..4 {
-        let subrow = row_base + offset;
-        if wick.contains(&subrow) && (bucket.close_only || !body.contains(&subrow)) {
-            bits |= braille_dot(offset, BrailleLane::Left);
+fn bucket_time_range(bucket: &CandleBucket) -> String {
+    match bucket.close_time.as_deref() {
+        Some(close_time) if close_time != bucket.open_time => {
+            format!("{}-{}", bucket.open_time, close_time)
         }
-        if bucket.close_only {
-            if subrow == close {
-                bits |= braille_dot(offset, BrailleLane::Left);
-                bits |= braille_dot(offset, BrailleLane::Right);
-            }
-        } else if body.contains(&subrow) {
-            bits |= braille_dot(offset, BrailleLane::Right);
-        }
+        _ => bucket.open_time.clone(),
     }
-
-    bits
 }
 
-#[derive(Debug, Clone, Copy)]
-enum BrailleLane {
-    Left,
-    Right,
+fn bucket_end_time(bucket: &CandleBucket) -> &str {
+    bucket.close_time.as_deref().unwrap_or(&bucket.open_time)
 }
 
-fn braille_dot(offset: u32, lane: BrailleLane) -> u8 {
-    match (lane, offset) {
-        (BrailleLane::Left, 0) => 0x01,
-        (BrailleLane::Left, 1) => 0x02,
-        (BrailleLane::Left, 2) => 0x04,
-        (BrailleLane::Left, 3) => 0x40,
-        (BrailleLane::Right, 0) => 0x08,
-        (BrailleLane::Right, 1) => 0x10,
-        (BrailleLane::Right, 2) => 0x20,
-        (BrailleLane::Right, 3) => 0x80,
-        _ => 0,
+fn body_symbol(bucket: &CandleBucket, geometry: ChartGeometry) -> &'static str {
+    if geometry.candle_width > 1 {
+        return "█";
+    }
+    if bucket.close >= bucket.open {
+        "█"
+    } else {
+        "▓"
+    }
+}
+
+fn close_only_symbol(geometry: ChartGeometry) -> &'static str {
+    if geometry.candle_width > 1 {
+        "◆"
+    } else {
+        "•"
     }
 }
 
@@ -409,31 +532,5 @@ mod tests {
         (0..buffer.area.width)
             .map(|x| buffer[(x, y)].symbol())
             .collect::<String>()
-    }
-
-    #[test]
-    fn braille_candles_use_subcell_price_precision() {
-        let bounds = PriceBounds {
-            min: 0.0,
-            max: 16.0,
-        };
-        let area = Rect::new(0, 0, 1, 4);
-        let bucket = CandleBucket {
-            open_time: "t".to_string(),
-            open: 4.0,
-            high: 16.0,
-            low: 0.0,
-            close: 12.0,
-            volume: None,
-            close_only: false,
-        };
-
-        let rows = (0..4)
-            .map(|row| braille_candle_bits(&bucket, bounds, area, row))
-            .collect::<Vec<_>>();
-
-        assert!(rows.iter().all(|bits| *bits != 0));
-        assert!(rows.iter().any(|bits| bits & 0x01 != 0));
-        assert!(rows.iter().any(|bits| bits & 0x08 != 0));
     }
 }

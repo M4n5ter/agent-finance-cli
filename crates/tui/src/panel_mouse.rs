@@ -3,7 +3,7 @@ use ratatui::layout::Rect;
 use crate::account_panel_view::{AccountPanelHit, AccountTicketPreset};
 use crate::intent_review_view::IntentReviewAction;
 use crate::model::Panel;
-use crate::mouse_target::{MouseTarget, PanelMouseAction};
+use crate::mouse_target::{MousePosition, MouseTarget, PanelMouseAction};
 use crate::state::{Action, AppState};
 use crate::ticket_panel_view::TicketPanelClick;
 
@@ -55,6 +55,9 @@ enum PanelHit {
         direction: isize,
     },
     IntentReviewAction(IntentReviewAction),
+    ChartPoint {
+        position: MousePosition,
+    },
 }
 
 impl PanelHit {
@@ -137,6 +140,7 @@ impl PanelHit {
                 PanelMouseAction::SettingAdjust { index, direction }
             }
             Self::IntentReviewAction(action) => PanelMouseAction::IntentReviewAction { action },
+            Self::ChartPoint { position } => PanelMouseAction::InspectChart { position },
         }
     }
 }
@@ -255,8 +259,8 @@ fn panel_hit_at(
             content_column(area, column).unwrap_or(u16::MAX),
         )
         .map(PanelHit::from_panel_action),
+        Panel::History => history_hit_at(state, area, column, row),
         Panel::Quote
-        | Panel::History
         | Panel::Evidence
         | Panel::Polymarket
         | Panel::Research
@@ -278,6 +282,35 @@ fn panel_hit_at(
                 .map(PanelHit::InfoRow)
         }
     }
+}
+
+fn history_hit_at(state: &AppState, area: Rect, column: u16, row: u16) -> Option<PanelHit> {
+    let content_row = content_row(area, row)?;
+    let content_column = content_column(area, column).unwrap_or(u16::MAX);
+    if let Some(action) = crate::read_only_panel_view::panel_action_at_content_cell(
+        state,
+        Panel::History,
+        area,
+        content_row,
+        content_column,
+    ) {
+        return Some(PanelHit::from_panel_action(action));
+    }
+    if rect_contains(
+        crate::read_only_panel_view::history_chart_area(area),
+        column,
+        row,
+    ) {
+        return Some(PanelHit::ChartPoint {
+            position: MousePosition::new(column, row),
+        });
+    }
+    crate::read_only_panel_view::info_row_at_content_row(state, Panel::History, area, content_row)
+        .map(PanelHit::InfoRow)
+}
+
+fn rect_contains(area: Rect, column: u16, row: u16) -> bool {
+    column >= area.x && column < area.right() && row >= area.y && row < area.bottom()
 }
 
 fn intent_review_hit_at(state: &AppState, area: Rect, column: u16, row: u16) -> Option<PanelHit> {
