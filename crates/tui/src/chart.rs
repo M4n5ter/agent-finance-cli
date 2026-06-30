@@ -188,6 +188,7 @@ pub struct ChartState {
     preset: ChartPreset,
     window: ChartWindow,
     cursor_bps: Option<u16>,
+    overlays_visible: bool,
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
@@ -202,6 +203,7 @@ impl ChartState {
             preset,
             window: ChartWindow::FULL,
             cursor_bps: None,
+            overlays_visible: true,
         }
     }
 
@@ -215,6 +217,15 @@ impl ChartState {
 
     pub const fn cursor_bps(&self) -> Option<u16> {
         self.cursor_bps
+    }
+
+    pub const fn overlays_visible(&self) -> bool {
+        self.overlays_visible
+    }
+
+    pub fn toggle_overlays(&mut self) -> bool {
+        self.overlays_visible = !self.overlays_visible;
+        self.overlays_visible
     }
 
     pub fn set_preset(&mut self, preset: ChartPreset) -> bool {
@@ -428,6 +439,15 @@ mod tests {
         assert!(state.set_preset(ChartPreset::OneDay));
         assert_eq!(state.window(), ChartWindow::FULL);
         assert_eq!(state.cursor_bps(), None);
+    }
+
+    #[test]
+    fn chart_overlay_visibility_is_session_state() {
+        let mut state = ChartState::new(ChartPreset::Auto);
+
+        assert!(state.overlays_visible());
+        assert!(!state.toggle_overlays());
+        assert!(state.toggle_overlays());
     }
 
     #[test]

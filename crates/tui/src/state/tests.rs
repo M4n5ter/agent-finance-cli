@@ -1694,6 +1694,24 @@ fn chart_window_selection_is_reducer_state() {
 }
 
 #[test]
+fn chart_overlay_toggle_is_command_driven_session_state() {
+    let mut state = AppState::from_config(TuiConfig::default());
+
+    assert!(state.chart.overlays_visible());
+
+    state.reduce(Action::Execute(ActionId::ToggleChartOverlays));
+
+    assert!(!state.chart.overlays_visible());
+    assert!(state.task_log.iter().any(|entry| {
+        entry.status == TaskStatus::Info && entry.message == "chart overlays hidden"
+    }));
+
+    state.reduce(Action::Execute(ActionId::ToggleChartOverlays));
+
+    assert!(state.chart.overlays_visible());
+}
+
+#[test]
 fn watchlist_add_symbol_selection_resets_chart_session_view() {
     let mut state = AppState::from_config(TuiConfig {
         watchlist: vec!["CRDO".to_string()],

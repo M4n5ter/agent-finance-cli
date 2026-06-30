@@ -184,7 +184,11 @@ fn render_history(
     let bars = snapshot
         .map(|snapshot| snapshot.bars.as_slice())
         .unwrap_or_default();
-    let chart_overlays = crate::chart_overlay::lines_for_state(state, symbol);
+    let chart_overlays = if state.chart.overlays_visible() {
+        crate::chart_overlay::lines_for_state(state, symbol)
+    } else {
+        Vec::new()
+    };
     let hover = mouse_target.and_then(|target| target.panel_chart_hovered(Panel::History));
     let mode = if workbench {
         history::ChartMode::Workbench

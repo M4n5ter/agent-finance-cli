@@ -41,7 +41,7 @@ The TUI persists the watchlist, focused panel, docked panel set, column layout, 
 - `[` / `]` zooms the chart window.
 - Number preset actions switch chart ranges.
 - `r` refreshes history for the selected symbol.
-- Open the command palette to search chart actions such as preset changes, chart refresh, reset zoom, and copy price to ticket.
+- Open the command palette to search chart actions such as preset changes, chart refresh, reset zoom, toggle overlays, and copy price to ticket.
 
 ## Trading Boundary
 

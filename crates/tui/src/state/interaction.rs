@@ -71,6 +71,14 @@ impl AppState {
                 self.close_text_input_floatings();
                 self.reduce(Action::ShiftChartPreset(direction));
             }
+            ActionId::ResetChartView => {
+                self.close_text_input_floatings();
+                self.reduce(Action::ResetChartView);
+            }
+            ActionId::ToggleChartOverlays => {
+                self.close_text_input_floatings();
+                self.reduce(Action::ToggleChartOverlays);
+            }
             ActionId::RefreshSelectedEvidence => {
                 self.close_text_input_floatings();
                 self.reduce(Action::RequestSymbolDataRefresh(SymbolTaskKind::Evidence));

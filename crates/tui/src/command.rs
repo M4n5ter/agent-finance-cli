@@ -111,6 +111,8 @@ pub enum ActionId {
     RefreshSelectedResearch,
     SetChartPreset(ChartPreset),
     ShiftChartPreset(isize),
+    ResetChartView,
+    ToggleChartOverlays,
     CaptureOrderReferencePrice,
     OpenTicketTextInput,
     StageOrderTicket,
@@ -444,6 +446,18 @@ pub static ACTION_REGISTRY: LazyLock<Vec<ActionSpec>> = LazyLock::new(|| {
             "Move the history chart to the previous time range preset"
         ),
         action!(
+            "chart-reset-view",
+            ActionId::ResetChartView,
+            "Chart reset view",
+            "Reset the history chart cursor and zoom window"
+        ),
+        action!(
+            "chart-toggle-overlays",
+            ActionId::ToggleChartOverlays,
+            "Chart toggle overlays",
+            "Show or hide history chart price, order, and position reference lines"
+        ),
+        action!(
             "refresh-selected-evidence",
             ActionId::RefreshSelectedEvidence,
             "Refresh selected evidence",
@@ -570,6 +584,27 @@ mod tests {
         assert_eq!(
             palette.selected_action(),
             Some(ActionId::CaptureOrderReferencePrice)
+        );
+    }
+
+    #[test]
+    fn command_palette_can_control_chart_view() {
+        let mut palette = CommandPaletteState::default();
+
+        for character in "chart reset view".chars() {
+            palette.edit_query(InputRequest::InsertChar(character));
+        }
+
+        assert_eq!(palette.selected_action(), Some(ActionId::ResetChartView));
+
+        palette.reset();
+        for character in "toggle chart overlays".chars() {
+            palette.edit_query(InputRequest::InsertChar(character));
+        }
+
+        assert_eq!(
+            palette.selected_action(),
+            Some(ActionId::ToggleChartOverlays)
         );
     }
 
