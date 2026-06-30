@@ -518,6 +518,8 @@ fn intent_review_shows_submitted_change_waiting_for_worker_result() {
     assert!(text.contains("next: wait for worker result"));
     assert!(text.contains("running"));
     assert!(text.contains("submit-queued"));
+    assert!(text.contains("waiting for worker result"));
+    assert!(!text.contains("[execute]"));
 }
 
 #[test]
@@ -551,6 +553,49 @@ fn intent_review_keeps_next_step_visible_after_intent_creation() {
 
     assert!(text.contains("status:running / stage:intent-created"));
     assert!(text.contains("next: wait for worker result / intent:intent-20260630"));
+    assert!(!text.contains("[execute]"));
+}
+
+#[test]
+fn intent_review_completed_change_exposes_close_without_execute() {
+    let mut state = AppState::from_config(TuiConfig {
+        watchlist: vec!["CRDO".to_string()],
+        trading: crate::config::TradingConfig {
+            default_profile: Some("mainnet".to_string()),
+        },
+        workspace: crate::config::WorkspaceConfig {
+            current: WorkspaceKind::Trade,
+        },
+        ..TuiConfig::default()
+    });
+    state
+        .order_ticket
+        .set_quantity_text(Some("0.05".to_string()));
+    state.order_ticket.set_price_text(Some("204".to_string()));
+    state.reduce(crate::state::Action::StageOrderTicket);
+    state.reduce(crate::state::Action::ExecuteStagedChange);
+    state.reduce(crate::state::Action::ConfirmStagedExecution);
+    let change_id = state.staged_change_review_views()[0].id.clone();
+    state.reduce(crate::state::Action::ApplyStagedChangeEvent {
+        id: change_id.clone(),
+        event: crate::state::StagedChangeEvent::IntentCreated {
+            intent_id: "intent-20260630-dry-run".to_string(),
+        },
+    });
+    state.reduce(crate::state::Action::ApplyStagedChangeEvent {
+        id: change_id,
+        event: crate::state::StagedChangeEvent::NonConsumingFinished {
+            intent_id: "intent-20260630-dry-run".to_string(),
+            mode: agent_finance_core::SubmitMode::DryRun,
+        },
+    });
+
+    let text = render_to_text_grid(&state, 160, 44);
+
+    assert!(text.contains("status:done / stage:dry-run-completed"));
+    assert!(text.contains("next: close after review"));
+    assert!(!text.contains("[execute]"));
+    assert!(text.contains("[close]"));
 }
 
 #[test]

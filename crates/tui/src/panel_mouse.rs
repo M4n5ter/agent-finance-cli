@@ -275,6 +275,12 @@ fn intent_review_hit_at(state: &AppState, area: Rect, column: u16, row: u16) -> 
                 .staged_change_count()
                 .saturating_sub(crate::state::VISIBLE_REVIEW_LIMIT),
             content_width(area),
+            crate::intent_review_view::action_state_for_status(
+                changes
+                    .iter()
+                    .find(|change| change.selected)
+                    .map(|change| change.stage.queue_status()),
+            ),
             content_row,
             content_column(area, column).unwrap_or(u16::MAX),
         )

@@ -7,7 +7,9 @@ use ratatui::widgets::{Cell, Paragraph, Row, Table, Wrap};
 use crate::model::Panel;
 use agent_finance_core::intent::IntentStatus;
 
-use crate::intent_review_view::{INTENT_REVIEW_SUMMARY_ROWS, IntentReviewActionLine, action_line};
+use crate::intent_review_view::{
+    INTENT_REVIEW_SUMMARY_ROWS, IntentReviewActionLine, action_line, action_state_for_status,
+};
 use crate::mouse_target::MouseTarget;
 use crate::staged_gate_preview::{GatePreviewRow, GatePreviewSeverity, selected_gate_preview};
 use crate::state::{AppState, StagedChangeQueueStatus, StagedChangeView, VISIBLE_REVIEW_LIMIT};
@@ -109,7 +111,11 @@ fn intent_review_summary_lines(
 
     lines.push(action_line_to_line(
         state,
-        action_line(hidden, width),
+        action_line(
+            hidden,
+            width,
+            action_state_for_status(selected.map(|change| change.stage.queue_status())),
+        ),
         mouse_target,
     ));
     lines

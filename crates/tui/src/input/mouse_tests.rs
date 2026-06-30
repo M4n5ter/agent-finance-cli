@@ -1,7 +1,9 @@
 use super::*;
 use crate::command::ActionId;
 use crate::confirmation_dialog::{self, ConfirmationButtonAction, ConfirmationRow};
-use crate::intent_review_view::{IntentReviewAction, action_line, staged_change_content_row};
+use crate::intent_review_view::{
+    IntentReviewAction, action_line, action_state_for_status, staged_change_content_row,
+};
 use crate::layout::{self, DockedColumnSplit, LayoutHit};
 use crate::model::{FloatingKind, Panel, WorkspaceKind};
 use crate::mouse_target::{self, MousePosition, MouseTarget, PanelMouseAction};
@@ -434,6 +436,48 @@ fn mouse_click_on_intent_review_execute_action_opens_confirmation() {
         state.floating.last().map(|pane| pane.kind),
         Some(FloatingKind::StagedExecutionConfirmation)
     );
+    assert_eq!(drag, MouseDrag::default());
+}
+
+#[test]
+fn running_intent_review_change_does_not_expose_mouse_actions() {
+    let area = Rect::new(0, 0, 160, 48);
+    let mut state = staged_review_state();
+    let (execute_column, action_row) =
+        intent_review_action_cell(area, &state, IntentReviewAction::ExecuteSelected);
+    let (close_column, _) =
+        intent_review_action_cell(area, &state, IntentReviewAction::CloseSelected);
+    state.reduce(Action::ExecuteStagedChange);
+    state.reduce(Action::ConfirmStagedExecution);
+    let mut drag = MouseDrag::default();
+
+    for column in [execute_column, close_column] {
+        handle_mouse_event(
+            area,
+            &mut state,
+            &mut drag,
+            mouse_event(MouseEventKind::Moved, column, action_row),
+        );
+
+        assert_eq!(state.floating.last().map(|pane| pane.kind), None);
+        assert!(!matches!(
+            current_mouse_target(area, &state),
+            Some(MouseTarget::PanelAction {
+                panel: Panel::IntentReview,
+                ..
+            })
+        ));
+
+        handle_mouse_event(
+            area,
+            &mut state,
+            &mut drag,
+            mouse_event(MouseEventKind::Down(MouseButton::Left), column, action_row),
+        );
+
+        assert_eq!(state.floating.last().map(|pane| pane.kind), None);
+        assert!(state.pending_staged_confirmation().is_none());
+    }
     assert_eq!(drag, MouseDrag::default());
 }
 
@@ -1928,7 +1972,14 @@ fn intent_review_action_cell(
     let hidden = state
         .staged_change_count()
         .saturating_sub(crate::state::VISIBLE_REVIEW_LIMIT);
-    let line = action_line(hidden, panel.width.saturating_sub(2));
+    let action_state = action_state_for_status(
+        state
+            .staged_change_review_views()
+            .iter()
+            .find(|change| change.selected)
+            .map(|change| change.stage.queue_status()),
+    );
+    let line = action_line(hidden, panel.width.saturating_sub(2), action_state);
     let span = line
         .actions
         .into_iter()
