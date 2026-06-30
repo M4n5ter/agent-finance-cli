@@ -1260,6 +1260,83 @@ fn mouse_click_on_order_ticket_edit_field_action_opens_input() {
 }
 
 #[test]
+fn mouse_click_on_transfer_ticket_edit_field_action_opens_input() {
+    let area = Rect::new(0, 0, 160, 48);
+    let mut state = AppState::from_config(crate::config::TuiConfig {
+        workspace: crate::config::WorkspaceConfig {
+            current: WorkspaceKind::Account,
+        },
+        ..crate::config::TuiConfig::default()
+    });
+    state.reduce(Action::SelectTransferTicketField(2));
+    let mut drag = MouseDrag::default();
+    let panel = layout::build(
+        area,
+        &state.layout,
+        &state.floating,
+        &state.visible_panels(),
+    )
+    .panel_rect(Panel::TransferTicket)
+    .expect("transfer ticket panel is visible");
+
+    let click = clickable_panel_action(
+        &mut state,
+        area,
+        panel,
+        Panel::TransferTicket,
+        ActionId::OpenTicketTextInput,
+    );
+    handle_mouse_event(area, &mut state, &mut drag, click);
+
+    assert_eq!(state.panels.focused(), Panel::TransferTicket);
+    assert_eq!(
+        state.floating.last().map(|pane| pane.kind),
+        Some(FloatingKind::TicketTextInput)
+    );
+    assert_eq!(state.ticket_text_input.target().field_label(), "amount");
+    assert_eq!(drag, MouseDrag::default());
+}
+
+#[test]
+fn mouse_click_on_futures_state_edit_field_action_opens_input() {
+    let area = Rect::new(0, 0, 160, 48);
+    let mut state = AppState::from_config(crate::config::TuiConfig {
+        watchlist: vec!["BTCUSDT".to_string()],
+        workspace: crate::config::WorkspaceConfig {
+            current: WorkspaceKind::Account,
+        },
+        ..crate::config::TuiConfig::default()
+    });
+    state.reduce(Action::SelectFuturesStateTicketField(2));
+    let mut drag = MouseDrag::default();
+    let panel = layout::build(
+        area,
+        &state.layout,
+        &state.floating,
+        &state.visible_panels(),
+    )
+    .panel_rect(Panel::FuturesState)
+    .expect("futures state panel is visible");
+
+    let click = clickable_panel_action(
+        &mut state,
+        area,
+        panel,
+        Panel::FuturesState,
+        ActionId::OpenTicketTextInput,
+    );
+    handle_mouse_event(area, &mut state, &mut drag, click);
+
+    assert_eq!(state.panels.focused(), Panel::FuturesState);
+    assert_eq!(
+        state.floating.last().map(|pane| pane.kind),
+        Some(FloatingKind::TicketTextInput)
+    );
+    assert_eq!(state.ticket_text_input.target().field_label(), "leverage");
+    assert_eq!(drag, MouseDrag::default());
+}
+
+#[test]
 fn mouse_click_on_ready_order_ticket_stages_review() {
     let area = Rect::new(0, 0, 160, 48);
     let mut state = AppState::from_config(crate::config::TuiConfig {

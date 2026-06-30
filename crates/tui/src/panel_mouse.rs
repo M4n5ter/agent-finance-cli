@@ -333,7 +333,7 @@ fn transfer_ticket_rows(state: &AppState) -> TicketPanelRows {
     let preview = state.transfer_ticket_preview();
     TicketPanelRows {
         detail_count: 0,
-        actions: &[],
+        actions: crate::transfer_ticket_controls::TRANSFER_TICKET_ACTIONS,
         field_count: TransferTicketField::COUNT,
         field_adjustable: vec![true; TransferTicketField::COUNT],
         ready: preview.ready,
@@ -345,7 +345,7 @@ fn futures_state_ticket_rows(state: &AppState) -> TicketPanelRows {
     let preview = state.futures_state_ticket_preview();
     TicketPanelRows {
         detail_count: 0,
-        actions: &[],
+        actions: crate::futures_state_controls::FUTURES_STATE_ACTIONS,
         field_count: FuturesStateTicketField::MAX_COUNT,
         field_adjustable: vec![true, preview.scope_adjustable(), true],
         ready: preview.ready,
