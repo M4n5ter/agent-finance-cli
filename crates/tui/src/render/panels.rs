@@ -200,8 +200,11 @@ fn render_history(
         &state.theme,
         hover,
         mode,
-        state.chart.window(),
-        state.chart.cursor_bps(),
+        history::ChartView {
+            window: state.chart.window(),
+            cursor_bps: state.chart.cursor_bps(),
+            selected_overlay_index: state.chart.selected_reference_line(),
+        },
         &chart_overlays,
     );
     frame.render_widget(chart, chart_area);

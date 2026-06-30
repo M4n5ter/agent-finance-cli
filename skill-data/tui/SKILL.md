@@ -38,6 +38,7 @@ The TUI persists the watchlist, focused panel, docked panel set, column layout, 
 ## Keyboard
 
 - `h` / `l` or left / right moves the chart cursor.
+- `j` / `k` or down / up cycles through visible price, order, and position reference lines.
 - `[` / `]` zooms the chart window.
 - Number preset actions switch chart ranges.
 - `r` refreshes history for the selected symbol.

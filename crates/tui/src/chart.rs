@@ -189,6 +189,7 @@ pub struct ChartState {
     window: ChartWindow,
     cursor_bps: Option<u16>,
     overlays_visible: bool,
+    selected_reference_line: Option<usize>,
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
@@ -204,6 +205,7 @@ impl ChartState {
             window: ChartWindow::FULL,
             cursor_bps: None,
             overlays_visible: true,
+            selected_reference_line: None,
         }
     }
 
@@ -223,9 +225,34 @@ impl ChartState {
         self.overlays_visible
     }
 
+    pub const fn selected_reference_line(&self) -> Option<usize> {
+        self.selected_reference_line
+    }
+
     pub fn toggle_overlays(&mut self) -> bool {
         self.overlays_visible = !self.overlays_visible;
+        if !self.overlays_visible {
+            self.selected_reference_line = None;
+        }
         self.overlays_visible
+    }
+
+    pub fn shift_reference_line(&mut self, direction: isize, line_count: usize) -> Option<usize> {
+        if line_count == 0 {
+            self.selected_reference_line = None;
+            return None;
+        }
+
+        let current = self.selected_reference_line.unwrap_or_else(|| {
+            if direction.is_negative() {
+                0
+            } else {
+                line_count.saturating_sub(1)
+            }
+        }) as isize;
+        let next = (current + direction).rem_euclid(line_count as isize) as usize;
+        self.selected_reference_line = Some(next);
+        self.selected_reference_line
     }
 
     pub fn set_preset(&mut self, preset: ChartPreset) -> bool {
@@ -268,6 +295,7 @@ impl ChartState {
     pub fn reset_view(&mut self) {
         self.window = ChartWindow::FULL;
         self.cursor_bps = None;
+        self.selected_reference_line = None;
     }
 }
 
@@ -448,6 +476,21 @@ mod tests {
         assert!(state.overlays_visible());
         assert!(!state.toggle_overlays());
         assert!(state.toggle_overlays());
+    }
+
+    #[test]
+    fn chart_reference_line_selection_wraps_and_resets() {
+        let mut state = ChartState::new(ChartPreset::Auto);
+
+        assert_eq!(state.shift_reference_line(1, 3), Some(0));
+        assert_eq!(state.shift_reference_line(1, 3), Some(1));
+        assert_eq!(state.shift_reference_line(-1, 3), Some(0));
+        assert_eq!(state.shift_reference_line(-1, 3), Some(2));
+        assert_eq!(state.shift_reference_line(1, 0), None);
+
+        state.shift_reference_line(1, 3);
+        state.reset_view();
+        assert_eq!(state.selected_reference_line(), None);
     }
 
     #[test]

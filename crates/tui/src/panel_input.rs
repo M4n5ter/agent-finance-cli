@@ -9,7 +9,7 @@ use crate::state::{Action, AppState};
 pub(crate) fn key_action(state: &AppState, key: KeyEvent) -> Option<Action> {
     match state.panels.focused() {
         Panel::Watchlist => watchlist_key_action(key),
-        Panel::History => history_key_action(key),
+        Panel::History => history_key_action(state, key),
         Panel::OrderTicket => crate::order_ticket_controls::order_ticket_key_action(key),
         Panel::OpenOrders => crate::open_order_controls::open_order_key_action(key),
         Panel::Account => crate::account_controls::account_key_action(key),
@@ -57,7 +57,7 @@ pub(crate) fn wheel_action_for_panel(
     }
 }
 
-fn history_key_action(key: KeyEvent) -> Option<Action> {
+fn history_key_action(state: &AppState, key: KeyEvent) -> Option<Action> {
     if key.modifiers.contains(KeyModifiers::CONTROL)
         || key.modifiers.contains(KeyModifiers::ALT)
         || key.modifiers.contains(KeyModifiers::SUPER)
@@ -71,6 +71,12 @@ fn history_key_action(key: KeyEvent) -> Option<Action> {
         (KeyCode::Right | KeyCode::Char('l'), KeyModifiers::NONE) => {
             Some(Action::MoveChartCursor(1))
         }
+        (KeyCode::Up | KeyCode::Char('k'), KeyModifiers::NONE) => {
+            chart_reference_line_action(state, -1)
+        }
+        (KeyCode::Down | KeyCode::Char('j'), KeyModifiers::NONE) => {
+            chart_reference_line_action(state, 1)
+        }
         (KeyCode::Char('['), KeyModifiers::NONE) => Some(Action::ZoomChartWindow(-1)),
         (KeyCode::Char(']'), KeyModifiers::NONE) => Some(Action::ZoomChartWindow(1)),
         (KeyCode::Char('r'), KeyModifiers::NONE) => {
@@ -82,6 +88,18 @@ fn history_key_action(key: KeyEvent) -> Option<Action> {
         }
         _ => None,
     }
+}
+
+fn chart_reference_line_action(state: &AppState, direction: isize) -> Option<Action> {
+    if !state.chart.overlays_visible() {
+        return None;
+    }
+    let symbol = state.selected_symbol()?;
+    let line_count = crate::chart_overlay::lines_for_state(state, symbol).len();
+    (line_count > 0).then_some(Action::MoveChartReferenceLine {
+        direction,
+        line_count,
+    })
 }
 
 fn watchlist_key_action(key: KeyEvent) -> Option<Action> {
@@ -126,6 +144,7 @@ fn intent_review_key_action(key: KeyEvent) -> Option<Action> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use agent_finance_market::snapshot::{MarketSnapshot, QuoteSnapshot, RegularBasisSnapshot};
     use crossterm::event::KeyEvent;
 
     #[test]
@@ -137,28 +156,85 @@ mod tests {
             Some(Action::ZoomChartWindow(1))
         );
         assert_eq!(
-            history_key_action(KeyEvent::from(KeyCode::Left)),
+            history_key_action(&state, KeyEvent::from(KeyCode::Left)),
             Some(Action::MoveChartCursor(-1))
         );
         assert_eq!(
-            history_key_action(KeyEvent::from(KeyCode::Char('l'))),
+            history_key_action(&state, KeyEvent::from(KeyCode::Char('l'))),
             Some(Action::MoveChartCursor(1))
         );
         assert_eq!(
-            history_key_action(KeyEvent::from(KeyCode::Char('['))),
+            history_key_action(&state, KeyEvent::from(KeyCode::Char('['))),
             Some(Action::ZoomChartWindow(-1))
         );
         assert_eq!(
-            history_key_action(KeyEvent::from(KeyCode::Char(']'))),
+            history_key_action(&state, KeyEvent::from(KeyCode::Char(']'))),
             Some(Action::ZoomChartWindow(1))
         );
         assert_eq!(
-            history_key_action(KeyEvent::from(KeyCode::Esc)),
+            history_key_action(&state, KeyEvent::from(KeyCode::Esc)),
             Some(Action::ResetChartView)
         );
         assert_eq!(
-            history_key_action(KeyEvent::from(KeyCode::Char('2'))),
+            history_key_action(&state, KeyEvent::from(KeyCode::Char('2'))),
             Some(Action::SetChartPreset(ChartPreset::FiveDays))
+        );
+    }
+
+    #[test]
+    fn history_helper_line_keys_follow_visible_chart_overlays() {
+        let mut state = AppState::from_config(crate::config::TuiConfig {
+            watchlist: vec!["CRDO".to_string()],
+            ..crate::config::TuiConfig::default()
+        });
+
+        assert_eq!(
+            history_key_action(&state, KeyEvent::from(KeyCode::Char('j'))),
+            None
+        );
+
+        state.market_snapshot = Some(MarketSnapshot {
+            fetched_at_local: None,
+            quotes: vec![QuoteSnapshot {
+                symbol: "CRDO".to_string(),
+                price: Some(109.5),
+                currency: Some("USD".to_string()),
+                provider: "test".to_string(),
+                session: Some("regular".to_string()),
+                market_time_local: None,
+                change_pct: None,
+                aliases: Vec::new(),
+                regular_basis: RegularBasisSnapshot {
+                    previous_close: Some(105.0),
+                    open: Some(101.0),
+                    high: Some(112.0),
+                    low: Some(96.0),
+                    volume: None,
+                },
+            }],
+            errors: Vec::new(),
+        });
+
+        assert_eq!(
+            history_key_action(&state, KeyEvent::from(KeyCode::Char('j'))),
+            Some(Action::MoveChartReferenceLine {
+                direction: 1,
+                line_count: 5
+            })
+        );
+        assert_eq!(
+            history_key_action(&state, KeyEvent::from(KeyCode::Char('k'))),
+            Some(Action::MoveChartReferenceLine {
+                direction: -1,
+                line_count: 5
+            })
+        );
+
+        state.reduce(Action::ToggleChartOverlays);
+
+        assert_eq!(
+            history_key_action(&state, KeyEvent::from(KeyCode::Char('j'))),
+            None
         );
     }
 }

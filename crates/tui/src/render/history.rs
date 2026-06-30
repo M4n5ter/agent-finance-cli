@@ -1,7 +1,7 @@
 use agent_finance_market::history_snapshot::HistoryBarSnapshot;
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
-use ratatui::style::Style;
+use ratatui::style::{Modifier, Style};
 use ratatui::widgets::Widget;
 
 use crate::chart::ChartWindow;
@@ -16,8 +16,7 @@ pub(super) fn chart<'a>(
     theme: &'a ThemeConfig,
     hover: Option<MousePosition>,
     mode: ChartMode,
-    window: ChartWindow,
-    cursor_bps: Option<u16>,
+    view: ChartView,
     overlays: &'a [ChartOverlayLine],
 ) -> CandlestickChart<'a> {
     CandlestickChart {
@@ -25,8 +24,7 @@ pub(super) fn chart<'a>(
         theme,
         hover,
         mode,
-        window,
-        cursor_bps,
+        view,
         overlays,
     }
 }
@@ -37,9 +35,15 @@ pub(super) struct CandlestickChart<'a> {
     theme: &'a ThemeConfig,
     hover: Option<MousePosition>,
     mode: ChartMode,
-    window: ChartWindow,
-    cursor_bps: Option<u16>,
+    view: ChartView,
     overlays: &'a [ChartOverlayLine],
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub(super) struct ChartView {
+    pub window: ChartWindow,
+    pub cursor_bps: Option<u16>,
+    pub selected_overlay_index: Option<usize>,
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
@@ -53,7 +57,7 @@ impl Widget for CandlestickChart<'_> {
         if area.width < 8 || area.height < 4 {
             return;
         }
-        let visible = visible_bars(self.bars, self.window);
+        let visible = visible_bars(self.bars, self.view.window);
         let buckets = compressed_bars(visible, bucket_capacity(area));
         if buckets.is_empty() {
             return;
@@ -66,7 +70,14 @@ impl Widget for CandlestickChart<'_> {
             self.overlays.iter().map(|line| line.price),
         );
         render_reference_lines(buffer, areas.price, bounds, &buckets, self.mode, self.theme);
-        render_chart_overlay_lines(buffer, areas.price, bounds, self.overlays, self.theme);
+        render_chart_overlay_lines(
+            buffer,
+            areas.price,
+            bounds,
+            self.overlays,
+            self.view.selected_overlay_index,
+            self.theme,
+        );
         render_overlays(buffer, areas.price, bounds, &buckets, geometry, self.theme);
         render_candles(buffer, areas.price, bounds, &buckets, geometry, self.theme);
         render_volume(buffer, areas.volume, &buckets, geometry, self.theme);
@@ -76,6 +87,7 @@ impl Widget for CandlestickChart<'_> {
             areas.price,
             bounds,
             self.overlays,
+            self.view.selected_overlay_index,
             self.mode,
             self.theme,
         );
@@ -85,8 +97,8 @@ impl Widget for CandlestickChart<'_> {
         render_cursor(
             buffer,
             area,
-            self.cursor_bps,
-            self.window,
+            self.view.cursor_bps,
+            self.view.window,
             &buckets,
             geometry,
             self.theme,
@@ -337,14 +349,16 @@ fn render_chart_overlay_lines(
     area: Rect,
     bounds: PriceBounds,
     overlays: &[ChartOverlayLine],
+    selected_overlay_index: Option<usize>,
     theme: &ThemeConfig,
 ) {
-    for overlay in overlays {
+    for (index, overlay) in overlays.iter().enumerate() {
+        let selected = selected_overlay_index == Some(index);
         render_horizontal_reference_line(
             buffer,
             area,
             bounds.row(area, overlay.price),
-            overlay_style(overlay.kind, theme),
+            overlay_style(overlay.kind, selected, theme),
         );
     }
 }
@@ -354,15 +368,18 @@ fn render_chart_overlay_labels(
     area: Rect,
     bounds: PriceBounds,
     overlays: &[ChartOverlayLine],
+    selected_overlay_index: Option<usize>,
     mode: ChartMode,
     theme: &ThemeConfig,
 ) {
     if mode != ChartMode::Workbench || area.width < 32 {
         return;
     }
-    for overlay in overlays.iter().take(8) {
+    for (index, overlay) in overlays.iter().take(8).enumerate() {
+        let selected = selected_overlay_index == Some(index);
         let label = format!(
-            "{} {}",
+            "{}{} {}",
+            if selected { "> " } else { "" },
             overlay.label,
             super::widgets::format_price(overlay.price)
         );
@@ -373,13 +390,13 @@ fn render_chart_overlay_labels(
                 ..area
             },
             &label,
-            overlay_style(overlay.kind, theme),
+            overlay_style(overlay.kind, selected, theme),
         );
     }
 }
 
-fn overlay_style(kind: ChartOverlayKind, theme: &ThemeConfig) -> Style {
-    match kind {
+fn overlay_style(kind: ChartOverlayKind, selected: bool, theme: &ThemeConfig) -> Style {
+    let style = match kind {
         ChartOverlayKind::Current => theme.accent_style(),
         ChartOverlayKind::PreviousClose
         | ChartOverlayKind::DayOpen
@@ -387,6 +404,11 @@ fn overlay_style(kind: ChartOverlayKind, theme: &ThemeConfig) -> Style {
         | ChartOverlayKind::DayLow => theme.muted_style(),
         ChartOverlayKind::BuyOrder | ChartOverlayKind::LongPosition => theme.success_style(),
         ChartOverlayKind::SellOrder | ChartOverlayKind::ShortPosition => theme.danger_style(),
+    };
+    if selected {
+        style.add_modifier(Modifier::BOLD | Modifier::REVERSED)
+    } else {
+        style
     }
 }
 
@@ -867,6 +889,42 @@ mod tests {
         assert_eq!(buffer[(1, 0)].symbol(), "⡇");
         assert_eq!(buffer[(1, 1)].symbol(), "█");
         assert_eq!(buffer[(1, 2)].symbol(), "┊");
+    }
+
+    #[test]
+    fn selected_overlay_label_is_visible_in_workbench() {
+        let mut buffer = Buffer::empty(Rect::new(0, 0, 40, 5));
+        let area = Rect::new(0, 0, 40, 5);
+        let overlays = vec![
+            ChartOverlayLine {
+                price: 100.0,
+                label: "cur".to_string(),
+                kind: ChartOverlayKind::Current,
+            },
+            ChartOverlayLine {
+                price: 95.0,
+                label: "buy order".to_string(),
+                kind: ChartOverlayKind::BuyOrder,
+            },
+        ];
+
+        render_chart_overlay_labels(
+            &mut buffer,
+            area,
+            PriceBounds::new(90.0, 110.0),
+            &overlays,
+            Some(0),
+            ChartMode::Workbench,
+            &ThemeConfig::default(),
+        );
+
+        assert!(row_text(&buffer, 2).starts_with("> cur"));
+        assert!(
+            buffer[(0, 2)]
+                .style()
+                .add_modifier
+                .contains(Modifier::REVERSED)
+        );
     }
 
     fn row_text(buffer: &Buffer, y: u16) -> String {

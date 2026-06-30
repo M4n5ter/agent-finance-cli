@@ -1053,6 +1053,12 @@ impl AppState {
             Action::ShiftChartPreset(direction) => self.shift_chart_preset(direction),
             Action::MoveChartCursor(direction) => self.chart.move_cursor(direction),
             Action::ZoomChartWindow(direction) => self.chart.zoom_window(direction),
+            Action::MoveChartReferenceLine {
+                direction,
+                line_count,
+            } => {
+                self.chart.shift_reference_line(direction, line_count);
+            }
             Action::ToggleChartOverlays => {
                 let visible = self.chart.toggle_overlays();
                 let status = if visible { "shown" } else { "hidden" };
@@ -1597,6 +1603,10 @@ pub enum Action {
     ShiftChartPreset(isize),
     MoveChartCursor(isize),
     ZoomChartWindow(isize),
+    MoveChartReferenceLine {
+        direction: isize,
+        line_count: usize,
+    },
     ToggleChartOverlays,
     SelectChartWindow {
         start_bps: u16,

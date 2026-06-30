@@ -1712,6 +1712,29 @@ fn chart_overlay_toggle_is_command_driven_session_state() {
 }
 
 #[test]
+fn chart_reference_line_selection_is_reducer_state() {
+    let mut state = AppState::from_config(TuiConfig::default());
+
+    state.reduce(Action::MoveChartReferenceLine {
+        direction: 1,
+        line_count: 3,
+    });
+    assert_eq!(state.chart.selected_reference_line(), Some(0));
+
+    state.reduce(Action::MoveChartReferenceLine {
+        direction: -1,
+        line_count: 3,
+    });
+    assert_eq!(state.chart.selected_reference_line(), Some(2));
+
+    state.reduce(Action::MoveChartReferenceLine {
+        direction: 1,
+        line_count: 0,
+    });
+    assert_eq!(state.chart.selected_reference_line(), None);
+}
+
+#[test]
 fn watchlist_add_symbol_selection_resets_chart_session_view() {
     let mut state = AppState::from_config(TuiConfig {
         watchlist: vec!["CRDO".to_string()],
