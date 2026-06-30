@@ -318,6 +318,9 @@ fn account_workspace_renders_signed_account_state() {
     assert!(text.contains("provider: binance"));
     assert!(text.contains("environment: live"));
     assert!(text.contains("risk: live:allowed"));
+    assert!(text.contains("[refresh]"));
+    assert!(text.contains("[revalidate]"));
+    assert!(text.contains("[enable live]"));
     assert!(text.contains("allowed symbols: btcusdt spot limit <= 50"));
     assert!(text.contains("missing profile permissions: spot_trading"));
     assert!(text.contains(&format!(

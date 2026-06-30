@@ -377,7 +377,16 @@ mod tests {
 
         assert_eq!(
             mode_key_hints(&state),
-            vec!["up/down open order", "c stage cancel", "q quit"]
+            vec![
+                "up/down open order",
+                "c stage cancel",
+                "r refresh",
+                "v revalidate",
+                "l live",
+                "t transfer",
+                "f futures",
+                "q quit",
+            ]
         );
     }
 

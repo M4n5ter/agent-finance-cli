@@ -82,6 +82,10 @@ impl AppState {
                 self.close_text_input_floatings();
                 self.reduce(Action::ExecuteStagedChange);
             }
+            ActionId::RefreshAccountSnapshot => {
+                self.close_text_input_floatings();
+                self.reduce(Action::RequestAccountRefresh);
+            }
             ActionId::RevalidateTradingProfile => {
                 self.close_text_input_floatings();
                 self.revalidate_trading_profile();

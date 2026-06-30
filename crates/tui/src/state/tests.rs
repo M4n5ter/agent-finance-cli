@@ -2309,6 +2309,21 @@ fn trading_profile_revalidation_requires_selected_profile() {
 }
 
 #[test]
+fn account_refresh_action_records_a_single_load_request_intent() {
+    let mut state = AppState::from_config(TuiConfig {
+        trading: crate::config::TradingConfig {
+            default_profile: Some("mainnet".to_string()),
+        },
+        ..TuiConfig::default()
+    });
+
+    state.reduce(Action::Execute(ActionId::RefreshAccountSnapshot));
+
+    assert!(state.take_pending_account_refresh());
+    assert!(!state.take_pending_account_refresh());
+}
+
+#[test]
 fn profile_live_toggle_stages_validated_profile_risk_review_for_local_commit_confirmation() {
     let mut state = AppState::from_config(TuiConfig {
         trading: crate::config::TradingConfig {

@@ -104,6 +104,7 @@ pub struct AppState {
     staged_changes: StagedChanges,
     pending_staged_confirmation: Option<PendingStagedConfirmation>,
     pending_staged_execution: Option<StagedExecutionRequest>,
+    pending_account_refresh: bool,
     pending_provider_preferences_update: bool,
     pending_config_save: bool,
 }
@@ -161,6 +162,7 @@ impl AppState {
             staged_changes: StagedChanges::default(),
             pending_staged_confirmation: None,
             pending_staged_execution: None,
+            pending_account_refresh: false,
             pending_provider_preferences_update: false,
             pending_config_save: false,
         };
@@ -262,6 +264,10 @@ impl AppState {
 
     pub fn take_pending_staged_execution(&mut self) -> Option<StagedExecutionRequest> {
         self.pending_staged_execution.take()
+    }
+
+    pub fn take_pending_account_refresh(&mut self) -> bool {
+        std::mem::take(&mut self.pending_account_refresh)
     }
 
     pub fn take_pending_provider_preferences_update(&mut self) -> Option<ProviderConfig> {
@@ -548,6 +554,10 @@ impl AppState {
             "config save requested for {}",
             self.config_changes.join(", ")
         ));
+    }
+
+    fn request_account_refresh(&mut self) {
+        self.pending_account_refresh = true;
     }
 
     fn config_saved(&mut self) {
@@ -915,6 +925,7 @@ impl AppState {
             Action::StageTransferTicket => self.stage_transfer_ticket(),
             Action::StageFuturesStateTicket => self.stage_futures_state_ticket(),
             Action::StageSelectedOpenOrderCancel => self.stage_selected_open_order_cancel(),
+            Action::RequestAccountRefresh => self.request_account_refresh(),
             Action::MoveStagedChangeSelection(direction) => {
                 self.staged_changes.move_selection(direction);
             }
@@ -1126,6 +1137,7 @@ impl AppState {
                 self.apply_profile_risk_commit_failure(id, error);
             }
             Action::Log(message) => self.task_log.info(message),
+            Action::LogWarning(message) => self.task_log.warning_event(message),
         }
     }
 
@@ -1402,6 +1414,7 @@ pub enum Action {
     StageTransferTicket,
     StageFuturesStateTicket,
     StageSelectedOpenOrderCancel,
+    RequestAccountRefresh,
     MoveStagedChangeSelection(isize),
     SelectStagedChange(usize),
     ExecuteStagedChange,
@@ -1539,6 +1552,7 @@ pub enum Action {
     CloseStagedChange(String),
     CloseSelectedStagedChange,
     Log(String),
+    LogWarning(String),
 }
 
 #[cfg(test)]

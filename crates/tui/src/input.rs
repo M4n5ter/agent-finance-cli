@@ -530,10 +530,16 @@ mod tests {
             Some(Action::Execute(ActionId::ShiftWorkspace(1)))
         );
         assert_eq!(key_action(&state, KeyEvent::from(KeyCode::Right)), None);
-        assert_eq!(key_action(&state, KeyEvent::from(KeyCode::Char('t'))), None);
+        assert_eq!(
+            key_action(&state, KeyEvent::from(KeyCode::Char('t'))),
+            Some(Action::Execute(ActionId::FocusPanel(Panel::TransferTicket)))
+        );
         assert_eq!(key_action(&state, KeyEvent::from(KeyCode::Char('u'))), None);
         assert_eq!(key_action(&state, KeyEvent::from(KeyCode::Char('i'))), None);
-        assert_eq!(key_action(&state, KeyEvent::from(KeyCode::Char('f'))), None);
+        assert_eq!(
+            key_action(&state, KeyEvent::from(KeyCode::Char('f'))),
+            Some(Action::Execute(ActionId::FocusPanel(Panel::FuturesState)))
+        );
     }
 
     #[test]
@@ -648,6 +654,36 @@ mod tests {
                 KeyEvent::new(KeyCode::Char('t'), KeyModifiers::CONTROL)
             ),
             Some(Action::Execute(ActionId::ToggleLiveWrites))
+        );
+    }
+
+    #[test]
+    fn account_focus_routes_operation_keys_before_global_keys() {
+        let mut state = AppState::from_config(crate::config::TuiConfig::default());
+        state.reduce(Action::Execute(ActionId::SetWorkspace(
+            WorkspaceKind::Account,
+        )));
+        state.reduce(Action::Execute(ActionId::FocusPanel(Panel::Account)));
+
+        assert_eq!(
+            key_action(&state, KeyEvent::from(KeyCode::Char('r'))),
+            Some(Action::Execute(ActionId::RefreshAccountSnapshot))
+        );
+        assert_eq!(
+            key_action(&state, KeyEvent::from(KeyCode::Char('v'))),
+            Some(Action::Execute(ActionId::RevalidateTradingProfile))
+        );
+        assert_eq!(
+            key_action(&state, KeyEvent::from(KeyCode::Char('l'))),
+            Some(Action::Execute(ActionId::ToggleLiveWrites))
+        );
+        assert_eq!(
+            key_action(&state, KeyEvent::from(KeyCode::Char('t'))),
+            Some(Action::Execute(ActionId::FocusPanel(Panel::TransferTicket)))
+        );
+        assert_eq!(
+            key_action(&state, KeyEvent::from(KeyCode::Char('f'))),
+            Some(Action::Execute(ActionId::FocusPanel(Panel::FuturesState)))
         );
     }
 

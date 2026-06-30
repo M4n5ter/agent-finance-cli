@@ -111,6 +111,7 @@ pub enum ActionId {
     StageFuturesStateTicket,
     StageSelectedOpenOrderCancel,
     ExecuteStagedChange,
+    RefreshAccountSnapshot,
     RevalidateTradingProfile,
     StageProfileLiveToggle,
     SaveConfig,
@@ -303,6 +304,12 @@ pub static ACTION_REGISTRY: LazyLock<Vec<ActionSpec>> = LazyLock::new(|| {
             ActionId::ExecuteStagedChange,
             "Execute staged change",
             "Review the selected ready staged change before provider submit or local profile commit"
+        ),
+        action!(
+            "refresh-account-snapshot",
+            ActionId::RefreshAccountSnapshot,
+            "Refresh account snapshot",
+            "Reload signed account balances, positions, open orders, and transfer history"
         ),
         action!(
             "open-trading-profile-editor",

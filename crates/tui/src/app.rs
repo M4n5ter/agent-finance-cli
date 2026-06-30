@@ -13,7 +13,7 @@ use ratatui::backend::CrosstermBackend;
 
 use agent_finance_market::is_likely_crypto_pair;
 
-use crate::account_load::{AccountLoadRuntime, request_account_load};
+use crate::account_load::{AccountLoadMode, AccountLoadRuntime, request_account_load};
 use crate::config::{TuiConfig, TuiLaunch};
 use crate::dump::TuiDump;
 use crate::input::{self, MouseDrag};
@@ -50,7 +50,12 @@ pub fn run(launch: TuiLaunch) -> Result<()> {
     let mut symbol_loads = SymbolLoadRuntimes::new();
     request_refresh(&scheduler, &mut state, &mut next_refresh_generation);
     request_profile_validation_load(&scheduler, &mut state, &mut profile_validation_load);
-    request_account_load(&scheduler, &mut state, &mut account_load, false);
+    request_account_load(
+        &scheduler,
+        &mut state,
+        &mut account_load,
+        AccountLoadMode::Cached,
+    );
     request_symbol_loads(&scheduler, &mut state, &mut symbol_loads, false);
 
     let result = run_loop(
@@ -102,13 +107,23 @@ fn run_dump_state(
 
     request_refresh(&scheduler, &mut state, &mut next_refresh_generation);
     request_profile_validation_load(&scheduler, &mut state, &mut profile_validation_load);
-    request_account_load(&scheduler, &mut state, &mut account_load, false);
+    request_account_load(
+        &scheduler,
+        &mut state,
+        &mut account_load,
+        AccountLoadMode::Cached,
+    );
     request_symbol_loads(&scheduler, &mut state, &mut symbol_loads, false);
 
     while Instant::now() < deadline {
         drain_scheduler_events(&scheduler, &mut state);
         request_profile_validation_load(&scheduler, &mut state, &mut profile_validation_load);
-        request_account_load(&scheduler, &mut state, &mut account_load, false);
+        request_account_load(
+            &scheduler,
+            &mut state,
+            &mut account_load,
+            AccountLoadMode::Cached,
+        );
         request_symbol_loads(&scheduler, &mut state, &mut symbol_loads, false);
         if dump_is_ready(&state) {
             break;
@@ -149,7 +164,12 @@ fn run_loop(
 
         drain_scheduler_events(context.scheduler, state);
         request_profile_validation_load(context.scheduler, state, context.profile_validation_load);
-        request_account_load(context.scheduler, state, context.account_load, false);
+        request_account_load(
+            context.scheduler,
+            state,
+            context.account_load,
+            AccountLoadMode::Cached,
+        );
         request_symbol_loads(context.scheduler, state, context.symbol_loads, false);
 
         let timeout = context
@@ -190,7 +210,17 @@ fn run_loop(
                     },
                     state,
                 );
-                request_account_load(context.scheduler, state, context.account_load, false);
+                let account_load_mode = if state.take_pending_account_refresh() {
+                    AccountLoadMode::UserRefresh
+                } else {
+                    AccountLoadMode::Cached
+                };
+                request_account_load(
+                    context.scheduler,
+                    state,
+                    context.account_load,
+                    account_load_mode,
+                );
                 request_profile_validation_load(
                     context.scheduler,
                     state,

@@ -774,6 +774,42 @@ fn mouse_click_on_account_transfer_action_focuses_transfer_ticket() {
 }
 
 #[test]
+fn mouse_click_on_account_refresh_action_requests_snapshot_reload() {
+    let area = Rect::new(0, 0, 160, 48);
+    let mut state = AppState::from_config(crate::config::TuiConfig {
+        workspace: crate::config::WorkspaceConfig {
+            current: WorkspaceKind::Account,
+        },
+        trading: crate::config::TradingConfig {
+            default_profile: Some("mainnet".to_string()),
+        },
+        ..crate::config::TuiConfig::default()
+    });
+    let mut drag = MouseDrag::default();
+    let panel = layout::build(
+        area,
+        &state.layout,
+        &state.floating,
+        &state.visible_panels(),
+    )
+    .panel_rect(Panel::Account)
+    .expect("account panel is visible");
+
+    let click = clickable_panel_action(
+        &mut state,
+        area,
+        panel,
+        Panel::Account,
+        ActionId::RefreshAccountSnapshot,
+    );
+    handle_mouse_event(area, &mut state, &mut drag, click);
+
+    assert!(state.take_pending_account_refresh());
+    assert_eq!(state.panels.focused(), Panel::Account);
+    assert_eq!(drag, MouseDrag::default());
+}
+
+#[test]
 fn mouse_click_on_account_holding_prefills_transfer_ticket() {
     let area = Rect::new(0, 0, 200, 80);
     let mut state = AppState::from_config(crate::config::TuiConfig {

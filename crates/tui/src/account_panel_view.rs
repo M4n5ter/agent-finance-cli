@@ -2,8 +2,8 @@ use ratatui::style::Modifier;
 use ratatui::text::{Line, Span};
 
 use crate::account::ACCOUNT_READ_PLAN;
+use crate::account_controls::{ACCOUNT_OPERATIONS, account_operation_label};
 use crate::action_line_view::{ActionLine, ActionSpan, right_aligned_action_line};
-use crate::command::ActionId;
 use crate::futures_state_ticket::FuturesStateTicketPreset;
 use crate::model::Panel;
 use crate::mouse_target::MouseTarget;
@@ -17,8 +17,6 @@ use crate::render::profile_policy::{ProfilePolicyFormat, profile_policy_lines};
 use crate::render::widgets::compact_text;
 
 const VISIBLE_TRANSFER_LIMIT: usize = 4;
-const ACCOUNT_TRANSFER_LABEL: &str = "[transfer]";
-const ACCOUNT_FUTURES_STATE_LABEL: &str = "[futures state]";
 const HOLDING_TRANSFER_LABEL: &str = "[transfer]";
 const HOLDING_FUTURES_STATE_LABEL: &str = "[state]";
 const HOLDING_ACTION_GAP: u16 = 2;
@@ -172,7 +170,7 @@ fn account_action_rows(
         return Vec::new();
     }
 
-    let action_line = account_action_line(width);
+    let action_line = account_action_line(state, width);
     let actions = action_line.actions.clone();
     vec![AccountPanelRow::action_line(
         styled_panel_action_line(&action_line, &state.theme, Panel::Account, mouse_target),
@@ -180,18 +178,15 @@ fn account_action_rows(
     )]
 }
 
-fn account_action_line(width: u16) -> PanelActionLine {
+fn account_action_line(state: &AppState, width: u16) -> PanelActionLine {
     let mut line = PanelActionLine::new("actions", width);
-    line.push_visible_text("  ");
-    line.push_visible_action(
-        ACCOUNT_TRANSFER_LABEL,
-        ActionId::FocusPanel(Panel::TransferTicket),
-    );
-    line.push_visible_text("  ");
-    line.push_visible_action(
-        ACCOUNT_FUTURES_STATE_LABEL,
-        ActionId::FocusPanel(Panel::FuturesState),
-    );
+    for operation in ACCOUNT_OPERATIONS {
+        line.push_visible_text("  ");
+        line.push_visible_action(
+            account_operation_label(*operation, state.live_writes_enabled),
+            operation.action,
+        );
+    }
     line
 }
 
@@ -444,6 +439,7 @@ fn warning_rows(state: &AppState, snapshot: &crate::AccountSnapshot) -> Vec<Acco
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::command::ActionId;
     use agent_finance_core::{
         Environment, Market, Provider, SignedReadRequest, SignedReadSnapshot, TransferDirection,
     };
@@ -495,12 +491,11 @@ mod tests {
             ),
             Some(action)
         );
-        assert_eq!(
-            rows_for_width(&state, None, 18)
+        assert!(
+            !rows_for_width(&state, None, 18)
                 .into_iter()
                 .flat_map(|row| row.actions)
-                .count(),
-            0
+                .any(|span| span.action == ActionId::StageSelectedOpenOrderCancel)
         );
     }
 
@@ -530,10 +525,30 @@ mod tests {
         assert_eq!(
             actions,
             vec![
+                ActionId::RefreshAccountSnapshot,
+                ActionId::RevalidateTradingProfile,
+                ActionId::ToggleLiveWrites,
                 ActionId::FocusPanel(Panel::TransferTicket),
                 ActionId::FocusPanel(Panel::FuturesState),
             ]
         );
+    }
+
+    #[test]
+    fn rows_render_live_write_session_state_as_account_action() {
+        let mut state = AppState::from_config(crate::config::TuiConfig {
+            trading: crate::config::TradingConfig {
+                default_profile: Some("mainnet".to_string()),
+            },
+            ..crate::config::TuiConfig::default()
+        });
+
+        let disabled_text = rows_text_ref(&rows_for_width(&state, None, 120));
+        state.live_writes_enabled = true;
+        let enabled_text = rows_text_ref(&rows_for_width(&state, None, 120));
+
+        assert!(disabled_text.contains("[enable live]"));
+        assert!(enabled_text.contains("[disable live]"));
     }
 
     #[test]
