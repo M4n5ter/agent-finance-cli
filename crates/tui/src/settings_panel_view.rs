@@ -2,8 +2,10 @@ use ratatui::style::Modifier;
 use ratatui::text::{Line, Span};
 
 use crate::action_line_view::{ActionLine, ActionSpan};
-use crate::model::Panel;
+use crate::command::ActionId;
+use crate::model::{FloatingKind, Panel};
 use crate::mouse_target::MouseTarget;
+use crate::panel_action_line_view::{PanelActionLine, PanelActionSpan, styled_panel_action_line};
 use crate::settings_editor::SettingRow;
 use crate::state::AppState;
 
@@ -20,6 +22,7 @@ pub(crate) struct SettingsPanelRow {
     pub line: Line<'static>,
     pub setting_index: Option<usize>,
     pub actions: Vec<SettingActionSpan>,
+    pub panel_actions: Vec<PanelActionSpan>,
 }
 
 impl SettingsPanelRow {
@@ -28,6 +31,7 @@ impl SettingsPanelRow {
             line: Line::from(text.into()),
             setting_index: None,
             actions: Vec::new(),
+            panel_actions: Vec::new(),
         }
     }
 
@@ -36,6 +40,7 @@ impl SettingsPanelRow {
             line,
             setting_index: None,
             actions: Vec::new(),
+            panel_actions: Vec::new(),
         }
     }
 
@@ -44,6 +49,16 @@ impl SettingsPanelRow {
             line,
             setting_index: Some(index),
             actions,
+            panel_actions: Vec::new(),
+        }
+    }
+
+    fn panel_action(line: Line<'static>, panel_actions: Vec<PanelActionSpan>) -> Self {
+        Self {
+            line,
+            setting_index: None,
+            actions: Vec::new(),
+            panel_actions,
         }
     }
 }
@@ -103,19 +118,12 @@ pub(crate) fn rows(
         SettingsPanelRow::text(""),
         SettingsPanelRow::text("settings editor"),
     ];
+    rows.extend(settings_action_rows(state, width, mouse_target));
     rows.extend(setting_rows(state, width, mouse_target));
     rows.extend([
         SettingsPanelRow::text(""),
         SettingsPanelRow::text(crate::settings_controls::settings_panel_hint()),
         SettingsPanelRow::text(""),
-        SettingsPanelRow::text("available editors"),
-        SettingsPanelRow::text(
-            ": command palette  a add symbols  d delete symbol  watchlist left/right reorder",
-        ),
-        SettingsPanelRow::text(
-            "profile/risk: use the Profile / Risk panel for validation and risk changes",
-        ),
-        SettingsPanelRow::text("save/undo: command palette -> Save config / Undo config change"),
     ]);
     rows.extend(state.config_changes.iter().take(3).map(|change| {
         SettingsPanelRow::line(Line::from(Span::styled(
@@ -134,6 +142,20 @@ pub(crate) fn setting_index_at_content_row(
     rows(state, width, None).get(content_row)?.setting_index
 }
 
+pub(crate) fn panel_action_at_content_cell(
+    state: &AppState,
+    width: u16,
+    content_row: usize,
+    content_column: u16,
+) -> Option<PanelActionSpan> {
+    rows(state, width, None)
+        .get(content_row)?
+        .panel_actions
+        .iter()
+        .copied()
+        .find(|span| (span.start..span.end).contains(&content_column))
+}
+
 pub(crate) fn action_at_content_cell(
     state: &AppState,
     width: u16,
@@ -146,6 +168,56 @@ pub(crate) fn action_at_content_cell(
         .iter()
         .copied()
         .find(|span| (span.start..span.end).contains(&content_column))
+}
+
+fn settings_action_rows(
+    state: &AppState,
+    width: u16,
+    mouse_target: Option<MouseTarget>,
+) -> Vec<SettingsPanelRow> {
+    vec![settings_action_row(
+        state,
+        width,
+        mouse_target,
+        "actions",
+        &[
+            (
+                "[add symbols]",
+                ActionId::OpenFloating(FloatingKind::WatchlistAdd),
+            ),
+            (
+                "[set profile]",
+                ActionId::OpenFloating(FloatingKind::TradingProfile),
+            ),
+            ("[profile/risk]", ActionId::FocusPanel(Panel::ProfileRisk)),
+            ("[save]", ActionId::SaveConfig),
+            ("[undo]", ActionId::UndoConfigChange),
+            (
+                "[providers]",
+                ActionId::OpenFloating(FloatingKind::ProviderDetails),
+            ),
+            ("[allow_live]", ActionId::StageProfileLiveToggle),
+        ],
+    )]
+}
+
+fn settings_action_row(
+    state: &AppState,
+    width: u16,
+    mouse_target: Option<MouseTarget>,
+    label: &'static str,
+    actions: &[(&'static str, ActionId)],
+) -> SettingsPanelRow {
+    let mut action_line = PanelActionLine::new(label, width);
+    for (label, action) in actions {
+        action_line.push_visible_text("  ");
+        action_line.push_visible_action(label, *action);
+    }
+    let panel_actions = action_line.actions.clone();
+    SettingsPanelRow::panel_action(
+        styled_panel_action_line(&action_line, &state.theme, Panel::Settings, mouse_target),
+        panel_actions,
+    )
 }
 
 fn setting_rows(
@@ -289,6 +361,51 @@ mod tests {
                 direction: 1
             }
         );
+    }
+
+    #[test]
+    fn rows_expose_panel_driven_settings_actions() {
+        let state = AppState::from_config(crate::config::TuiConfig::default());
+
+        let actions = rows(&state, 140, None)
+            .into_iter()
+            .flat_map(|row| row.panel_actions)
+            .map(|span| span.action)
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            actions,
+            vec![
+                ActionId::OpenFloating(FloatingKind::WatchlistAdd),
+                ActionId::OpenFloating(FloatingKind::TradingProfile),
+                ActionId::FocusPanel(Panel::ProfileRisk),
+                ActionId::SaveConfig,
+                ActionId::UndoConfigChange,
+                ActionId::OpenFloating(FloatingKind::ProviderDetails),
+                ActionId::StageProfileLiveToggle,
+            ]
+        );
+    }
+
+    #[test]
+    fn panel_action_at_content_cell_maps_rendered_settings_action() {
+        let state = AppState::from_config(crate::config::TuiConfig::default());
+        let rendered_rows = rows(&state, 140, None);
+        let (content_row, span) = rendered_rows
+            .iter()
+            .enumerate()
+            .find_map(|(content_row, row)| {
+                row.panel_actions
+                    .iter()
+                    .find(|span| span.action == ActionId::OpenFloating(FloatingKind::WatchlistAdd))
+                    .map(|span| (content_row, *span))
+            })
+            .expect("watchlist add action is rendered");
+
+        let action = panel_action_at_content_cell(&state, 140, content_row, span.start)
+            .expect("watchlist add action is clickable");
+
+        assert_eq!(action, span);
     }
 
     #[test]

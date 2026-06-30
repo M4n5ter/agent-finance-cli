@@ -987,10 +987,213 @@ fn mouse_click_on_settings_row_selects_setting() {
     .panel_rect(Panel::Settings)
     .expect("settings panel is visible");
 
-    handle_mouse_event(area, &mut state, &mut drag, panel_click(panel, 14));
+    let click = clickable_panel_target(
+        &mut state,
+        area,
+        panel,
+        |target| target.panel_row_hovered(Panel::Settings, 2),
+        "settings row was not found",
+    );
+    handle_mouse_event(area, &mut state, &mut drag, click);
 
     assert_eq!(state.settings_editor.selected().label(), "theme accent");
     assert_eq!(state.panels.focused(), Panel::Settings);
+    assert_eq!(drag, MouseDrag::default());
+}
+
+#[test]
+fn mouse_click_on_settings_add_symbols_action_opens_watchlist_add() {
+    let area = Rect::new(0, 0, 160, 48);
+    let mut state = AppState::from_config(crate::config::TuiConfig {
+        workspace: crate::config::WorkspaceConfig {
+            current: WorkspaceKind::Settings,
+        },
+        ..crate::config::TuiConfig::default()
+    });
+    let mut drag = MouseDrag::default();
+    let panel = layout::build(
+        area,
+        &state.layout,
+        &state.floating,
+        &state.visible_panels(),
+    )
+    .panel_rect(Panel::Settings)
+    .expect("settings panel is visible");
+
+    let click = clickable_panel_action(
+        &mut state,
+        area,
+        panel,
+        Panel::Settings,
+        ActionId::OpenFloating(FloatingKind::WatchlistAdd),
+    );
+    handle_mouse_event(area, &mut state, &mut drag, click);
+
+    assert_eq!(
+        state.floating.last().map(|pane| pane.kind),
+        Some(FloatingKind::WatchlistAdd)
+    );
+    assert_eq!(state.panels.focused(), Panel::Settings);
+    assert_eq!(drag, MouseDrag::default());
+}
+
+#[test]
+fn mouse_click_on_settings_profile_action_opens_profile_editor() {
+    let area = Rect::new(0, 0, 160, 48);
+    let mut state = AppState::from_config(crate::config::TuiConfig {
+        workspace: crate::config::WorkspaceConfig {
+            current: WorkspaceKind::Settings,
+        },
+        trading: crate::config::TradingConfig {
+            default_profile: Some("mainnet".to_string()),
+        },
+        ..crate::config::TuiConfig::default()
+    });
+    let mut drag = MouseDrag::default();
+    let panel = layout::build(
+        area,
+        &state.layout,
+        &state.floating,
+        &state.visible_panels(),
+    )
+    .panel_rect(Panel::Settings)
+    .expect("settings panel is visible");
+
+    let click = clickable_panel_action(
+        &mut state,
+        area,
+        panel,
+        Panel::Settings,
+        ActionId::OpenFloating(FloatingKind::TradingProfile),
+    );
+    handle_mouse_event(area, &mut state, &mut drag, click);
+
+    assert_eq!(
+        state.floating.last().map(|pane| pane.kind),
+        Some(FloatingKind::TradingProfile)
+    );
+    assert_eq!(state.profile_editor.profile().as_deref(), Some("mainnet"));
+    assert_eq!(state.panels.focused(), Panel::Settings);
+    assert_eq!(drag, MouseDrag::default());
+}
+
+#[test]
+fn mouse_click_on_settings_profile_risk_action_focuses_profile_risk() {
+    let area = Rect::new(0, 0, 160, 48);
+    let mut state = AppState::from_config(crate::config::TuiConfig {
+        workspace: crate::config::WorkspaceConfig {
+            current: WorkspaceKind::Settings,
+        },
+        ..crate::config::TuiConfig::default()
+    });
+    let mut drag = MouseDrag::default();
+    let panel = layout::build(
+        area,
+        &state.layout,
+        &state.floating,
+        &state.visible_panels(),
+    )
+    .panel_rect(Panel::Settings)
+    .expect("settings panel is visible");
+
+    let click = clickable_panel_action(
+        &mut state,
+        area,
+        panel,
+        Panel::Settings,
+        ActionId::FocusPanel(Panel::ProfileRisk),
+    );
+    handle_mouse_event(area, &mut state, &mut drag, click);
+
+    assert_eq!(state.panels.focused(), Panel::ProfileRisk);
+    assert_eq!(drag, MouseDrag::default());
+}
+
+#[test]
+fn mouse_click_on_settings_providers_action_opens_provider_details() {
+    let area = Rect::new(0, 0, 160, 48);
+    let mut state = AppState::from_config(crate::config::TuiConfig {
+        workspace: crate::config::WorkspaceConfig {
+            current: WorkspaceKind::Settings,
+        },
+        ..crate::config::TuiConfig::default()
+    });
+    let mut drag = MouseDrag::default();
+    let panel = layout::build(
+        area,
+        &state.layout,
+        &state.floating,
+        &state.visible_panels(),
+    )
+    .panel_rect(Panel::Settings)
+    .expect("settings panel is visible");
+
+    let click = clickable_panel_action(
+        &mut state,
+        area,
+        panel,
+        Panel::Settings,
+        ActionId::OpenFloating(FloatingKind::ProviderDetails),
+    );
+    handle_mouse_event(area, &mut state, &mut drag, click);
+
+    assert_eq!(
+        state.floating.last().map(|pane| pane.kind),
+        Some(FloatingKind::ProviderDetails)
+    );
+    assert_eq!(state.panels.focused(), Panel::Settings);
+    assert_eq!(drag, MouseDrag::default());
+}
+
+#[test]
+fn mouse_click_on_settings_allow_live_action_stages_profile_risk_change() {
+    let area = Rect::new(0, 0, 160, 48);
+    let mut state = AppState::from_config(crate::config::TuiConfig {
+        workspace: crate::config::WorkspaceConfig {
+            current: WorkspaceKind::Settings,
+        },
+        trading: crate::config::TradingConfig {
+            default_profile: Some("mainnet".to_string()),
+        },
+        ..crate::config::TuiConfig::default()
+    });
+    state.reduce(Action::ProfileValidationStarted {
+        generation: 1,
+        profile: "mainnet".to_string(),
+    });
+    state.reduce(Action::ProfileValidationLoaded {
+        generation: 1,
+        snapshot: crate::profile_snapshot::test_profile_validation_snapshot(
+            "mainnet",
+            "mainnet.toml",
+        ),
+    });
+    let mut drag = MouseDrag::default();
+    let panel = layout::build(
+        area,
+        &state.layout,
+        &state.floating,
+        &state.visible_panels(),
+    )
+    .panel_rect(Panel::Settings)
+    .expect("settings panel is visible");
+
+    let click = clickable_panel_action(
+        &mut state,
+        area,
+        panel,
+        Panel::Settings,
+        ActionId::StageProfileLiveToggle,
+    );
+    handle_mouse_event(area, &mut state, &mut drag, click);
+
+    assert_eq!(state.panels.focused(), Panel::IntentReview);
+    let changes = state.staged_change_views();
+    assert_eq!(changes.len(), 1);
+    assert_eq!(
+        changes[0].change_kind,
+        crate::state::StagedChangeKind::ProfileRisk
+    );
     assert_eq!(drag, MouseDrag::default());
 }
 

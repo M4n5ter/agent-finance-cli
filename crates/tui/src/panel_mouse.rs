@@ -221,6 +221,17 @@ fn panel_hit_at(
             let content_row = content_row(area, row)?;
             let content_width = content_width(area);
             let content_column = content_column(area, column).unwrap_or(u16::MAX);
+            if let Some(action) = crate::settings_panel_view::panel_action_at_content_cell(
+                state,
+                content_width,
+                content_row,
+                content_column,
+            ) {
+                return Some(PanelHit::Action {
+                    label: action.label,
+                    action: action.action,
+                });
+            }
             if let Some(action) = crate::settings_panel_view::action_at_content_cell(
                 state,
                 content_width,
