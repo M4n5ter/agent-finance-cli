@@ -21,7 +21,7 @@ For an interactive live cockpit, use:
 agent-finance tui --symbols AAPL,CRDO,BTCUSDT
 ```
 
-Prefer structured `market ... --json` commands for agent data collection. The TUI is an interactive cockpit for live monitoring and guided exploration, with quote, history, crypto evidence, research, Polymarket, provider health, task log, mouse focus, docked-column drag resize, floating-corner resize, close/restore panel controls, an executable command palette, and an OHLCV chart workbench with draft-only ticket fills from chart prices or selected reference lines; it is not a machine extraction surface.
+Prefer structured `market ... --json` commands for agent data collection. The TUI is an interactive cockpit for live monitoring and guided exploration, with quote, history, crypto evidence, research, Polymarket, provider health, task log, mouse focus, docked-column drag resize, floating-corner resize, close/restore panel controls, an executable command palette, and an OHLCV chart workbench with draft-only ticket fills plus stop-loss or take-profit ticket drafts from selected reference lines; it is not a machine extraction surface.
 The TUI persists watchlist and layout state to TOML by default; use `--no-persist` for one-off sessions.
 
 ## Task Router
@@ -122,7 +122,7 @@ agent-finance audit export --json
 - Use both daily and minute history before judging fills, limit-order quality, stop placement, or intraday action.
 - Use `market providers --json` for a machine-readable capability matrix.
 - Use `capabilities --json` for the unified terminal surface, including account/order/transfer/futures-state safety boundaries.
-- Use `skills get tui` before relying on the interactive cockpit, chart workbench, account overlays, selected reference line copy, or chart-guided draft ticket workflow.
+- Use `skills get tui` before relying on the interactive cockpit, chart workbench, account overlays, selected reference line copy, protective chart drafts, or chart-guided draft ticket workflow.
 - Treat crypto as 24/7 market data. Use Binance/Coinbase/OKX/CoinGecko through capability-first crypto commands, then force providers only for cross-checking.
 - Spot is crypto spot; USD-M futures / TradFi perps are derivatives and proxy instruments.
 - Treat Polymarket as quantifiable prediction-market sentiment and event-probability evidence only; it is not an equity quote or primary-source fact.

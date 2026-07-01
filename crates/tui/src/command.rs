@@ -3,6 +3,8 @@ use std::sync::LazyLock;
 
 use tui_input::InputRequest;
 
+use agent_finance_core::OrderKind;
+
 use crate::chart::{ChartGlyphMode, ChartInterval, ChartPreset};
 use crate::model::{FloatingKind, Panel, WorkspaceKind};
 use crate::search::{SearchListState, fuzzy_indices};
@@ -117,6 +119,7 @@ pub enum ActionId {
     ToggleChartOverlays,
     CaptureOrderReferencePrice,
     CaptureSelectedChartReferencePrice,
+    CaptureSelectedChartReferenceAs(OrderKind),
     OpenTicketTextInput,
     StageOrderTicket,
     StageTransferTicket,
@@ -495,6 +498,18 @@ pub static ACTION_REGISTRY: LazyLock<Vec<ActionSpec>> = LazyLock::new(|| {
             "Copy the selected history chart reference line price into the order ticket"
         ),
         action!(
+            "chart-draft-stop-loss",
+            ActionId::CaptureSelectedChartReferenceAs(OrderKind::StopLoss),
+            "Chart draft stop loss",
+            "Prepare a stop-loss order ticket from the selected chart reference line"
+        ),
+        action!(
+            "chart-draft-take-profit",
+            ActionId::CaptureSelectedChartReferenceAs(OrderKind::TakeProfit),
+            "Chart draft take profit",
+            "Prepare a take-profit order ticket from the selected chart reference line"
+        ),
+        action!(
             "refresh-selected-evidence",
             ActionId::RefreshSelectedEvidence,
             "Refresh selected evidence",
@@ -658,6 +673,34 @@ mod tests {
         assert_eq!(
             palette.selected_action(),
             Some(ActionId::CaptureSelectedChartReferencePrice)
+        );
+    }
+
+    #[test]
+    fn command_palette_can_prepare_protective_chart_drafts() {
+        let mut palette = CommandPaletteState::default();
+
+        for character in "chart draft stop loss".chars() {
+            palette.edit_query(InputRequest::InsertChar(character));
+        }
+
+        assert_eq!(
+            palette.selected_action(),
+            Some(ActionId::CaptureSelectedChartReferenceAs(
+                OrderKind::StopLoss
+            ))
+        );
+
+        palette.reset();
+        for character in "chart draft take profit".chars() {
+            palette.edit_query(InputRequest::InsertChar(character));
+        }
+
+        assert_eq!(
+            palette.selected_action(),
+            Some(ActionId::CaptureSelectedChartReferenceAs(
+                OrderKind::TakeProfit
+            ))
         );
     }
 

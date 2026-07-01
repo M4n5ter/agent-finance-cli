@@ -83,6 +83,12 @@ impl OrderTicket {
         self.selected_field = OrderTicketField::Price;
     }
 
+    pub fn capture_reference_price_as(&mut self, price: f64, kind: OrderKind) {
+        self.kind = kind;
+        self.capture_reference_price(price);
+        self.normalize_for_kind();
+    }
+
     pub fn adjust_selected_field(&mut self, direction: isize, reference_price: Option<f64>) {
         match self.selected_field {
             OrderTicketField::Market => {

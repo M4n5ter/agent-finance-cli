@@ -334,6 +334,61 @@ fn capture_selected_chart_reference_price_fills_order_ticket_without_staging() {
 }
 
 #[test]
+fn capture_selected_chart_reference_can_prepare_protective_order_drafts_without_staging() {
+    for (kind, expected_spec) in [
+        (agent_finance_core::OrderKind::StopLoss, "stop-loss"),
+        (agent_finance_core::OrderKind::TakeProfit, "take-profit"),
+    ] {
+        let mut state = AppState::from_config(TuiConfig {
+            watchlist: vec!["CRDO".to_string()],
+            workspace: WorkspaceConfig {
+                current: WorkspaceKind::Market,
+            },
+            trading: crate::config::TradingConfig {
+                default_profile: Some("mainnet".to_string()),
+            },
+            ..TuiConfig::default()
+        });
+        state.market_snapshot = Some(snapshot(1, "CRDO"));
+        state
+            .order_ticket
+            .set_quantity_text(Some("0.05".to_string()));
+        state.reduce(Action::MoveChartReferenceLine {
+            direction: 1,
+            line_count: 2,
+        });
+
+        state.reduce(Action::Execute(ActionId::CaptureSelectedChartReferenceAs(
+            kind,
+        )));
+
+        let preview = state.order_ticket_preview();
+        assert_eq!(state.panels.focused(), Panel::OrderTicket);
+        assert_eq!(preview.symbol.as_deref(), Some("CRDO"));
+        assert_eq!(preview.kind, kind);
+        assert_eq!(preview.price.as_deref(), Some("250.00"));
+        assert_eq!(state.staged_change_count(), 0);
+        assert!(state.pending_staged_confirmation().is_none());
+        assert!(state.take_pending_staged_execution().is_none());
+        assert!(state.task_log.iter().any(|entry| {
+            entry.status == TaskStatus::Info
+                && entry
+                    .message
+                    .starts_with(&format!("prepared {expected_spec}"))
+        }));
+
+        match (kind, preview.order_spec.as_ref()) {
+            (agent_finance_core::OrderKind::StopLoss, Some(OrderSpec::StopLoss { stop_price }))
+            | (
+                agent_finance_core::OrderKind::TakeProfit,
+                Some(OrderSpec::TakeProfit { stop_price }),
+            ) => assert_eq!(stop_price.to_string(), "250"),
+            _ => panic!("expected protective order spec"),
+        }
+    }
+}
+
+#[test]
 fn capture_selected_chart_reference_price_without_selection_only_warns() {
     let mut state = AppState::from_config(TuiConfig {
         watchlist: vec!["CRDO".to_string()],

@@ -28,7 +28,7 @@ agent-finance tui --symbols BTC/USDT,ETH/USDT --chart-preset 1d
 agent-finance skills get tui
 ```
 
-Focus History and press `z` for the full chart workbench. Use hover for crosshair and O/H/L/C/V tooltip, wheel to zoom, drag to zoom into a selected window, `h`/`l` or arrows to move the cursor, `j`/`k` to select visible reference lines, `Enter` to copy the selected reference line price into the order ticket draft, `[`/`]` to zoom, number preset actions to switch chart range, and command palette actions for refresh, preset switching, reset zoom, overlay toggles, and copying chart reference prices to the order ticket.
+Focus History and press `z` for the full chart workbench. Use hover for crosshair and O/H/L/C/V tooltip, wheel to zoom, drag to zoom into a selected window, `h`/`l` or arrows to move the cursor, `j`/`k` to select visible reference lines, `Enter` to copy the selected reference line price into the order ticket draft, `[`/`]` to zoom, number preset actions to switch chart range, and command palette actions for refresh, preset switching, reset zoom, overlay toggles, copying chart reference prices to the order ticket, and preparing stop-loss or take-profit ticket drafts from the selected reference line.
 
 The chart can show OHLCV candles, volume, MA20, MA50, VWAP, current price, previous close, day open/high/low, open-order lines, and position entry lines when the provider and local snapshots provide those fields. Clicking a chart price fills a draft ticket only; it must still pass stage, review, risk, and live confirmation before any signed exchange write.
 

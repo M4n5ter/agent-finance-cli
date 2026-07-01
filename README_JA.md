@@ -180,7 +180,7 @@ agent-finance tui --symbols AAPL,CRDO,BTCUSDT
 agent-finance tui --symbols CRDO,LITE,AAOI --chart-preset auto
 ```
 
-TUI は、watchlist、quote/sessions、history、crypto evidence、research、Polymarket、provider health、task log、マウスフォーカス、docked column のドラッグリサイズ、floating corner resize、panel の close/restore、実行可能な command palette、そしてネイティブ OHLCV ローソク足 workbench を備えたインタラクティブ cockpit です。History panel で `z` を押すとフルチャートに入り、hover で O/H/L/C/V、wheel や drag で zoom、チャート上の価格をクリックすると order ticket の draft price に入ります。`j`/`k` で current price、previous close、open、high、low、open order、position entry などの参照ラインを選び、`Enter` で ticket にコピーすることもできます。チャートは取引準備を助けるだけで、直接 submit しません。stage、review、risk、live confirmation、audit は必ず通ります。cockpit の使い方は `agent-finance skills get tui` を読み、構造化データが必要な場合は引き続き `market ... --json` を使ってください。
+TUI は、watchlist、quote/sessions、history、crypto evidence、research、Polymarket、provider health、task log、マウスフォーカス、docked column のドラッグリサイズ、floating corner resize、panel の close/restore、実行可能な command palette、そしてネイティブ OHLCV ローソク足 workbench を備えたインタラクティブ cockpit です。History panel で `z` を押すとフルチャートに入り、hover で O/H/L/C/V、wheel や drag で zoom、チャート上の価格をクリックすると order ticket の draft price に入ります。`j`/`k` で current price、previous close、open、high、low、open order、position entry などの参照ラインを選び、`Enter` で ticket にコピーすることもできます。command palette から、選択中の参照ラインを stop-loss または take-profit の ticket draft として用意することもできます。チャートは取引準備を助けるだけで、直接 submit しません。stage、review、risk、live confirmation、audit は必ず通ります。cockpit の使い方は `agent-finance skills get tui` を読み、構造化データが必要な場合は引き続き `market ... --json` を使ってください。
 `--no-persist` を指定しない限り、TUI は watchlist、docked panel の構成、現在 focused な panel、列レイアウト、floating panes、更新間隔、provider 設定を TOML に保存します。
 
 ## 署名付き取引フロー

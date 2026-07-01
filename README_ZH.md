@@ -180,7 +180,7 @@ agent-finance tui --symbols AAPL,CRDO,BTCUSDT
 agent-finance tui --symbols CRDO,LITE,AAOI --chart-preset auto
 ```
 
-TUI 是交互式 cockpit，包含 watchlist、quote/sessions、history、crypto evidence、research、Polymarket、provider health、task log、鼠标聚焦、docked column 拖拽调整、floating 右下角调整、关闭/恢复 panel 控制、可执行 command palette，以及原生 OHLCV K 线 workbench。在 History panel 中按 `z` 进入完整图表，hover 查看 O/H/L/C/V，滚轮或拖拽缩放，点击图上价格可填入订单 ticket 草稿，也可以用 `j`/`k` 选择 current price、previous close、open、high、low、活动订单或持仓成本等参考线，再按 `Enter` 复制到 ticket。图表只辅助准备交易，不会直接提交；仍然必须经过 stage、review、risk、live confirmation 和 audit。使用 `agent-finance skills get tui` 查看 cockpit 工作流；需要结构化数据时，应继续使用 `market ... --json`。
+TUI 是交互式 cockpit，包含 watchlist、quote/sessions、history、crypto evidence、research、Polymarket、provider health、task log、鼠标聚焦、docked column 拖拽调整、floating 右下角调整、关闭/恢复 panel 控制、可执行 command palette，以及原生 OHLCV K 线 workbench。在 History panel 中按 `z` 进入完整图表，hover 查看 O/H/L/C/V，滚轮或拖拽缩放，点击图上价格可填入订单 ticket 草稿，也可以用 `j`/`k` 选择 current price、previous close、open、high、low、活动订单或持仓成本等参考线，再按 `Enter` 复制到 ticket。command palette 还可以把选中的参考线直接准备成 stop-loss 或 take-profit ticket 草稿。图表只辅助准备交易，不会直接提交；仍然必须经过 stage、review、risk、live confirmation 和 audit。使用 `agent-finance skills get tui` 查看 cockpit 工作流；需要结构化数据时，应继续使用 `market ... --json`。
 除非使用 `--no-persist`，TUI 会把 watchlist、docked panel 集合、当前 focused panel、列布局、floating panes、刷新频率和 provider 偏好持久化到 TOML。
 
 ## 签名交易流程

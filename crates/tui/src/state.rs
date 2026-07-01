@@ -1,3 +1,4 @@
+use agent_finance_core::OrderKind;
 use agent_finance_core::submit::SubmitMode;
 use agent_finance_market::crypto_evidence_snapshot::CryptoQuoteEvidenceSnapshot;
 use agent_finance_market::history_snapshot::HistorySnapshot;
@@ -455,6 +456,26 @@ impl AppState {
         self.focus_panel(Panel::OrderTicket);
         self.task_log.info(format!(
             "captured chart reference {} {} for {}",
+            line.label,
+            self.order_ticket_preview().price.as_deref().unwrap_or("-"),
+            symbol
+        ));
+    }
+
+    fn capture_selected_chart_reference_as(&mut self, kind: OrderKind) {
+        let (symbol, line) = match self.selected_chart_reference_line() {
+            Ok(selection) => selection,
+            Err(reason) => {
+                self.task_log.warning_event(reason.warning().to_string());
+                return;
+            }
+        };
+        self.order_ticket
+            .capture_reference_price_as(line.price, kind);
+        self.focus_panel(Panel::OrderTicket);
+        self.task_log.info(format!(
+            "prepared {} from chart reference {} {} for {}",
+            kind,
             line.label,
             self.order_ticket_preview().price.as_deref().unwrap_or("-"),
             symbol
@@ -1106,6 +1127,9 @@ impl AppState {
             Action::CaptureSelectedChartReferencePrice => {
                 self.capture_selected_chart_reference_price();
             }
+            Action::CaptureSelectedChartReferenceAs(kind) => {
+                self.capture_selected_chart_reference_as(kind);
+            }
             Action::OpenTicketTextInput => self.open_ticket_text_input(),
             Action::MoveTransferTicketField(direction) => {
                 self.transfer_ticket.move_field(direction);
@@ -1645,6 +1669,7 @@ pub enum Action {
     },
     CaptureOrderReferencePrice,
     CaptureSelectedChartReferencePrice,
+    CaptureSelectedChartReferenceAs(OrderKind),
     CaptureChartPrice {
         price: f64,
     },
