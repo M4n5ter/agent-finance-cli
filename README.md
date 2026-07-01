@@ -8,7 +8,9 @@ Market intelligence for AI agents that need evidence, not guesswork.
 
 It also includes `agent-finance tui`, a live market cockpit for watching symbols, provider health, research context, crypto evidence, and prediction-market signals in one terminal.
 
-![agent-finance TUI market cockpit](assets/tui-market-cockpit.png)
+| Market cockpit | Guarded trading workflow |
+|---|---|
+| ![agent-finance TUI market cockpit with OHLCV chart](assets/tui-market-cockpit.png) | ![agent-finance TUI guarded trade workspace](assets/tui-trade-workspace.png) |
 
 Install once, then let agents discover the command surface from the CLI itself.
 
