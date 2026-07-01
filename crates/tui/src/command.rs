@@ -3,7 +3,7 @@ use std::sync::LazyLock;
 
 use tui_input::InputRequest;
 
-use crate::chart::ChartPreset;
+use crate::chart::{ChartInterval, ChartPreset};
 use crate::model::{FloatingKind, Panel, WorkspaceKind};
 use crate::search::{SearchListState, fuzzy_indices};
 
@@ -110,6 +110,7 @@ pub enum ActionId {
     RefreshSelectedEvidence,
     RefreshSelectedResearch,
     SetChartPreset(ChartPreset),
+    SetChartInterval(ChartInterval),
     ShiftChartPreset(isize),
     ResetChartView,
     ToggleChartOverlays,
@@ -187,6 +188,20 @@ fn chart_preset_action(preset: ChartPreset) -> ActionSpec {
         command: Some(CommandPresentation {
             title: Cow::Owned(preset.command_title()),
             description: Cow::Borrowed(preset.command_description()),
+        }),
+    }
+}
+
+fn chart_interval_action(interval: ChartInterval) -> ActionSpec {
+    ActionSpec {
+        id: Cow::Owned(format!("chart-interval-{}", interval.label())),
+        action: ActionId::SetChartInterval(interval),
+        command: Some(CommandPresentation {
+            title: Cow::Owned(format!(
+                "Chart interval {}",
+                interval.label().to_ascii_uppercase()
+            )),
+            description: Cow::Borrowed("Override the selected history chart preset interval"),
         }),
     }
 }
@@ -471,6 +486,7 @@ pub static ACTION_REGISTRY: LazyLock<Vec<ActionSpec>> = LazyLock::new(|| {
         ),
     ];
     actions.extend(ChartPreset::ALL.map(chart_preset_action));
+    actions.extend(ChartInterval::ALL.map(chart_interval_action));
     actions.extend(panel_action_specs());
     actions.push(action!(
         "close-command-palette",
@@ -675,6 +691,20 @@ mod tests {
 
             assert_eq!(palette.selected_action(), Some(expected), "{query}");
         }
+    }
+
+    #[test]
+    fn command_palette_can_find_chart_interval_actions() {
+        let mut palette = CommandPaletteState::default();
+
+        for character in "chart interval 15m".chars() {
+            palette.edit_query(InputRequest::InsertChar(character));
+        }
+
+        assert_eq!(
+            palette.selected_action(),
+            Some(ActionId::SetChartInterval(ChartInterval::FifteenMinutes))
+        );
     }
 
     #[test]

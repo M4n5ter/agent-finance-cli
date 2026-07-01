@@ -66,6 +66,11 @@ pub(super) fn close_only_symbol(candle_width: u16) -> &'static str {
     if candle_width > 1 { "◆" } else { "•" }
 }
 
+pub(super) fn volume_symbol(eighths: u8) -> &'static str {
+    const SYMBOLS: [&str; 9] = [" ", "▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"];
+    SYMBOLS[usize::from(eighths.min(8))]
+}
+
 fn render_vertical_segment(
     buffer: &mut Buffer,
     x: u16,

@@ -67,6 +67,10 @@ impl AppState {
                 self.close_text_input_floatings();
                 self.reduce(Action::SetChartPreset(preset));
             }
+            ActionId::SetChartInterval(interval) => {
+                self.close_text_input_floatings();
+                self.reduce(Action::SetChartInterval(interval));
+            }
             ActionId::ShiftChartPreset(direction) => {
                 self.close_text_input_floatings();
                 self.reduce(Action::ShiftChartPreset(direction));

@@ -348,6 +348,11 @@ fn history_summary_rows(
                 width,
                 mouse_target,
             )));
+            rows.push(HistorySummaryRow::Action(history_interval_toolbar_line(
+                state,
+                width,
+                mouse_target,
+            )));
             if workbench {
                 for line in history_workbench_lines(snapshot, &state.chart, &state.theme) {
                     push_history_info_row(&mut rows, line);
@@ -453,6 +458,25 @@ fn history_toolbar_line(
     render_panel_action_line(&line, &state.theme, Panel::History, mouse_target)
 }
 
+fn history_interval_toolbar_line(
+    state: &AppState,
+    width: u16,
+    mouse_target: Option<MouseTarget>,
+) -> RenderedPanelActionLine {
+    let mut line = PanelActionLine::new(format!("interval={}  ", state.chart.interval()), width);
+    let symbol = state.selected_symbol().unwrap_or_default();
+    for interval in
+        crate::chart::ChartInterval::available_for(symbol, state.providers.equity.provider())
+    {
+        line.push_visible_action(
+            interval.action_label(),
+            ActionId::SetChartInterval(interval),
+        );
+        line.push_visible_text(" ");
+    }
+    render_panel_action_line(&line, &state.theme, Panel::History, mouse_target)
+}
+
 fn history_workbench_lines(
     snapshot: &HistorySnapshot,
     chart: &crate::chart::ChartState,
@@ -521,7 +545,7 @@ fn history_workbench_lines(
 }
 
 fn history_text_area_height(area: Rect, workbench: bool) -> usize {
-    let max = if workbench { 9 } else { 6 };
+    let max = if workbench { 10 } else { 7 };
     area.height.saturating_sub(2).min(max).into()
 }
 

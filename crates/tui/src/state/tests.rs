@@ -1712,6 +1712,157 @@ fn chart_overlay_toggle_is_command_driven_session_state() {
 }
 
 #[test]
+fn chart_interval_override_is_session_state() {
+    let mut state = AppState::from_config(TuiConfig::default());
+
+    state.reduce(Action::SetChartInterval(
+        crate::chart::ChartInterval::FifteenMinutes,
+    ));
+
+    assert_eq!(
+        state
+            .chart
+            .request_for_provider("CRDO", state.providers.equity.provider())
+            .interval,
+        "15m"
+    );
+    assert_eq!(
+        state.export_config(&TuiConfig::default()).chart,
+        Default::default()
+    );
+}
+
+#[test]
+fn chart_interval_override_rejects_provider_unsupported_interval() {
+    let mut state = AppState::from_config(TuiConfig {
+        providers: crate::config::ProviderConfig {
+            equity: crate::config::EquityProvider::Robinhood,
+            ..crate::config::ProviderConfig::default()
+        },
+        watchlist: vec!["CRDO".to_string()],
+        ..TuiConfig::default()
+    });
+
+    state.reduce(Action::SetChartInterval(
+        crate::chart::ChartInterval::FifteenMinutes,
+    ));
+
+    assert_eq!(state.chart.interval(), crate::chart::ChartInterval::Auto);
+    assert!(
+        state
+            .task_log
+            .iter()
+            .any(|entry| entry.message.contains("not supported by robinhood"))
+    );
+}
+
+#[test]
+fn provider_change_normalizes_unsupported_chart_interval() {
+    let mut state = AppState::from_config(TuiConfig {
+        workspace: WorkspaceConfig {
+            current: WorkspaceKind::Settings,
+        },
+        watchlist: vec!["CRDO".to_string()],
+        ..TuiConfig::default()
+    });
+    state.reduce(Action::SetChartInterval(
+        crate::chart::ChartInterval::FifteenMinutes,
+    ));
+    assert_eq!(
+        state.chart.interval(),
+        crate::chart::ChartInterval::FifteenMinutes
+    );
+
+    while state.providers.equity != crate::config::EquityProvider::Robinhood {
+        state.reduce(Action::AdjustSelectedSetting(1));
+    }
+
+    assert_eq!(
+        state.providers.equity,
+        crate::config::EquityProvider::Robinhood
+    );
+    assert_eq!(state.chart.interval(), crate::chart::ChartInterval::Auto);
+}
+
+#[test]
+fn symbol_change_normalizes_unsupported_chart_interval() {
+    let mut state = AppState::from_config(TuiConfig {
+        providers: crate::config::ProviderConfig {
+            equity: crate::config::EquityProvider::Robinhood,
+            ..crate::config::ProviderConfig::default()
+        },
+        watchlist: vec!["BTCUSDT".to_string(), "CRDO".to_string()],
+        ..TuiConfig::default()
+    });
+    state.reduce(Action::SetChartInterval(
+        crate::chart::ChartInterval::FifteenMinutes,
+    ));
+    assert_eq!(
+        state.chart.interval(),
+        crate::chart::ChartInterval::FifteenMinutes
+    );
+
+    state.reduce(Action::SelectWatchlistSymbol(1));
+
+    assert_eq!(state.selected_symbol(), Some("CRDO"));
+    assert_eq!(state.chart.interval(), crate::chart::ChartInterval::Auto);
+}
+
+#[test]
+fn symbol_shift_normalizes_unsupported_chart_interval() {
+    let mut state = AppState::from_config(TuiConfig {
+        providers: crate::config::ProviderConfig {
+            equity: crate::config::EquityProvider::Robinhood,
+            ..crate::config::ProviderConfig::default()
+        },
+        watchlist: vec!["BTCUSDT".to_string(), "CRDO".to_string()],
+        ..TuiConfig::default()
+    });
+    state.reduce(Action::SetChartInterval(
+        crate::chart::ChartInterval::FifteenMinutes,
+    ));
+
+    state.reduce(Action::Execute(ActionId::SelectSymbolBy(1)));
+
+    assert_eq!(state.selected_symbol(), Some("CRDO"));
+    assert_eq!(state.chart.interval(), crate::chart::ChartInterval::Auto);
+}
+
+#[test]
+fn watchlist_add_and_delete_normalize_unsupported_chart_interval() {
+    let mut state = AppState::from_config(TuiConfig {
+        providers: crate::config::ProviderConfig {
+            equity: crate::config::EquityProvider::Robinhood,
+            ..crate::config::ProviderConfig::default()
+        },
+        watchlist: vec!["BTCUSDT".to_string()],
+        ..TuiConfig::default()
+    });
+    state.reduce(Action::SetChartInterval(
+        crate::chart::ChartInterval::FifteenMinutes,
+    ));
+
+    for character in "CRDO".chars() {
+        state.reduce(Action::EditWatchlistAddQuery(
+            tui_input::InputRequest::InsertChar(character),
+        ));
+    }
+    state.reduce(Action::AcceptWatchlistAdd);
+
+    assert_eq!(state.selected_symbol(), Some("CRDO"));
+    assert_eq!(state.chart.interval(), crate::chart::ChartInterval::Auto);
+
+    state.reduce(Action::SelectWatchlistSymbol(0));
+    state.reduce(Action::SetChartInterval(
+        crate::chart::ChartInterval::FifteenMinutes,
+    ));
+    state.reduce(Action::DeleteSelectedWatchlistSymbol);
+
+    assert_eq!(state.selected_symbol(), Some("CRDO"));
+    assert_eq!(state.chart.interval(), crate::chart::ChartInterval::Auto);
+}
+
+#[test]
 fn chart_reference_line_selection_is_reducer_state() {
     let mut state = AppState::from_config(TuiConfig::default());
 

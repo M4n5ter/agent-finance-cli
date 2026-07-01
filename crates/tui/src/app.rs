@@ -468,7 +468,9 @@ fn request_symbol_load(
         SymbolTaskKind::History => scheduler.request_history(
             request.generation,
             request.symbol.clone(),
-            state.chart.preset().request_for(&request.symbol),
+            state
+                .chart
+                .request_for_provider(&request.symbol, state.providers.equity.provider()),
         ),
         SymbolTaskKind::Evidence => {
             scheduler.request_evidence(request.generation, request.symbol.clone())

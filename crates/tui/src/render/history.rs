@@ -16,7 +16,7 @@ use crate::theme::ThemeConfig;
 use super::history_annotations::render_warning_band;
 use super::history_annotations::{render_crosshair, render_hover_tooltip};
 use super::history_glyphs::{
-    CandleShape, render_close_only_candle, render_dense_candle, render_split_candle,
+    CandleShape, render_close_only_candle, render_dense_candle, render_split_candle, volume_symbol,
 };
 
 pub(super) fn chart<'a>(props: ChartProps<'a>) -> CandlestickChart<'a> {
@@ -517,10 +517,18 @@ fn render_volume(
         let Some(x) = geometry.body_x(index) else {
             break;
         };
-        let height = ((volume / max_volume) * f64::from(area.height)).ceil() as u16;
+        let total_slots = u32::from(area.height) * 8;
+        let height = ((volume / max_volume) * f64::from(total_slots)).ceil() as u32;
+        let height = height.max(1).min(total_slots);
         let style = candle_style(bucket, theme);
-        for offset in 0..height.max(1).min(area.height) {
-            buffer.set_string(x, area.y + area.height - 1 - offset, "█", style);
+        let full_rows = height / 8;
+        let partial = (height % 8) as u8;
+        for offset in 0..full_rows.min(u32::from(area.height)) {
+            buffer.set_string(x, area.y + area.height - 1 - offset as u16, "█", style);
+        }
+        if partial > 0 && full_rows < u32::from(area.height) {
+            let row = area.y + area.height - 1 - full_rows as u16;
+            buffer.set_string(x, row, volume_symbol(partial), style);
         }
     }
 }
@@ -875,6 +883,52 @@ mod tests {
         assert_eq!(buffer[(2, 0)].symbol(), "⡇");
         assert_eq!(buffer[(2, 3)].symbol(), "⡇");
         assert_eq!(buffer[(3, 2)].symbol(), "◆");
+    }
+
+    #[test]
+    fn volume_renderer_preserves_sub_cell_height_precision() {
+        let mut buffer = Buffer::empty(Rect::new(0, 0, 4, 4));
+        let area = Rect::new(0, 0, 4, 4);
+        let geometry = ChartGeometry {
+            area,
+            bucket_count: 2,
+            candle_layout: CandleLayout::Dense,
+        };
+
+        render_volume(
+            &mut buffer,
+            area,
+            &[
+                CandleBucket {
+                    open_time: "09:30".to_string(),
+                    close_time: Some("09:35".to_string()),
+                    open: 100.0,
+                    high: 100.0,
+                    low: 100.0,
+                    close: 100.0,
+                    volume: Some(12.5),
+                    close_only: false,
+                },
+                CandleBucket {
+                    open_time: "09:35".to_string(),
+                    close_time: Some("09:40".to_string()),
+                    open: 101.0,
+                    high: 101.0,
+                    low: 101.0,
+                    close: 101.0,
+                    volume: Some(100.0),
+                    close_only: false,
+                },
+            ],
+            geometry,
+            &ThemeConfig::default(),
+        );
+
+        assert_eq!(buffer[(0, 3)].symbol(), "▄");
+        assert_eq!(buffer[(3, 0)].symbol(), "█");
+        assert_eq!(buffer[(3, 1)].symbol(), "█");
+        assert_eq!(buffer[(3, 2)].symbol(), "█");
+        assert_eq!(buffer[(3, 3)].symbol(), "█");
     }
 
     #[test]

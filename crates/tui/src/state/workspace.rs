@@ -11,8 +11,7 @@ impl AppState {
 
     pub(super) fn select_symbol_search_symbol(&mut self, index: usize) {
         if index < self.watchlist.len() {
-            self.selected_symbol = index;
-            self.chart.reset_view();
+            self.select_symbol_index(index);
             self.close_floating(FloatingKind::SymbolSearch);
         }
     }
@@ -87,10 +86,7 @@ impl AppState {
         let len = self.watchlist.len() as isize;
         let selected = self.selected_symbol as isize;
         let next = (selected + direction).rem_euclid(len) as usize;
-        if next != self.selected_symbol {
-            self.selected_symbol = next;
-            self.chart.reset_view();
-        }
+        self.select_symbol_index(next);
     }
 
     pub(super) fn clear_zoom(&mut self) {

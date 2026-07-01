@@ -1,7 +1,7 @@
 use std::fmt;
 use std::str::FromStr;
 
-use agent_finance_market::args::HistorySession;
+use agent_finance_market::args::{HistorySession, Provider};
 use agent_finance_market::is_likely_crypto_pair;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
@@ -171,6 +171,89 @@ impl<'de> Deserialize<'de> for ChartPreset {
     }
 }
 
+#[derive(Debug, Clone, Copy, Default, Eq, PartialEq)]
+pub enum ChartInterval {
+    #[default]
+    Auto,
+    OneMinute,
+    FiveMinutes,
+    FifteenMinutes,
+    OneHour,
+    OneDay,
+}
+
+impl ChartInterval {
+    pub const ALL: [Self; 6] = [
+        Self::Auto,
+        Self::OneMinute,
+        Self::FiveMinutes,
+        Self::FifteenMinutes,
+        Self::OneHour,
+        Self::OneDay,
+    ];
+
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Auto => "auto",
+            Self::OneMinute => "1m",
+            Self::FiveMinutes => "5m",
+            Self::FifteenMinutes => "15m",
+            Self::OneHour => "1h",
+            Self::OneDay => "1d",
+        }
+    }
+
+    pub const fn action_label(self) -> &'static str {
+        match self {
+            Self::Auto => "[auto]",
+            Self::OneMinute => "[1m]",
+            Self::FiveMinutes => "[5m]",
+            Self::FifteenMinutes => "[15m]",
+            Self::OneHour => "[1h]",
+            Self::OneDay => "[1d]",
+        }
+    }
+
+    pub fn available_for(symbol: &str, equity_provider: Provider) -> Vec<Self> {
+        Self::ALL
+            .into_iter()
+            .filter(|interval| interval.supported_for(symbol, equity_provider))
+            .collect()
+    }
+
+    pub fn supported_for(self, symbol: &str, equity_provider: Provider) -> bool {
+        if is_likely_crypto_pair(symbol) {
+            return true;
+        }
+        match equity_provider {
+            Provider::Robinhood => matches!(
+                self,
+                Self::Auto | Self::FiveMinutes | Self::OneHour | Self::OneDay
+            ),
+            Provider::Stooq => matches!(self, Self::Auto | Self::OneDay),
+            _ => true,
+        }
+    }
+
+    fn apply_to(self, request: &mut ChartHistoryRequest, symbol: &str) {
+        if self != Self::Auto {
+            request.interval = self.label().to_string();
+            request.limit = history_limit_for(
+                &request.range,
+                request.interval.as_str(),
+                request.session,
+                symbol,
+            );
+        }
+    }
+}
+
+impl fmt::Display for ChartInterval {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(self.label())
+    }
+}
+
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct ChartHistoryRequest {
     pub range: String,
@@ -195,9 +278,51 @@ impl ChartHistoryRequest {
     }
 }
 
+fn history_limit_for(range: &str, interval: &str, session: HistorySession, symbol: &str) -> usize {
+    let days = range_trading_days(range);
+    if interval == "1d" {
+        return days;
+    }
+
+    let Some(minutes) = interval_minutes(interval) else {
+        return days.max(1);
+    };
+    let daily_minutes = if is_likely_crypto_pair(symbol) {
+        24 * 60
+    } else if session == HistorySession::Extended {
+        16 * 60
+    } else {
+        390
+    };
+    (days * daily_minutes).div_ceil(minutes).clamp(1, 30_000)
+}
+
+fn range_trading_days(range: &str) -> usize {
+    match range {
+        "1d" => 1,
+        "5d" => 5,
+        "1mo" => 31,
+        "3mo" => 66,
+        "6mo" => 132,
+        "1y" => 252,
+        _ => 1,
+    }
+}
+
+fn interval_minutes(interval: &str) -> Option<usize> {
+    match interval {
+        "1m" => Some(1),
+        "5m" => Some(5),
+        "15m" => Some(15),
+        "1h" | "60m" => Some(60),
+        _ => None,
+    }
+}
+
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct ChartState {
     preset: ChartPreset,
+    interval: ChartInterval,
     window: ChartWindow,
     cursor_bps: Option<u16>,
     overlays_visible: bool,
@@ -214,6 +339,7 @@ impl ChartState {
     pub const fn new(preset: ChartPreset) -> Self {
         Self {
             preset,
+            interval: ChartInterval::Auto,
             window: ChartWindow::FULL,
             cursor_bps: None,
             overlays_visible: true,
@@ -223,6 +349,29 @@ impl ChartState {
 
     pub const fn preset(&self) -> ChartPreset {
         self.preset
+    }
+
+    pub const fn interval(&self) -> ChartInterval {
+        self.interval
+    }
+
+    pub fn request_for_provider(
+        &self,
+        symbol: &str,
+        equity_provider: Provider,
+    ) -> ChartHistoryRequest {
+        let mut request = self.preset.request_for(symbol);
+        if self.interval.supported_for(symbol, equity_provider) {
+            self.interval.apply_to(&mut request, symbol);
+        }
+        request
+    }
+
+    pub fn normalize_interval_for(&mut self, symbol: &str, equity_provider: Provider) -> bool {
+        if self.interval.supported_for(symbol, equity_provider) {
+            return false;
+        }
+        self.set_interval(ChartInterval::Auto)
     }
 
     pub const fn window(&self) -> ChartWindow {
@@ -278,6 +427,15 @@ impl ChartState {
 
     pub fn shift_preset(&mut self, direction: isize) -> bool {
         self.set_preset(self.preset.shift(direction))
+    }
+
+    pub fn set_interval(&mut self, interval: ChartInterval) -> bool {
+        let changed = self.interval != interval;
+        self.interval = interval;
+        if changed {
+            self.reset_view();
+        }
+        changed
     }
 
     pub fn move_cursor(&mut self, direction: isize) {
@@ -443,6 +601,31 @@ mod tests {
         assert_eq!(long.range, "1y");
         assert_eq!(long.interval, "1d");
         assert_eq!(long.limit, 252);
+    }
+
+    #[test]
+    fn chart_state_interval_override_changes_history_request_without_changing_range() {
+        let mut state = ChartState::new(ChartPreset::FiveDays);
+        assert!(state.set_interval(ChartInterval::FifteenMinutes));
+
+        let request = state.request_for_provider("CRDO", Provider::Auto);
+
+        assert_eq!(request.range, "5d");
+        assert_eq!(request.interval, "15m");
+        assert_eq!(request.limit, 320);
+        assert_eq!(request.session, HistorySession::Extended);
+    }
+
+    #[test]
+    fn interval_override_recomputes_request_limit_for_selected_precision() {
+        let mut state = ChartState::new(ChartPreset::FiveDays);
+        assert!(state.set_interval(ChartInterval::OneMinute));
+
+        let request = state.request_for_provider("CRDO", Provider::Auto);
+
+        assert_eq!(request.range, "5d");
+        assert_eq!(request.interval, "1m");
+        assert_eq!(request.limit, 4_800);
     }
 
     #[test]

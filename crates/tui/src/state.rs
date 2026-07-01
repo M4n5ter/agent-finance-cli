@@ -8,7 +8,7 @@ use agent_finance_market::service;
 use agent_finance_market::snapshot::MarketSnapshot;
 
 use crate::account::AccountSnapshot;
-use crate::chart::{ChartPreset, ChartState};
+use crate::chart::{ChartInterval, ChartPreset, ChartState};
 use crate::command::{ActionId, CommandPaletteState};
 use crate::config::{
     FloatingConfig, LayoutConfig, PanelConfig, ProviderConfig, TuiConfig, WorkspaceConfig,
@@ -525,14 +525,34 @@ impl AppState {
     }
 
     fn select_watchlist_symbol(&mut self, index: usize) {
+        self.select_symbol_index(index);
+    }
+
+    pub(super) fn select_symbol_index(&mut self, index: usize) {
         let before = self.selected_symbol;
-        if self.watchlist.is_empty() {
-            self.selected_symbol = 0;
+        self.selected_symbol = if self.watchlist.is_empty() {
+            0
         } else {
-            self.selected_symbol = index.min(self.watchlist.len() - 1);
-        }
+            index.min(self.watchlist.len() - 1)
+        };
         if self.selected_symbol != before {
             self.chart.reset_view();
+            self.normalize_chart_interval_for_selected_symbol();
+        }
+    }
+
+    pub(super) fn normalize_chart_interval_for_selected_symbol(&mut self) {
+        let Some(symbol) = self.selected_symbol().map(ToString::to_string) else {
+            return;
+        };
+        if self
+            .chart
+            .normalize_interval_for(&symbol, self.providers.equity.provider())
+        {
+            self.task_log.info(format!(
+                "chart interval reset to auto for {} on {}",
+                symbol, self.providers.equity
+            ));
         }
     }
 
@@ -572,6 +592,7 @@ impl AppState {
 
         if change.requires_provider_reload {
             self.pending_provider_preferences_update = true;
+            self.normalize_chart_interval_for_selected_symbol();
         }
         self.task_log.info(format!(
             "setting updated: {}={}",
@@ -671,6 +692,7 @@ impl AppState {
         if trading_profile_changed {
             self.invalidate_account_snapshot_for_profile_change();
         }
+        self.normalize_chart_interval_for_selected_symbol();
         self.task_log.info(if self.config_changes.is_empty() {
             "undid local config change; config is clean".to_string()
         } else {
@@ -733,10 +755,7 @@ impl AppState {
         });
 
         if let Some(index) = selected {
-            if self.selected_symbol != index {
-                self.chart.reset_view();
-            }
-            self.selected_symbol = index;
+            self.select_symbol_index(index);
         }
         if added.is_empty() {
             self.task_log
@@ -811,10 +830,11 @@ impl AppState {
                 let index = state.selected_symbol.min(state.watchlist.len() - 1);
                 let removed = state.watchlist.remove(index);
                 state.selected_symbol = index.min(state.watchlist.len() - 1);
-                state.chart.reset_view();
                 Some(LocalConfigEdit::new("watchlist", removed))
             })
             .expect("prevalidated watchlist delete must produce an edit");
+        self.chart.reset_view();
+        self.normalize_chart_interval_for_selected_symbol();
         self.task_log
             .info(format!("removed {removed} from watchlist"));
     }
@@ -833,9 +853,10 @@ impl AppState {
             let symbol = state.watchlist.remove(current);
             state.watchlist.insert(next, symbol);
             state.selected_symbol = next;
-            state.chart.reset_view();
             Some(LocalConfigEdit::new("watchlist", ()))
         });
+        self.chart.reset_view();
+        self.normalize_chart_interval_for_selected_symbol();
     }
 
     fn set_chart_preset(&mut self, preset: ChartPreset) {
@@ -871,6 +892,29 @@ impl AppState {
         };
         self.task_log
             .info(format!("chart preset changed from {before} to {after}"));
+        self.request_symbol_data_refresh(SymbolTaskKind::History);
+    }
+
+    fn set_chart_interval(&mut self, interval: ChartInterval) {
+        let Some(symbol) = self.selected_symbol().map(ToString::to_string) else {
+            self.task_log
+                .warning_event("no selected symbol for chart interval change".to_string());
+            return;
+        };
+        if !interval.supported_for(&symbol, self.providers.equity.provider()) {
+            self.task_log.warning_event(format!(
+                "chart interval {interval} is not supported by {} for {symbol}",
+                self.providers.equity
+            ));
+            return;
+        }
+        let before = self.chart.interval();
+        if !self.chart.set_interval(interval) {
+            return;
+        }
+        self.task_log.info(format!(
+            "chart interval changed from {before} to {interval}"
+        ));
         self.request_symbol_data_refresh(SymbolTaskKind::History);
     }
 
@@ -1050,6 +1094,7 @@ impl AppState {
             Action::RequestMarketRefresh => self.request_market_refresh(),
             Action::RequestSymbolDataRefresh(kind) => self.request_symbol_data_refresh(kind),
             Action::SetChartPreset(preset) => self.set_chart_preset(preset),
+            Action::SetChartInterval(interval) => self.set_chart_interval(interval),
             Action::ShiftChartPreset(direction) => self.shift_chart_preset(direction),
             Action::MoveChartCursor(direction) => self.chart.move_cursor(direction),
             Action::ZoomChartWindow(direction) => self.chart.zoom_window(direction),
@@ -1600,6 +1645,7 @@ pub enum Action {
         main_ratio: u16,
     },
     SetChartPreset(ChartPreset),
+    SetChartInterval(ChartInterval),
     ShiftChartPreset(isize),
     MoveChartCursor(isize),
     ZoomChartWindow(isize),

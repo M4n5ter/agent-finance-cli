@@ -930,6 +930,60 @@ fn mouse_click_on_history_chart_preset_changes_range_and_refreshes_history() {
 }
 
 #[test]
+fn mouse_click_on_history_chart_interval_changes_request_and_refreshes_history() {
+    let area = Rect::new(0, 0, 120, 32);
+    let mut state = AppState::from_config(crate::config::TuiConfig {
+        watchlist: vec!["CRDO".to_string()],
+        ..crate::config::TuiConfig::default()
+    });
+    state.reduce(Action::HistoryStarted {
+        generation: 1,
+        symbol: "CRDO".to_string(),
+    });
+    state.reduce(Action::HistoryLoaded {
+        generation: 1,
+        snapshot: history_snapshot("CRDO"),
+    });
+    let mut drag = MouseDrag::default();
+    let panel = layout::build(
+        area,
+        &state.layout,
+        &state.floating,
+        &state.visible_panels(),
+    )
+    .panel_rect(Panel::History)
+    .expect("history panel is visible");
+
+    let click = clickable_panel_action(
+        &mut state,
+        area,
+        panel,
+        Panel::History,
+        ActionId::SetChartInterval(crate::chart::ChartInterval::FifteenMinutes),
+    );
+    let previous_log_count = state.task_log.iter().count();
+    handle_mouse_event(area, &mut state, &mut drag, click);
+
+    assert_eq!(
+        state
+            .chart
+            .request_for_provider("CRDO", state.providers.equity.provider())
+            .interval,
+        "15m",
+        "the next history request should use the clicked interval"
+    );
+    assert!(
+        state
+            .task_log
+            .iter()
+            .skip(previous_log_count)
+            .any(|entry| entry.message == "history refresh requested for CRDO")
+    );
+    assert_eq!(state.panels.focused(), Panel::History);
+    assert_eq!(drag, MouseDrag::default());
+}
+
+#[test]
 fn mouse_cannot_click_hidden_history_chart_preset_without_history_snapshot() {
     let area = Rect::new(0, 0, 120, 32);
     let mut state = AppState::from_config(crate::config::TuiConfig::default());

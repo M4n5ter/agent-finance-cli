@@ -4,6 +4,7 @@ use std::sync::{Arc, RwLock};
 use std::thread;
 
 use agent_finance_core::ProfileStore;
+use agent_finance_market::is_likely_crypto_pair;
 use agent_finance_market::{
     args::{CryptoInstrument, HistorySession, Provider as MarketDataProvider},
     crypto_evidence_snapshot::{
@@ -646,7 +647,7 @@ impl TuiProviderPolicy {
         symbol: String,
         request: ChartHistoryRequest,
     ) -> HistorySnapshotRequest {
-        let request = self.adapt_history_request(request);
+        let request = self.adapt_history_request(&symbol, request);
         HistorySnapshotRequest {
             symbol,
             provider: request.provider,
@@ -666,7 +667,20 @@ impl TuiProviderPolicy {
         }
     }
 
-    fn adapt_history_request(&self, request: ChartHistoryRequest) -> ProviderHistoryRequest {
+    fn adapt_history_request(
+        &self,
+        symbol: &str,
+        request: ChartHistoryRequest,
+    ) -> ProviderHistoryRequest {
+        if is_likely_crypto_pair(symbol) {
+            return ProviderHistoryRequest {
+                provider: MarketDataProvider::Auto,
+                session: HistorySession::Regular,
+                interval: request.interval,
+                range: request.range,
+                limit: request.limit,
+            };
+        }
         let provider = self.equity.provider();
         match provider {
             MarketDataProvider::Robinhood => ProviderHistoryRequest {
@@ -800,6 +814,27 @@ mod tests {
         );
         assert_eq!(stooq_auto.interval, "1d");
         assert_eq!(stooq_auto.limit, 5);
+    }
+
+    #[test]
+    fn history_request_does_not_apply_equity_provider_adapters_to_crypto_symbols() {
+        let policy = TuiProviderPolicy::from(ProviderConfig {
+            equity: EquityProvider::Robinhood,
+            crypto: CryptoProvider::Binance,
+        });
+        let mut chart = crate::chart::ChartState::new(crate::chart::ChartPreset::OneDay);
+        assert!(chart.set_interval(crate::chart::ChartInterval::FifteenMinutes));
+
+        let history = policy.history_request(
+            "BTCUSDT".to_string(),
+            chart.request_for_provider("BTCUSDT", MarketDataProvider::Robinhood),
+        );
+
+        assert_eq!(history.provider, MarketDataProvider::Auto);
+        assert_eq!(history.crypto_provider, CryptoProvider::Binance);
+        assert_eq!(history.session, HistorySession::Regular);
+        assert_eq!(history.interval, "15m");
+        assert_eq!(history.limit, 96);
     }
 
     #[test]
