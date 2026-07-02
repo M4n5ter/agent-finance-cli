@@ -1,0 +1,12 @@
+[package]
+name = "agent-finance-i18n"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+fluent-bundle.workspace = true
+sys-locale.workspace = true
+unic-langid.workspace = true

@@ -8,9 +8,9 @@ pub(crate) struct ActionLine<A> {
     used_width: u16,
 }
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub(crate) struct ActionSpan<A> {
-    pub label: &'static str,
+    pub label: String,
     pub start: u16,
     pub end: u16,
     pub byte_start: usize,
@@ -51,7 +51,8 @@ impl<A> ActionLine<A> {
         self.used_width = self.used_width.saturating_add(added_width);
     }
 
-    pub(crate) fn push_visible_action(&mut self, label: &'static str, action: A) {
+    pub(crate) fn push_visible_action(&mut self, label: impl AsRef<str>, action: A) {
+        let label = label.as_ref();
         let label_width = UnicodeWidthStr::width(label) as u16;
         if label_width > self.remaining_width() {
             return;
@@ -62,7 +63,7 @@ impl<A> ActionLine<A> {
         self.text.push_str(label);
         self.used_width = self.used_width.saturating_add(label_width);
         self.actions.push(ActionSpan {
-            label,
+            label: label.to_string(),
             start,
             end: self.used_width,
             byte_start,
@@ -92,8 +93,8 @@ impl<A: Copy> ActionLine<A> {
     pub(crate) fn action_at(&self, content_column: u16) -> Option<ActionSpan<A>> {
         self.actions
             .iter()
-            .copied()
             .find(|span| (span.start..span.end).contains(&content_column))
+            .cloned()
     }
 }
 
@@ -101,7 +102,7 @@ pub(crate) fn right_aligned_action_line<A: Clone>(
     width: u16,
     text: &str,
     min_gap: u16,
-    actions: &[(&'static str, A)],
+    actions: &[(&str, A)],
 ) -> ActionLine<A> {
     let action_width = actions_width(actions);
     let mut line = ActionLine::new("", width);
@@ -124,7 +125,7 @@ pub(crate) fn right_aligned_action_line<A: Clone>(
     line
 }
 
-fn actions_width<A>(actions: &[(&'static str, A)]) -> u16 {
+fn actions_width<A>(actions: &[(&str, A)]) -> u16 {
     let labels_width = actions
         .iter()
         .map(|(label, _)| UnicodeWidthStr::width(*label) as u16)

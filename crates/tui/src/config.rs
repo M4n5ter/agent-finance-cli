@@ -5,8 +5,10 @@ use std::str::FromStr;
 use std::time::Duration;
 
 use agent_finance_core::paths;
+use agent_finance_i18n::{LocaleId, LocaleSources};
 use agent_finance_market::args::{CryptoProvider, Provider};
 use anyhow::{Context, Result};
+use serde::de::Error as _;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::chart::ChartPreset;
@@ -36,6 +38,7 @@ pub struct TuiLaunch {
     pub timeout_seconds: u64,
     pub timezone: String,
     pub account_load: bool,
+    pub locale: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
@@ -72,6 +75,7 @@ impl TuiLaunch {
             timeout_seconds,
             timezone: timezone.to_string(),
             account_load: true,
+            locale: None,
         }
     }
 
@@ -92,6 +96,11 @@ impl TuiLaunch {
 
     pub const fn with_account_load(mut self, account_load: bool) -> Self {
         self.account_load = account_load;
+        self
+    }
+
+    pub fn with_locale(mut self, locale: Option<String>) -> Self {
+        self.locale = locale;
         self
     }
 
@@ -133,6 +142,13 @@ impl TuiLaunch {
         if let Some(profile) = self.profile.as_ref() {
             config.trading.default_profile = Some(profile.clone());
         }
+        config.locale.current = Some(
+            LocaleSources::from_environment(
+                self.locale.as_deref(),
+                config.locale.current.map(LocaleId::as_str),
+            )
+            .locale,
+        );
         config.normalize();
         config
     }
@@ -168,6 +184,8 @@ pub struct TuiConfig {
     #[serde(default = "default_watchlist")]
     pub watchlist: Vec<String>,
     #[serde(default)]
+    pub locale: LocaleConfig,
+    #[serde(default)]
     pub workspace: WorkspaceConfig,
     #[serde(default)]
     pub layout: LayoutConfig,
@@ -193,6 +211,7 @@ impl Default for TuiConfig {
     fn default() -> Self {
         Self {
             watchlist: default_watchlist(),
+            locale: LocaleConfig::default(),
             workspace: WorkspaceConfig::default(),
             layout: LayoutConfig::default(),
             panels: PanelConfig::default(),
@@ -234,6 +253,7 @@ impl TuiConfig {
             self.watchlist = default_watchlist();
         }
         self.workspace.normalize();
+        self.locale.normalize();
         self.layout.normalize();
         self.panels.normalize();
         self.floating.normalize();
@@ -243,6 +263,21 @@ impl TuiConfig {
         self.theme.normalize();
         self.keymap.normalize();
     }
+}
+
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, Eq, PartialEq)]
+pub struct LocaleConfig {
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        serialize_with = "serialize_optional_locale",
+        deserialize_with = "deserialize_optional_locale"
+    )]
+    pub current: Option<LocaleId>,
+}
+
+impl LocaleConfig {
+    fn normalize(&mut self) {}
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Eq, PartialEq)]
@@ -286,6 +321,30 @@ fn persisted_workspace_label(label: &str) -> Option<WorkspaceKind> {
         "crypto" => Some(WorkspaceKind::Research),
         value => value.parse().ok(),
     }
+}
+
+fn serialize_optional_locale<S>(
+    locale: &Option<LocaleId>,
+    serializer: S,
+) -> std::result::Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    locale.map(LocaleId::as_str).serialize(serializer)
+}
+
+fn deserialize_optional_locale<'de, D>(
+    deserializer: D,
+) -> std::result::Result<Option<LocaleId>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let Some(value) = Option::<String>::deserialize(deserializer)? else {
+        return Ok(None);
+    };
+    LocaleId::parse(&value)
+        .ok_or_else(|| D::Error::custom(format!("unknown locale '{value}'")))
+        .map(Some)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
@@ -757,6 +816,32 @@ mod tests {
     }
 
     #[test]
+    fn launch_uses_persisted_locale_when_cli_locale_is_absent() {
+        let launch = TuiLaunch::new(Vec::new(), None, true);
+        let runtime = launch.runtime_config(TuiConfig {
+            locale: LocaleConfig {
+                current: Some(LocaleId::JaJp),
+            },
+            ..TuiConfig::default()
+        });
+
+        assert_eq!(runtime.locale.current, Some(LocaleId::JaJp));
+    }
+
+    #[test]
+    fn launch_cli_locale_overrides_persisted_locale() {
+        let launch = TuiLaunch::new(Vec::new(), None, true).with_locale(Some("ko".to_string()));
+        let runtime = launch.runtime_config(TuiConfig {
+            locale: LocaleConfig {
+                current: Some(LocaleId::JaJp),
+            },
+            ..TuiConfig::default()
+        });
+
+        assert_eq!(runtime.locale.current, Some(LocaleId::KoKr));
+    }
+
+    #[test]
     fn launch_chart_preset_override_changes_runtime_chart_only() {
         let launch =
             TuiLaunch::new(Vec::new(), None, true).with_chart_preset(Some(ChartPreset::OneMonth));
@@ -794,6 +879,9 @@ mod tests {
     fn config_roundtrip_preserves_user_visible_preferences() {
         let mut config = TuiConfig {
             watchlist: vec!["lite".to_string(), "aaoi".to_string()],
+            locale: LocaleConfig {
+                current: Some(LocaleId::ZhCn),
+            },
             workspace: WorkspaceConfig {
                 current: WorkspaceKind::Research,
             },
@@ -840,6 +928,7 @@ mod tests {
         let decoded = toml::from_str::<TuiConfig>(&encoded).expect("decode");
 
         assert_eq!(decoded.watchlist, ["LITE", "AAOI"]);
+        assert_eq!(decoded.locale.current, Some(LocaleId::ZhCn));
         assert_eq!(decoded.workspace.current, WorkspaceKind::Research);
         assert_eq!(decoded.layout.left_ratio, 15);
         assert_eq!(decoded.layout.main_ratio, 60);
@@ -859,6 +948,7 @@ mod tests {
         assert_eq!(decoded.theme, ThemeConfig::default());
         assert_eq!(decoded.keymap.normal, KeymapConfig::default().normal);
         assert!(encoded.contains("equity = \"yahoo\""));
+        assert!(encoded.contains("current = \"zh-CN\""));
         assert!(encoded.contains("crypto = \"binance\""));
         assert!(encoded.contains("[trading]"));
         assert!(encoded.contains("default_profile = \"mainnet\""));

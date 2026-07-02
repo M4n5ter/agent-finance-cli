@@ -17,6 +17,7 @@ mod futures_state_controls;
 mod futures_state_ticket;
 mod hints;
 mod history_chart;
+mod i18n;
 mod input;
 mod intent_review_view;
 mod keymap;

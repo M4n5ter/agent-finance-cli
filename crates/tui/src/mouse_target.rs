@@ -92,7 +92,6 @@ impl MouseTarget {
                 panel: hover_panel,
                 action: PanelMouseAction::ExecuteAction {
                     action: hover_action,
-                    ..
                 },
             } if hover_panel == panel && hover_action == action
         )
@@ -197,37 +196,16 @@ impl MouseTarget {
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum PanelMouseAction {
-    SelectRow {
-        index: usize,
-    },
-    SelectField {
-        index: usize,
-    },
-    AdjustField {
-        index: usize,
-        direction: isize,
-    },
+    SelectRow { index: usize },
+    SelectField { index: usize },
+    AdjustField { index: usize, direction: isize },
     StageReadyChange,
-    ExecuteAction {
-        label: &'static str,
-        action: ActionId,
-    },
-    RowAction {
-        content_row: usize,
-    },
-    SettingAdjust {
-        index: usize,
-        direction: isize,
-    },
-    IntentReviewAction {
-        action: IntentReviewAction,
-    },
-    InspectRow {
-        index: usize,
-    },
-    InspectChart {
-        position: MousePosition,
-    },
+    ExecuteAction { action: ActionId },
+    RowAction { content_row: usize },
+    SettingAdjust { index: usize, direction: isize },
+    IntentReviewAction { action: IntentReviewAction },
+    InspectRow { index: usize },
+    InspectChart { position: MousePosition },
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
@@ -268,12 +246,12 @@ pub(crate) fn target_at(
                 )
             })
             .or(Some(MouseTarget::Floating(kind))),
-        LayoutHit::Status => workspace_tab_at(layout.status, position.column)
+        LayoutHit::Status => workspace_tab_at(layout.status, position.column, state.locale)
             .map(MouseTarget::WorkspaceTab)
             .or_else(|| {
                 crate::status_bar::visible_action_at(
                     state,
-                    crate::status_bar::areas(layout.status).detail,
+                    crate::status_bar::areas(layout.status, state.locale).detail,
                     position.column,
                 )
                 .map(MouseTarget::StatusAction)

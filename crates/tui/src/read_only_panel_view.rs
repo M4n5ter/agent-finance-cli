@@ -409,8 +409,8 @@ impl HistorySummaryRow {
             Self::Action(action) => action
                 .actions
                 .iter()
-                .copied()
-                .find(|span| (span.start..span.end).contains(&content_column)),
+                .find(|span| (span.start..span.end).contains(&content_column))
+                .cloned(),
         }
     }
 

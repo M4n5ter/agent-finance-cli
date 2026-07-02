@@ -3,6 +3,7 @@ use crate::config::ProviderConfig;
 use crate::keymap::{KeyStroke, KeymapConfig};
 use crate::model::FloatingKind;
 use crate::theme::{ThemeColor, ThemeConfig};
+use agent_finance_i18n::LocaleId;
 
 #[derive(Debug, Clone, Copy, Default, Eq, PartialEq)]
 pub struct SettingsEditorState {
@@ -33,7 +34,8 @@ pub struct SettingRow {
 }
 
 impl SettingRow {
-    pub const ALL: [Self; 11] = [
+    pub const ALL: [Self; 12] = [
+        Self::locale(),
         Self::provider("equity provider", ProviderSetting::Equity),
         Self::provider("crypto provider", ProviderSetting::Crypto),
         Self::theme("theme accent", ThemeSetting::Accent),
@@ -46,6 +48,13 @@ impl SettingRow {
         Self::keymap(KeymapSetting::SaveConfig),
         Self::keymap(KeymapSetting::UndoConfig),
     ];
+
+    const fn locale() -> Self {
+        Self {
+            label: "language",
+            target: SettingTarget::Locale,
+        }
+    }
 
     const fn provider(label: &'static str, setting: ProviderSetting) -> Self {
         Self {
@@ -72,23 +81,44 @@ impl SettingRow {
         self.label
     }
 
+    pub fn label_key(self) -> &'static str {
+        match self.label {
+            "language" => "tui-setting-language",
+            "equity provider" => "tui-setting-equity-provider",
+            "crypto provider" => "tui-setting-crypto-provider",
+            "theme accent" => "tui-setting-theme-accent",
+            "selection background" => "tui-setting-selection-background",
+            "selection foreground" => "tui-setting-selection-foreground",
+            "key command palette" => "tui-setting-key-command-palette",
+            "key symbol search" => "tui-setting-key-symbol-search",
+            "key provider details" => "tui-setting-key-provider-details",
+            "key live writes" => "tui-setting-key-live-writes",
+            "key save config" => "tui-setting-key-save-config",
+            "key undo config" => "tui-setting-key-undo-config",
+            _ => "tui-setting-unknown",
+        }
+    }
+
     pub fn value(
         self,
+        locale: &LocaleId,
         providers: &ProviderConfig,
         theme: &ThemeConfig,
         keymap: &KeymapConfig,
     ) -> String {
-        self.target.value(providers, theme, keymap)
+        self.target.value(locale, providers, theme, keymap)
     }
 
     pub fn adjust(
         self,
+        locale: &mut LocaleId,
         providers: &mut ProviderConfig,
         theme: &mut ThemeConfig,
         keymap: &mut KeymapConfig,
         direction: isize,
     ) -> Option<SettingChange> {
-        self.target.adjust(providers, theme, keymap, direction)
+        self.target
+            .adjust(locale, providers, theme, keymap, direction)
     }
 }
 
@@ -100,6 +130,7 @@ pub struct SettingChange {
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 enum SettingTarget {
+    Locale,
     Provider(ProviderSetting),
     Theme(ThemeSetting),
     Keymap(KeymapSetting),
@@ -108,11 +139,13 @@ enum SettingTarget {
 impl SettingTarget {
     fn value(
         self,
+        locale: &LocaleId,
         providers: &ProviderConfig,
         theme: &ThemeConfig,
         keymap: &KeymapConfig,
     ) -> String {
         match self {
+            Self::Locale => locale.display_name().to_string(),
             Self::Provider(setting) => setting.value(providers),
             Self::Theme(setting) => setting.value(theme),
             Self::Keymap(setting) => setting.value(keymap),
@@ -121,17 +154,35 @@ impl SettingTarget {
 
     fn adjust(
         self,
+        locale: &mut LocaleId,
         providers: &mut ProviderConfig,
         theme: &mut ThemeConfig,
         keymap: &mut KeymapConfig,
         direction: isize,
     ) -> Option<SettingChange> {
         match self {
+            Self::Locale => adjust_locale(locale, direction),
             Self::Provider(setting) => setting.adjust(providers, direction),
             Self::Theme(setting) => setting.adjust(theme, direction),
             Self::Keymap(setting) => setting.adjust(keymap, direction),
         }
     }
+}
+
+fn adjust_locale(locale: &mut LocaleId, direction: isize) -> Option<SettingChange> {
+    let current = LocaleId::ALL
+        .iter()
+        .position(|candidate| candidate == locale)
+        .unwrap_or_default();
+    let next = LocaleId::ALL[shift_index(current, LocaleId::ALL.len(), direction)];
+    if *locale == next {
+        return None;
+    }
+    *locale = next;
+    Some(SettingChange {
+        section: "locale",
+        requires_provider_reload: false,
+    })
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
@@ -365,10 +416,22 @@ mod tests {
         assert_eq!(state.selected().label(), "key undo config");
 
         state.move_selection(1);
-        assert_eq!(state.selected().label(), "equity provider");
+        assert_eq!(state.selected().label(), "language");
 
         state.move_selection(2);
-        assert_eq!(state.selected().label(), "theme accent");
+        assert_eq!(state.selected().label(), "crypto provider");
+    }
+
+    #[test]
+    fn locale_setting_cycles_supported_locales() {
+        let mut locale = LocaleId::EnUs;
+
+        let change = adjust_locale(&mut locale, 1).expect("locale should change");
+
+        assert_eq!(change.section, "locale");
+        assert_eq!(locale, LocaleId::ZhCn);
+        adjust_locale(&mut locale, -1);
+        assert_eq!(locale, LocaleId::EnUs);
     }
 
     #[test]

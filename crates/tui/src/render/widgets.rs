@@ -1,6 +1,7 @@
 use ratatui::style::Style;
 use ratatui::widgets::{Block, Borders};
 
+use crate::i18n::TuiText;
 use crate::model::Panel;
 use crate::pane_status::{TuiPaneStatus, pane_health};
 use crate::state::AppState;
@@ -36,12 +37,13 @@ pub(crate) fn format_volume(value: f64) -> String {
 
 pub(super) fn panel_block(panel: Panel, state: &AppState) -> Block<'static> {
     let status = pane_health(state, panel).status;
+    let text = TuiText::new(state.locale);
     let style = if state.panels.focused() == panel {
         state.theme.accent_style()
     } else {
         status_style(state, status)
     };
-    let title = format!("{} [{}]", panel.title(), status.label());
+    let title = format!("{} [{}]", text.panel_title(panel), text.pane_status(status));
     Block::default()
         .title(title)
         .borders(Borders::ALL)

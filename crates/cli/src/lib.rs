@@ -3,6 +3,7 @@ mod cli;
 mod crypto_app;
 mod crypto_cli;
 mod crypto_evidence;
+mod localized_help;
 mod output;
 mod skills;
 mod terminal_app;

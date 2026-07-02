@@ -13,6 +13,7 @@ path = "src/main.rs"
 [dependencies]
 agent-finance-binance.workspace = true
 agent-finance-core.workspace = true
+agent-finance-i18n.workspace = true
 agent-finance-market.workspace = true
 agent-finance-trading.workspace = true
 agent-finance-tui.workspace = true
@@ -22,3 +23,4 @@ clap = { workspace = true, features = ["derive"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }
+unicode-width.workspace = true

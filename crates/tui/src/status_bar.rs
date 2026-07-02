@@ -1,5 +1,7 @@
 use ratatui::layout::Rect;
 
+use agent_finance_i18n::LocaleId;
+
 use crate::command::ActionId;
 use crate::hints::{self, StatusHint};
 use crate::state::AppState;
@@ -250,8 +252,8 @@ pub(crate) fn status_symbol_and_errors(state: &AppState) -> (&str, usize) {
     (symbol, errors)
 }
 
-pub(crate) fn areas(area: Rect) -> StatusAreas {
-    let tab_width = crate::workspace_tabs::workspace_tabs_width().min(area.width);
+pub(crate) fn areas(area: Rect, locale: LocaleId) -> StatusAreas {
+    let tab_width = crate::workspace_tabs::workspace_tabs_width(locale).min(area.width);
     StatusAreas {
         tabs: Rect {
             x: area.x,
@@ -329,7 +331,7 @@ mod tests {
     #[test]
     fn status_areas_share_layout_between_render_and_hit_test() {
         let area = Rect::new(4, 10, 120, 1);
-        let areas = areas(area);
+        let areas = areas(area, LocaleId::EnUs);
 
         assert_eq!(areas.tabs.x, area.x);
         assert_eq!(areas.detail.x, areas.tabs.right());

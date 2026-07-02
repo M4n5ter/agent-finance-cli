@@ -25,7 +25,7 @@ pub(super) fn render_status(
         return;
     }
 
-    let areas = crate::status_bar::areas(area);
+    let areas = crate::status_bar::areas(area, state.locale);
     render_workspace_tabs(frame, state, areas.tabs, mouse_target);
 
     if areas.detail.is_empty() {
@@ -102,7 +102,7 @@ fn render_workspace_tabs(
         return;
     }
 
-    let spans = workspace_tab_segments(area)
+    let spans = workspace_tab_segments(area, state.locale)
         .into_iter()
         .flat_map(|segment| {
             let hovered =

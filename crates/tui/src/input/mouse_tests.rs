@@ -1283,7 +1283,7 @@ fn mouse_click_on_settings_row_selects_setting() {
         &mut state,
         area,
         panel,
-        |target| target.panel_row_hovered(Panel::Settings, 2),
+        |target| target.panel_row_hovered(Panel::Settings, 3),
         "settings row was not found",
     );
     handle_mouse_event(area, &mut state, &mut drag, click);
@@ -1513,7 +1513,7 @@ fn mouse_click_on_settings_adjust_action_updates_setting() {
         &mut state,
         area,
         panel,
-        |target| target.panel_setting_adjust_hovered(Panel::Settings, 0, 1),
+        |target| target.panel_setting_adjust_hovered(Panel::Settings, 1, 1),
         "settings next action was not found",
     );
     handle_mouse_event(area, &mut state, &mut drag, click);
@@ -3464,7 +3464,7 @@ fn visible_status_action_column(area: Rect, state: &AppState, action: ActionId) 
         &state.floating,
         &state.visible_panels(),
     );
-    let detail = crate::status_bar::areas(layout.status).detail;
+    let detail = crate::status_bar::areas(layout.status, state.locale).detail;
     (detail.x..detail.right())
         .find(|column| {
             mouse_target::target_at(state, &layout, MousePosition::new(*column, detail.y))

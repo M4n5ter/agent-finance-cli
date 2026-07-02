@@ -65,6 +65,7 @@ pub(crate) use staged_confirmation::{PendingStagedConfirmationView, TypedConfirm
 
 #[derive(Debug, Clone)]
 pub struct AppState {
+    pub locale: agent_finance_i18n::LocaleId,
     pub watchlist: Vec<String>,
     pub selected_symbol: usize,
     pub config_changes: Vec<String>,
@@ -153,6 +154,10 @@ impl ChartReferenceSelectionFailure {
 impl AppState {
     pub fn from_config(config: TuiConfig) -> Self {
         let mut state = Self {
+            locale: config
+                .locale
+                .current
+                .unwrap_or(agent_finance_i18n::LocaleId::DEFAULT),
             watchlist: config.watchlist,
             selected_symbol: 0,
             config_changes: Vec::new(),
@@ -210,6 +215,7 @@ impl AppState {
 
     pub fn export_config(&self, base: &TuiConfig) -> TuiConfig {
         let mut config = base.clone();
+        config.locale.current = Some(self.locale);
         config.watchlist = self.watchlist.clone();
         config.workspace = WorkspaceConfig {
             current: self.workspace,
@@ -682,6 +688,7 @@ impl AppState {
         let row = self.settings_editor.selected();
         let Some(change) = self.edit_local_config(|state| {
             row.adjust(
+                &mut state.locale,
                 &mut state.providers,
                 &mut state.theme,
                 &mut state.keymap,
@@ -699,7 +706,7 @@ impl AppState {
         self.task_log.info(format!(
             "setting updated: {}={}",
             row.label(),
-            row.value(&self.providers, &self.theme, &self.keymap)
+            row.value(&self.locale, &self.providers, &self.theme, &self.keymap)
         ));
     }
 

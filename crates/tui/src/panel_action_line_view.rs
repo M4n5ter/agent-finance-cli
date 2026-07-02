@@ -22,8 +22,8 @@ pub(crate) fn panel_action_span_at(
 ) -> Option<PanelActionSpan> {
     actions
         .iter()
-        .copied()
         .find(|span| (span.start..span.end).contains(&content_column))
+        .cloned()
 }
 
 pub(crate) fn render_panel_action_line(

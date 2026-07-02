@@ -36,6 +36,11 @@ where
     after_help = "AI agents: start with `agent-finance skills get core`; prefer capability-first commands, then force providers only for cross-checks."
 )]
 pub struct Cli {
+    /// Human-output locale. Supported values: en-US, zh-CN, ja-JP, ko-KR and aliases en/zh/ja/ko.
+    /// Defaults to AGENT_FINANCE_LOCALE, then the system locale, then en-US.
+    #[arg(long, global = true)]
+    pub locale: Option<String>,
+
     /// Explicit proxy URL, for example http://127.0.0.1:7890 or socks5h://127.0.0.1:7890.
     /// If omitted, AGENT_FINANCE_PROXY and standard proxy environment variables are checked.
     #[arg(long, global = true)]
@@ -304,6 +309,21 @@ mod tests {
         };
         assert_eq!(args.profile, "smoke");
         assert!(args.json);
+    }
+
+    #[test]
+    fn accepts_global_locale_before_subcommands() {
+        let cli = Cli::try_parse_from([
+            "agent-finance",
+            "--locale",
+            "zh-CN",
+            "market",
+            "price",
+            "AAPL",
+        ])
+        .expect("global locale should parse before nested commands");
+
+        assert_eq!(cli.locale.as_deref(), Some("zh-CN"));
     }
 }
 

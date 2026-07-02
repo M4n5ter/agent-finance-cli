@@ -291,7 +291,10 @@ mod tests {
         assert_eq!(
             rows.action_at_content_cell(80, 4, 0)
                 .map(|span| (span.label, span.action)),
-            Some(("[capture price]", ActionId::CaptureOrderReferencePrice))
+            Some((
+                "[capture price]".to_string(),
+                ActionId::CaptureOrderReferencePrice,
+            ))
         );
         assert_eq!(rows.action_at_content_cell(80, 4, 15), None);
         assert_eq!(rows.action_at_content_cell(3, 4, 0), None);

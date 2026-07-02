@@ -1,6 +1,9 @@
+use std::{env, process};
+
 use anyhow::{Result, anyhow};
 use clap::Parser;
 
+use agent_finance_i18n::{LocaleResolution, LocaleSources, Translator};
 use agent_finance_market::service::{self, MarketRuntime, PriceResponse, WatchResponse};
 use agent_finance_market::time::resolve_timezone;
 
@@ -11,18 +14,44 @@ use crate::cli::{
     WatchArgs,
 };
 use crate::crypto_app;
+use crate::localized_help;
 use crate::output;
 use crate::skills;
 
 pub async fn run() -> Result<()> {
-    let cli = Cli::parse();
+    let raw_args = env::args_os().collect::<Vec<_>>();
+    if localized_help::print_top_level_help_if_requested(&raw_args)? {
+        return Ok(());
+    }
+
+    let cli = match Cli::try_parse_from(raw_args.clone()) {
+        Ok(cli) => cli,
+        Err(error) => {
+            localized_help::print_parse_error_guidance(&raw_args, error.kind())?;
+            error.print()?;
+            process::exit(error.exit_code());
+        }
+    };
+    let locale = LocaleSources::from_environment(cli.locale.as_deref(), None);
+    let translator = Translator::new(locale.locale)?;
+    let cli_locale = cli.locale.clone();
     let proxy = cli.proxy.as_deref();
     let no_proxy = cli.no_proxy;
     let timezone = resolve_timezone(cli.timezone.as_deref())?;
     let timezone = timezone.as_str();
     let timeout_seconds = cli.timeout_seconds;
     match cli.command {
-        Command::Market(args) => run_market(args, proxy, no_proxy, timeout_seconds, timezone).await,
+        Command::Market(args) => {
+            run_market(
+                args,
+                proxy,
+                no_proxy,
+                timeout_seconds,
+                timezone,
+                &translator,
+            )
+            .await
+        }
         Command::Tui(args) => {
             let dump_state = args
                 .dump_state
@@ -41,6 +70,7 @@ pub async fn run() -> Result<()> {
                     timezone,
                 )
                 .with_profile(args.profile)
+                .with_locale(cli_locale)
                 .with_account_load(!args.no_account_load)
                 .with_workspace(args.workspace)
                 .with_chart_preset(args.chart_preset)
@@ -55,8 +85,14 @@ pub async fn run() -> Result<()> {
         Command::State(args) => crate::terminal_state::run(args, timeout_seconds).await,
         Command::Risk(args) => crate::terminal_app::run_risk(args),
         Command::Audit(args) => crate::terminal_app::run_audit(args),
-        Command::Skills(args) => run_skills(args),
+        Command::Skills(args) => run_skills(args, &locale, &translator),
     }
+}
+
+#[allow(dead_code)]
+struct CliContext {
+    locale: LocaleResolution,
+    translator: Translator,
 }
 
 async fn run_market(
@@ -65,11 +101,12 @@ async fn run_market(
     no_proxy: bool,
     timeout_seconds: u64,
     timezone: &str,
+    translator: &Translator,
 ) -> Result<()> {
     let runtime = MarketRuntime::new(proxy, no_proxy, timeout_seconds, timezone);
     match args.command {
-        MarketCommand::Price(args) => run_price(&runtime, args).await,
-        MarketCommand::Sessions(args) => run_sessions(&runtime, args).await,
+        MarketCommand::Price(args) => run_price(&runtime, args, translator).await,
+        MarketCommand::Sessions(args) => run_sessions(&runtime, args, translator).await,
         MarketCommand::History(args) => run_history(&runtime, args).await,
         MarketCommand::Indicators(args) => run_indicators(&runtime, args).await,
         MarketCommand::Fundamentals(args) => {
@@ -113,7 +150,7 @@ async fn run_market(
         MarketCommand::Screen(args) => run_screen(&runtime, args).await,
         MarketCommand::Stooq(args) => run_stooq(&runtime, args).await,
         MarketCommand::Providers(args) => run_providers(args),
-        MarketCommand::Watch(args) => run_watch(&runtime, args).await,
+        MarketCommand::Watch(args) => run_watch(&runtime, args, translator).await,
         MarketCommand::Stream(args) => run_stream(&runtime, args).await,
     }
 }
@@ -165,7 +202,12 @@ async fn run_polymarket(runtime: &MarketRuntime, args: PolymarketArgs) -> Result
     }
 }
 
-fn run_skills(args: crate::cli::SkillsArgs) -> Result<()> {
+fn run_skills(
+    args: crate::cli::SkillsArgs,
+    locale: &LocaleResolution,
+    translator: &Translator,
+) -> Result<()> {
+    let _ = (locale, translator);
     match args.command {
         crate::cli::SkillsCommand::List => {
             skills::print_list()?;
@@ -184,7 +226,11 @@ fn run_skills(args: crate::cli::SkillsArgs) -> Result<()> {
     }
 }
 
-async fn run_price(runtime: &MarketRuntime, args: crate::cli::PriceArgs) -> Result<()> {
+async fn run_price(
+    runtime: &MarketRuntime,
+    args: crate::cli::PriceArgs,
+    translator: &Translator,
+) -> Result<()> {
     let json = args.json;
     let show_all = matches!(args.session, crate::cli::SessionMode::All);
     let response = service::price(
@@ -216,7 +262,7 @@ async fn run_price(runtime: &MarketRuntime, args: crate::cli::PriceArgs) -> Resu
                 if index > 0 {
                     println!();
                 }
-                output::print_price_summary(summary, show_all);
+                output::print_price_summary(summary, show_all, translator);
             }
         }
     }
@@ -228,7 +274,11 @@ async fn run_price(runtime: &MarketRuntime, args: crate::cli::PriceArgs) -> Resu
     }
 }
 
-async fn run_sessions(runtime: &MarketRuntime, args: SessionsArgs) -> Result<()> {
+async fn run_sessions(
+    runtime: &MarketRuntime,
+    args: SessionsArgs,
+    translator: &Translator,
+) -> Result<()> {
     let summary = service::sessions(
         runtime,
         service::SessionsRequest {
@@ -241,7 +291,7 @@ async fn run_sessions(runtime: &MarketRuntime, args: SessionsArgs) -> Result<()>
     if args.json {
         println!("{}", serde_json::to_string_pretty(&summary)?);
     } else {
-        output::print_price_summary(&summary, true);
+        output::print_price_summary(&summary, true, translator);
     }
 
     if summary.current.is_some() {
@@ -498,7 +548,11 @@ async fn run_screen(runtime: &MarketRuntime, args: ScreenArgs) -> Result<()> {
     Ok(())
 }
 
-async fn run_watch(runtime: &MarketRuntime, args: WatchArgs) -> Result<()> {
+async fn run_watch(
+    runtime: &MarketRuntime,
+    args: WatchArgs,
+    translator: &Translator,
+) -> Result<()> {
     let json = args.json;
     let mut had_errors = false;
     service::watch_each(
@@ -526,7 +580,7 @@ async fn run_watch(runtime: &MarketRuntime, args: WatchArgs) -> Result<()> {
                 }
                 WatchResponse::Equity(summaries) => {
                     for summary in &summaries {
-                        output::print_price_summary(summary, false);
+                        output::print_price_summary(summary, false, translator);
                         println!();
                     }
                 }

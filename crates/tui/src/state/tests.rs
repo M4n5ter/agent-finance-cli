@@ -30,9 +30,7 @@ fn move_to_setting(state: &mut AppState, label: &str) {
         .iter()
         .position(|row| row.label() == label)
         .expect("setting row exists");
-    for _ in 0..index {
-        state.reduce(Action::MoveSettingsSelection(1));
-    }
+    state.reduce(Action::SelectSettingRow(index));
 }
 
 fn request_and_confirm_selected_staged_submit(state: &mut AppState) -> StagedSubmitRequest {
@@ -2083,6 +2081,7 @@ fn provider_change_normalizes_unsupported_chart_interval() {
         crate::chart::ChartInterval::FifteenMinutes
     );
 
+    move_to_setting(&mut state, "equity provider");
     while state.providers.equity != crate::config::EquityProvider::Robinhood {
         state.reduce(Action::AdjustSelectedSetting(1));
     }
@@ -3079,6 +3078,7 @@ fn settings_provider_preferences_edit_export_and_request_runtime_update() {
         ..TuiConfig::default()
     });
 
+    move_to_setting(&mut state, "equity provider");
     state.reduce(Action::AdjustSelectedSetting(1));
 
     assert_eq!(state.providers.equity, crate::config::EquityProvider::Yahoo);
@@ -3089,7 +3089,7 @@ fn settings_provider_preferences_edit_export_and_request_runtime_update() {
     assert_eq!(pending.equity, crate::config::EquityProvider::Yahoo);
     assert!(state.take_pending_provider_preferences_update().is_none());
 
-    state.reduce(Action::MoveSettingsSelection(1));
+    move_to_setting(&mut state, "crypto provider");
     state.reduce(Action::AdjustSelectedSetting(1));
 
     assert_eq!(state.providers.crypto, CryptoProvider::Binance);
@@ -3114,7 +3114,7 @@ fn settings_theme_edit_exports_without_provider_runtime_update() {
         ..TuiConfig::default()
     });
 
-    state.reduce(Action::MoveSettingsSelection(2));
+    move_to_setting(&mut state, "theme accent");
     state.reduce(Action::AdjustSelectedSetting(1));
 
     assert_eq!(state.theme.accent, ThemeColor::Gray);
@@ -3134,6 +3134,7 @@ fn settings_provider_edit_can_be_undone_and_reloads_runtime_preferences() {
     });
     let initial_equity = state.providers.equity;
 
+    move_to_setting(&mut state, "equity provider");
     state.reduce(Action::AdjustSelectedSetting(1));
     assert_eq!(state.providers.equity, crate::config::EquityProvider::Yahoo);
     assert_eq!(state.config_changes, ["providers"]);
@@ -3161,7 +3162,7 @@ fn settings_theme_edit_undo_restores_clean_config_without_provider_reload() {
     });
     let initial_accent = state.theme.accent;
 
-    state.reduce(Action::MoveSettingsSelection(2));
+    move_to_setting(&mut state, "theme accent");
     state.reduce(Action::AdjustSelectedSetting(1));
     assert_eq!(state.theme.accent, ThemeColor::Gray);
 

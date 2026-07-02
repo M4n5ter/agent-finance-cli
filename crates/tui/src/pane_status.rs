@@ -24,19 +24,6 @@ pub enum TuiPaneStatus {
     Stale,
 }
 
-impl TuiPaneStatus {
-    pub const fn label(self) -> &'static str {
-        match self {
-            Self::Fresh => "fresh",
-            Self::Loading => "loading",
-            Self::Partial => "partial",
-            Self::Empty => "empty",
-            Self::Error => "error",
-            Self::Stale => "stale",
-        }
-    }
-}
-
 pub fn pane_health(state: &AppState, panel: Panel) -> PaneHealth {
     let data = pane_data_state(state, panel);
     let status = if data.has_error {

@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 
 use anyhow::Result;
 
+use agent_finance_i18n::Translator;
 use agent_finance_market::model::{
     DerivedIndicator, HistoryBatch, PredictionMarketReport, PredictionMarketSummary,
     PredictionOutcome, PredictionSearchReport, PricePoint, PriceSummary, ProviderProfile,
@@ -11,65 +12,106 @@ use agent_finance_market::service::{
     CryptoSentimentReport, CryptoSnapshotReport, CryptoStreamReport, PageReadReport,
 };
 use agent_finance_market::time::utc_to_local;
+use unicode_width::UnicodeWidthStr;
 
-pub fn print_price_summary(summary: &PriceSummary, show_all: bool) {
+pub fn print_price_summary(summary: &PriceSummary, show_all: bool, translator: &Translator) {
     println!(
-        "{} price summary  fetched={}  tz={}",
-        summary.symbol, summary.fetched_at_local, summary.timezone
+        "{}",
+        translator.text_with_args(
+            "price-summary-title",
+            &[
+                ("symbol", summary.symbol.as_str()),
+                ("fetched", summary.fetched_at_local.as_str()),
+                ("timezone", summary.timezone.as_str()),
+            ],
+        )
     );
     if let Some(current) = summary.current.as_ref() {
+        let price = money_value(current.price);
+        let change = pct_value(current.change_pct);
         println!(
-            "Current: {} {}  session={}  source={}  change={}  time={}",
-            currency(current.currency.as_deref()),
-            money_value(current.price),
-            current.session.as_deref().unwrap_or("-"),
-            current.provider,
-            pct_value(current.change_pct),
-            current.market_time_local.as_deref().unwrap_or("-")
+            "{}",
+            translator.text_with_args(
+                "price-current",
+                &[
+                    ("currency", currency(current.currency.as_deref())),
+                    ("price", price.as_str()),
+                    ("session", current.session.as_deref().unwrap_or("-")),
+                    ("source", current.provider.as_str()),
+                    ("change", change.as_str()),
+                    ("time", current.market_time_local.as_deref().unwrap_or("-")),
+                ],
+            )
         );
     } else {
-        println!("Current: no quote available");
+        println!("{}", translator.text("price-current-missing"));
     }
+    let previous_close = money_value(summary.regular_basis.previous_close);
+    let open = money_value(summary.regular_basis.open);
+    let high = money_value(summary.regular_basis.high);
+    let low = money_value(summary.regular_basis.low);
+    let volume = number_value(summary.regular_basis.volume.map(|value| value as f64));
     println!(
-        "Regular basis: prev_close={} open={} high={} low={} volume={}",
-        money_value(summary.regular_basis.previous_close),
-        money_value(summary.regular_basis.open),
-        money_value(summary.regular_basis.high),
-        money_value(summary.regular_basis.low),
-        number_value(summary.regular_basis.volume.map(|value| value as f64))
+        "{}",
+        translator.text_with_args(
+            "price-regular-basis",
+            &[
+                ("prevClose", previous_close.as_str()),
+                ("open", open.as_str()),
+                ("high", high.as_str()),
+                ("low", low.as_str()),
+                ("volume", volume.as_str()),
+            ],
+        )
     );
     if let Some(proxy) = summary.proxy.as_ref() {
+        let proxy_price = money_value(proxy.price);
         println!(
-            "Proxy: {} {} via {} time={} note={}",
-            currency(proxy.currency.as_deref()),
-            money_value(proxy.price),
-            proxy.provider,
-            proxy.market_time_local.as_deref().unwrap_or("-"),
-            proxy.note.as_deref().unwrap_or("-")
+            "{}",
+            translator.text_with_args(
+                "price-proxy",
+                &[
+                    ("currency", currency(proxy.currency.as_deref())),
+                    ("price", proxy_price.as_str()),
+                    ("provider", proxy.provider.as_str()),
+                    ("time", proxy.market_time_local.as_deref().unwrap_or("-")),
+                    ("note", proxy.note.as_deref().unwrap_or("-")),
+                ],
+            )
         );
     }
     if show_all {
         println!();
-        println!("Session / provider split");
+        println!("{}", translator.text("price-session-split-heading"));
         let headers = [
-            "label", "price", "chg%", "session", "provider", "time", "open", "high", "low",
-            "volume",
+            translator.text("price-table-label"),
+            translator.text("price-table-price"),
+            translator.text("price-table-change"),
+            translator.text("price-table-session"),
+            translator.text("price-table-provider"),
+            translator.text("price-table-time"),
+            translator.text("price-table-open"),
+            translator.text("price-table-high"),
+            translator.text("price-table-low"),
+            translator.text("price-table-volume"),
         ];
         let rows = summary
             .sessions
             .iter()
             .map(price_point_row)
             .collect::<Vec<_>>();
-        print_table(&headers, &rows);
+        let header_refs = headers.iter().map(String::as_str).collect::<Vec<_>>();
+        print_table(&header_refs, &rows);
     } else if summary.sessions.len() > 1 {
+        let count = summary.sessions.len().to_string();
         println!(
-            "Note: fetched {} session/provider rows; use sessions to inspect the split.",
-            summary.sessions.len()
+            "{}",
+            translator.text_with_args("price-session-split-note", &[("count", count.as_str())])
         );
     }
     if !summary.errors.is_empty() {
         println!();
-        println!("Quote errors");
+        println!("{}", translator.text("price-errors-heading"));
         for (provider, error) in &summary.errors {
             println!("{provider}: {error}");
         }
@@ -657,11 +699,11 @@ fn price_point_row(point: &PricePoint) -> Vec<String> {
 fn print_table(headers: &[&str], rows: &[Vec<String>]) {
     let mut widths = headers
         .iter()
-        .map(|header| header.len())
+        .map(|header| UnicodeWidthStr::width(*header))
         .collect::<Vec<_>>();
     for row in rows {
         for (index, value) in row.iter().enumerate() {
-            widths[index] = widths[index].max(value.len());
+            widths[index] = widths[index].max(UnicodeWidthStr::width(value.as_str()));
         }
     }
 
@@ -683,9 +725,14 @@ where
     values
         .into_iter()
         .zip(widths.iter())
-        .map(|(value, width)| format!("{:<width$}", value.as_ref()))
+        .map(|(value, width)| pad_to_width(value.as_ref(), *width))
         .collect::<Vec<_>>()
         .join("  ")
+}
+
+fn pad_to_width(value: &str, width: usize) -> String {
+    let padding = width.saturating_sub(UnicodeWidthStr::width(value));
+    format!("{value}{}", " ".repeat(padding))
 }
 
 fn local_or_original(value: &str, timezone: &str) -> String {

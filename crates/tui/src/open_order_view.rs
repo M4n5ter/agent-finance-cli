@@ -238,7 +238,7 @@ mod tests {
         let row = open_order_rows(&open_orders, 0).len();
         assert_eq!(
             open_order_action_at_content_cell(&open_orders, 0, 80, row, span.start),
-            Some(*span)
+            Some(span.clone())
         );
         assert_eq!(
             open_order_action_at_content_cell(&open_orders, 0, 80, row - 1, span.start),

@@ -58,6 +58,65 @@ fn write_commands_use_action_names_not_internal_intent_names() {
     assert_unknown_subcommand(&["state", "intent", "--help"], "intent");
 }
 
+#[test]
+fn top_level_help_uses_requested_locale() {
+    let help = command_text(&["--locale", "zh", "--help"]);
+
+    assert!(
+        help.contains("用法：agent-finance [选项] <命令>"),
+        "top-level help should be localized: {help}"
+    );
+    assert!(
+        help.contains("输出内置 AI Agent skill 文档"),
+        "command descriptions should be localized: {help}"
+    );
+}
+
+#[test]
+fn locale_does_not_localize_json_contracts() {
+    let output = command(&["--locale", "zh", "market", "providers", "--json"])
+        .output()
+        .expect("agent-finance command should start");
+    assert!(
+        output.status.success(),
+        "localized JSON command should succeed: stdout={} stderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let profiles: serde_json::Value =
+        serde_json::from_slice(&output.stdout).expect("providers output should stay JSON");
+    assert!(
+        profiles
+            .as_array()
+            .expect("provider profiles should be an array")
+            .iter()
+            .any(|profile| profile["provider"] == "auto"),
+        "provider enum values should remain stable English: {profiles}"
+    );
+}
+
+#[test]
+fn parse_errors_include_localized_guidance() {
+    let output = command(&["--locale", "zh", "unknown-command"])
+        .output()
+        .expect("agent-finance command should start");
+
+    assert!(
+        !output.status.success(),
+        "unknown command should be rejected"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("无法解析命令"),
+        "stderr should include localized guidance: {stderr}"
+    );
+    assert!(
+        stderr.contains("unrecognized subcommand 'unknown-command'"),
+        "stderr should preserve clap's detailed parser error: {stderr}"
+    );
+}
+
 fn command_text(args: &[&str]) -> String {
     let output = command(args)
         .output()

@@ -639,7 +639,7 @@ fn account_workspace_keeps_transfer_ticket_visible_without_snapshot() {
         ..TuiConfig::default()
     });
 
-    let text = render_to_text_grid(&state, 120, 32);
+    let text = render_to_text_grid(&state, 160, 48);
 
     assert!(text.contains("transfer ticket"));
     assert!(text.contains("direction: spot-to-usds-futures"));
@@ -687,8 +687,7 @@ fn settings_workspace_renders_configuration_cockpit() {
     assert!(text.contains("risk.allow_live: true"));
     assert!(text.contains("allowed symbols: btcusdt spot limit <= 50"));
     assert!(text.contains("provider preferences: equity=robinhood  crypto=okx"));
-    assert!(text.contains("> equity provider: robinhood"));
-    assert!(text.contains("crypto provider: okx"));
+    assert!(text.contains("language: English (en-US)"));
     assert!(text.contains("provider capability profiles:"));
     assert!(text.contains("normal key bindings:"));
 }

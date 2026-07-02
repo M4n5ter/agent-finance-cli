@@ -50,7 +50,6 @@ enum PanelHit {
     },
     TicketReadyAction,
     Action {
-        label: &'static str,
         action: crate::command::ActionId,
     },
     AccountHit {
@@ -70,7 +69,6 @@ enum PanelHit {
 impl PanelHit {
     fn from_panel_action(action: crate::panel_action_line_view::PanelActionSpan) -> Self {
         Self::Action {
-            label: action.label,
             action: action.action,
         }
     }
@@ -134,7 +132,7 @@ impl PanelHit {
                 PanelMouseAction::AdjustField { index, direction }
             }
             Self::TicketReadyAction => PanelMouseAction::StageReadyChange,
-            Self::Action { label, action } => PanelMouseAction::ExecuteAction { label, action },
+            Self::Action { action } => PanelMouseAction::ExecuteAction { action },
             Self::AccountHit {
                 hit: AccountPanelHit::OpenOrder(index),
                 ..

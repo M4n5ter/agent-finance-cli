@@ -220,13 +220,13 @@ mod tests {
                         span.action
                             == ActionId::OpenFloating(crate::model::FloatingKind::TradingProfile)
                     })
-                    .map(|span| (content_row, *span))
+                    .map(|span| (content_row, span.clone()))
             })
             .expect("profile editor action is rendered");
 
         assert_eq!(
             action_at_content_cell(&state, 100, content_row, span.start),
-            Some(span)
+            Some(span.clone())
         );
         assert_eq!(
             action_at_content_cell(&state, 100, content_row, span.end),

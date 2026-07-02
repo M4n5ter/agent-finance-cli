@@ -9,6 +9,7 @@ description = "Interactive terminal cockpit for agent-finance public market data
 [dependencies]
 agent-finance-market.workspace = true
 agent-finance-core.workspace = true
+agent-finance-i18n.workspace = true
 agent-finance-trading.workspace = true
 anyhow.workspace = true
 crossterm.workspace = true
@@ -21,7 +22,7 @@ nucleo-matcher.workspace = true
 tui-input.workspace = true
 chrono.workspace = true
 rust_decimal.workspace = true
-unicode-width = "0.2"
+unicode-width.workspace = true
 
 [dev-dependencies]
 insta = "1.48"

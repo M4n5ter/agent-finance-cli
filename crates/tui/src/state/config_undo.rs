@@ -105,6 +105,7 @@ impl AppState {
     pub(super) fn restore_local_config_snapshot(&mut self, snapshot: LocalConfigSnapshot) {
         let TuiConfig {
             watchlist,
+            locale,
             workspace: WorkspaceConfig { current: _ },
             layout,
             panels,
@@ -127,6 +128,9 @@ impl AppState {
             .collect::<Vec<_>>();
 
         self.watchlist = watchlist;
+        self.locale = locale
+            .current
+            .unwrap_or(agent_finance_i18n::LocaleId::DEFAULT);
         self.selected_symbol = selected_symbol
             .as_deref()
             .and_then(|symbol| {

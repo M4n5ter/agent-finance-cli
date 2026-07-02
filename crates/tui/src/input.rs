@@ -123,14 +123,16 @@ pub fn handle_mouse_event(
                     }
                 }
                 Some(LayoutHit::Status) => {
-                    if let Some(workspace) = workspace_tab_at(terminal_area, mouse.column) {
+                    if let Some(workspace) =
+                        workspace_tab_at(terminal_area, mouse.column, state.locale)
+                    {
                         state.reduce(Action::Execute(crate::command::ActionId::SetWorkspace(
                             workspace,
                         )));
                         state.reduce(Action::Focus(workspace.default_panel()));
                     } else if let Some(action) = crate::status_bar::visible_action_at(
                         state,
-                        crate::status_bar::areas(layout.status).detail,
+                        crate::status_bar::areas(layout.status, state.locale).detail,
                         mouse.column,
                     ) {
                         state.reduce(Action::Execute(action.action));

@@ -741,6 +741,7 @@ impl Drop for TerminalGuard {
 mod tests {
     use super::*;
     use crate::command::ActionId;
+    use crate::settings_editor::SettingRow;
     use agent_finance_market::crypto_evidence_snapshot::CryptoQuoteEvidenceSnapshot;
     use agent_finance_market::history_snapshot::HistorySnapshot;
     use agent_finance_market::research_snapshot::ResearchContextSnapshot;
@@ -892,6 +893,7 @@ mod tests {
                 "{kind:?} should start"
             );
         }
+        select_setting(&mut state, "equity provider");
         state.reduce(Action::AdjustSelectedSetting(1));
 
         drain_pending_app_requests(
@@ -936,6 +938,14 @@ mod tests {
         assert!(state.history.selected_snapshot("BTCUSDT").is_none());
         assert!(state.evidence.selected_snapshot("BTCUSDT").is_none());
         assert!(state.research.selected_snapshot("BTCUSDT").is_some());
+    }
+
+    fn select_setting(state: &mut AppState, label: &str) {
+        let index = SettingRow::ALL
+            .iter()
+            .position(|row| row.label() == label)
+            .expect("setting row exists");
+        state.reduce(Action::SelectSettingRow(index));
     }
 
     #[test]

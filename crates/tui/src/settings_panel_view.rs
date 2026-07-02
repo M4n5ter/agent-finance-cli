@@ -3,6 +3,7 @@ use ratatui::text::{Line, Span};
 
 use crate::action_line_view::{ActionLine, ActionSpan};
 use crate::command::ActionId;
+use crate::i18n::TuiText;
 use crate::model::{FloatingKind, Panel};
 use crate::mouse_target::MouseTarget;
 use crate::panel_action_line_view::{
@@ -75,58 +76,91 @@ pub(crate) fn rows(
     width: u16,
     mouse_target: Option<MouseTarget>,
 ) -> Vec<SettingsPanelRow> {
+    let text = SettingsText::new(state.locale);
     let dirty = if state.config_changes.is_empty() {
-        "clean".to_string()
+        text.t("tui-settings-clean")
     } else {
         state.config_changes.join(", ")
     };
     let profile = state.trading_profile.as_deref().unwrap_or("-");
+    let workspace = state.workspace.to_string();
+    let watchlist_count = state.watchlist.len().to_string();
+    let default_submit_mode = state.default_submit_mode.to_string();
+    let effective_submit_mode = state.effective_submit_mode().to_string();
+    let equity_provider = state.providers.equity.to_string();
+    let crypto_provider = state.providers.crypto.to_string();
+    let theme_accent = state.theme.accent.to_string();
+    let theme_selection_background = state.theme.selection_background.to_string();
+    let theme_selection_foreground = state.theme.selection_foreground.to_string();
+    let provider_profile_count = state.provider_profiles.len().to_string();
+    let normal_key_count = state.keymap.normal_len().to_string();
     let mut rows = vec![
         SettingsPanelRow::line(Line::from(Span::styled(
-            "configuration cockpit",
+            text.t("tui-settings-title"),
             state.theme.accent_style().add_modifier(Modifier::BOLD),
         ))),
-        SettingsPanelRow::text(format!("workspace: {}", state.workspace)),
-        SettingsPanelRow::text(format!("dirty config: {dirty}")),
-        SettingsPanelRow::text(format!(
-            "watchlist: {} symbols  selected={}",
-            state.watchlist.len(),
-            state.selected_symbol().unwrap_or("-")
+        SettingsPanelRow::text(text.f("tui-settings-workspace", &[("workspace", &workspace)])),
+        SettingsPanelRow::text(text.f(
+            "tui-settings-language-summary",
+            &[
+                ("language", state.locale.display_name()),
+                ("locale", state.locale.as_str()),
+            ],
         )),
-        SettingsPanelRow::text(format!(
-            "trading profile: {profile}  live writes={}",
-            if state.live_writes_enabled {
-                "on"
-            } else {
-                "off"
-            }
+        SettingsPanelRow::text(text.f("tui-settings-dirty-config", &[("dirty", &dirty)])),
+        SettingsPanelRow::text(text.f(
+            "tui-settings-watchlist",
+            &[
+                ("count", &watchlist_count),
+                ("selected", state.selected_symbol().unwrap_or("-")),
+            ],
         )),
-        SettingsPanelRow::text(format!(
-            "default submit mode: {}  effective={}",
-            state.default_submit_mode,
-            state.effective_submit_mode()
+        SettingsPanelRow::text(text.f(
+            "tui-settings-trading-profile",
+            &[
+                ("profile", profile),
+                (
+                    "liveWrites",
+                    if state.live_writes_enabled {
+                        "on"
+                    } else {
+                        "off"
+                    },
+                ),
+            ],
         )),
-        SettingsPanelRow::text(format!(
-            "provider preferences: equity={}  crypto={}",
-            state.providers.equity, state.providers.crypto
+        SettingsPanelRow::text(text.f(
+            "tui-settings-submit-mode",
+            &[
+                ("default", &default_submit_mode),
+                ("effective", &effective_submit_mode),
+            ],
         )),
-        SettingsPanelRow::text(format!(
-            "theme: accent={}  selection={}/{}",
-            state.theme.accent, state.theme.selection_background, state.theme.selection_foreground
+        SettingsPanelRow::text(text.f(
+            "tui-settings-provider-preferences",
+            &[("equity", &equity_provider), ("crypto", &crypto_provider)],
         )),
-        SettingsPanelRow::text(format!(
-            "provider capability profiles: {}",
-            state.provider_profiles.len()
+        SettingsPanelRow::text(text.f(
+            "tui-settings-theme",
+            &[
+                ("accent", &theme_accent),
+                ("selectionBackground", &theme_selection_background),
+                ("selectionForeground", &theme_selection_foreground),
+            ],
         )),
-        SettingsPanelRow::text(format!(
-            "normal key bindings: {}",
-            state.keymap.normal_len()
+        SettingsPanelRow::text(text.f(
+            "tui-settings-provider-capability-profiles",
+            &[("count", &provider_profile_count)],
+        )),
+        SettingsPanelRow::text(text.f(
+            "tui-settings-normal-key-bindings",
+            &[("count", &normal_key_count)],
         )),
         SettingsPanelRow::text(""),
-        SettingsPanelRow::text("settings editor"),
+        SettingsPanelRow::text(text.t("tui-settings-editor-heading")),
     ];
-    rows.extend(settings_action_rows(state, width, mouse_target));
-    rows.extend(setting_rows(state, width, mouse_target));
+    rows.extend(settings_action_rows(state, width, mouse_target, &text));
+    rows.extend(setting_rows(state, width, mouse_target, &text));
     rows.extend([
         SettingsPanelRow::text(""),
         SettingsPanelRow::text(crate::settings_controls::settings_panel_hint()),
@@ -134,12 +168,14 @@ pub(crate) fn rows(
     ]);
     rows.extend(state.config_changes.iter().take(3).map(|change| {
         SettingsPanelRow::line(Line::from(Span::styled(
-            format!("pending: {change}"),
+            text.f("tui-settings-pending", &[("change", change)]),
             state.theme.warning_style(),
         )))
     }));
     rows
 }
+
+type SettingsText = TuiText;
 
 pub(crate) fn setting_index_at_content_row(
     state: &AppState,
@@ -170,14 +206,15 @@ pub(crate) fn action_at_content_cell(
         .get(content_row)?
         .actions
         .iter()
-        .copied()
         .find(|span| (span.start..span.end).contains(&content_column))
+        .cloned()
 }
 
 fn settings_action_rows(
     state: &AppState,
     width: u16,
     mouse_target: Option<MouseTarget>,
+    _text: &SettingsText,
 ) -> Vec<SettingsPanelRow> {
     vec![settings_action_row(
         state,
@@ -209,7 +246,7 @@ fn settings_action_row(
     state: &AppState,
     width: u16,
     mouse_target: Option<MouseTarget>,
-    label: &'static str,
+    label: &str,
     actions: &[(&'static str, ActionId)],
 ) -> SettingsPanelRow {
     let mut action_line = PanelActionLine::new(label, width);
@@ -229,6 +266,7 @@ fn setting_rows(
     state: &AppState,
     width: u16,
     mouse_target: Option<MouseTarget>,
+    text: &SettingsText,
 ) -> Vec<SettingsPanelRow> {
     SettingRow::ALL
         .into_iter()
@@ -238,8 +276,9 @@ fn setting_rows(
             let hovered =
                 mouse_target.is_some_and(|target| target.panel_row_hovered(Panel::Settings, index));
             let marker = if selected { ">" } else { " " };
-            let value = row.value(&state.providers, &state.theme, &state.keymap);
-            let action_line = setting_action_line_for(index, marker, row.label(), &value, width);
+            let value = row.value(&state.locale, &state.providers, &state.theme, &state.keymap);
+            let label = text.setting_label(row);
+            let action_line = setting_action_line_for(index, marker, &label, &value, width, text);
             let actions = action_line.actions.clone();
             let line = styled_setting_action_line(
                 &action_line,
@@ -260,6 +299,7 @@ fn setting_action_line_for(
     label: &str,
     value: &str,
     width: u16,
+    _text: &SettingsText,
 ) -> SettingActionLine {
     let mut line = SettingActionLine::new(format!("{marker} {label}: {value}  "), width);
     line.push_visible_action(
@@ -369,6 +409,22 @@ mod tests {
     }
 
     #[test]
+    fn rows_localize_static_settings_text() {
+        let mut config = crate::config::TuiConfig::default();
+        config.locale.current = Some(agent_finance_i18n::LocaleId::ZhCn);
+        let state = AppState::from_config(config);
+        let text = rows(&state, 120, None)
+            .into_iter()
+            .map(|row| row.line.to_string())
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        assert!(text.contains("配置驾驶舱"));
+        assert!(text.contains("工作区："));
+        assert!(text.contains("> 语言: 简体中文"));
+    }
+
+    #[test]
     fn rows_expose_panel_driven_settings_actions() {
         let state = AppState::from_config(crate::config::TuiConfig::default());
 
@@ -403,7 +459,7 @@ mod tests {
                 row.panel_actions
                     .iter()
                     .find(|span| span.action == ActionId::OpenFloating(FloatingKind::WatchlistAdd))
-                    .map(|span| (content_row, *span))
+                    .map(|span| (content_row, span.clone()))
             })
             .expect("watchlist add action is rendered");
 
