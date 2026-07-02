@@ -503,14 +503,14 @@ fn print_prediction_outcomes(outcomes: &[PredictionOutcome]) {
     print_table(&headers, &rows);
 }
 
-pub fn print_provider_profiles(profiles: &[ProviderProfile]) {
+pub fn print_provider_profiles(profiles: &[ProviderProfile], translator: &Translator) {
     let headers = [
-        "provider",
-        "key",
-        "official",
-        "stability",
-        "large",
-        "best_for",
+        translator.text("providers-table-provider"),
+        translator.text("providers-table-key"),
+        translator.text("providers-table-official"),
+        translator.text("providers-table-stability"),
+        translator.text("providers-table-large"),
+        translator.text("providers-table-best-for"),
     ];
     let rows = profiles
         .iter()
@@ -532,9 +532,15 @@ pub fn print_provider_profiles(profiles: &[ProviderProfile]) {
     print_table(&headers, &rows);
 
     println!();
-    println!("Capabilities");
+    println!("{}", translator.text("providers-capabilities-heading"));
     println!("------------");
-    let headers = ["provider", "module", "status", "implemented", "note"];
+    let headers = [
+        translator.text("providers-table-provider"),
+        translator.text("providers-table-module"),
+        translator.text("providers-table-status"),
+        translator.text("providers-table-implemented"),
+        translator.text("providers-table-note"),
+    ];
     let rows = profiles
         .iter()
         .flat_map(|profile| {
@@ -696,10 +702,10 @@ fn price_point_row(point: &PricePoint) -> Vec<String> {
     ]
 }
 
-fn print_table(headers: &[&str], rows: &[Vec<String>]) {
+fn print_table<T: AsRef<str>>(headers: &[T], rows: &[Vec<String>]) {
     let mut widths = headers
         .iter()
-        .map(|header| UnicodeWidthStr::width(*header))
+        .map(|header| UnicodeWidthStr::width(header.as_ref()))
         .collect::<Vec<_>>();
     for row in rows {
         for (index, value) in row.iter().enumerate() {
@@ -707,7 +713,7 @@ fn print_table(headers: &[&str], rows: &[Vec<String>]) {
         }
     }
 
-    println!("{}", table_row(headers.iter().copied(), &widths));
+    println!("{}", table_row(headers.iter().map(AsRef::as_ref), &widths));
     println!(
         "{}",
         table_row(widths.iter().map(|width| "-".repeat(*width)), &widths)

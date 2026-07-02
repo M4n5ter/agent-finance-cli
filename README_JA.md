@@ -109,6 +109,20 @@ agent-finance skills get profile
 agent-finance skills get tui
 ```
 
+## ローカライズ
+
+人が読む CLI/TUI テキストは `en-US`、`zh-CN`、`ja-JP`、`ko-KR` に対応しています。
+
+```bash
+agent-finance --locale zh market price AAPL
+agent-finance --locale ja --help
+AGENT_FINANCE_LOCALE=ko agent-finance skills get core
+```
+
+locale の優先順位は `--locale`、TUI config、`AGENT_FINANCE_LOCALE`、system locale、最後に `en-US` です。
+
+TUI では Settings を開き、`language` を変更するとすぐに UI 言語が切り替わります。config を保存すると言語設定も永続化されます。JSON output、command names、flags、provider identifiers、schema keys、数値形式、timestamps、provider から返る本文は安定したままで、ローカライズされません。
+
 ## クイックツアー
 
 現在価格とセッション：

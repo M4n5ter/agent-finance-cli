@@ -88,6 +88,7 @@ fn command_indices_for_query(query: &str) -> Vec<usize> {
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct CommandSpec {
+    pub id: Cow<'static, str>,
     pub title: Cow<'static, str>,
     pub description: Cow<'static, str>,
     pub action: ActionId,
@@ -148,6 +149,7 @@ pub struct ActionSpec {
 impl ActionSpec {
     pub fn command(&self) -> Option<CommandSpec> {
         self.command.as_ref().map(|command| CommandSpec {
+            id: self.id.clone(),
             title: command.title.clone(),
             description: command.description.clone(),
             action: self.action,

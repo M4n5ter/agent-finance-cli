@@ -1,6 +1,7 @@
 use ratatui::Frame;
 use ratatui::layout::Rect;
 
+use crate::i18n::TuiText;
 use crate::model::Panel;
 use crate::mouse_target::MouseTarget;
 use crate::state::AppState;
@@ -16,6 +17,7 @@ pub(super) fn render_order_ticket(
     let ticket = &state.order_ticket;
     let preview = state.order_ticket_preview();
     let selected = ticket.selected_field_label();
+    let text = TuiText::new(state.locale);
 
     render_ticket_panel(
         frame,
@@ -23,33 +25,52 @@ pub(super) fn render_order_ticket(
         area,
         TicketPanel {
             panel: Panel::OrderTicket,
-            heading: "staged order",
+            heading: text.t("tui-ticket-order-heading"),
             live_writes_enabled: preview.live_writes_enabled,
             effective_mode: preview.effective_mode.to_string(),
-            detail_lines: crate::ticket_panel_view::order_ticket_detail_lines(&preview),
+            detail_lines: crate::ticket_panel_view::order_ticket_detail_lines(
+                &preview,
+                state.locale,
+            ),
             rows: crate::ticket_panel_view::order_ticket_rows(state),
             fields: vec![
-                TicketField::new("market", ticket.market().to_string(), selected),
-                TicketField::new("side", ticket.side().to_string(), selected),
-                TicketField::new("kind", ticket.kind().to_string(), selected),
                 TicketField::new(
-                    "quantity",
+                    text.t("tui-ticket-field-market"),
+                    ticket.market().to_string(),
+                    selected == "market",
+                ),
+                TicketField::new(
+                    text.t("tui-ticket-field-side"),
+                    ticket.side().to_string(),
+                    selected == "side",
+                ),
+                TicketField::new(
+                    text.t("tui-ticket-field-kind"),
+                    ticket.kind().to_string(),
+                    selected == "kind",
+                ),
+                TicketField::new(
+                    text.t("tui-ticket-field-quantity"),
                     preview.quantity.as_deref().unwrap_or("-").to_string(),
-                    selected,
+                    selected == "quantity",
                 ),
                 TicketField::new(
-                    "price",
+                    text.t("tui-ticket-field-price"),
                     preview.price.as_deref().unwrap_or("-").to_string(),
-                    selected,
+                    selected == "price",
                 ),
                 TicketField::new(
-                    "time in force",
+                    text.t("tui-ticket-field-time-in-force"),
                     ticket.time_in_force().to_string(),
-                    selected,
+                    selected == "time in force",
                 ),
-                TicketField::new("reduce only", ticket.reduce_only().to_string(), selected),
+                TicketField::new(
+                    text.t("tui-ticket-field-reduce-only"),
+                    ticket.reduce_only().to_string(),
+                    selected == "reduce only",
+                ),
             ],
-            ready_label: "ready for intent review",
+            ready_label: text.t("tui-ticket-order-ready"),
             blockers: preview.blockers,
             hint: crate::order_ticket_controls::order_ticket_panel_hint(),
         },

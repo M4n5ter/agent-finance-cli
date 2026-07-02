@@ -170,8 +170,9 @@ fn load_filesystem_store(skill_data_dir: &Path, locale: LocaleId) -> Result<Vec<
 
         let content = fs::read_to_string(&skill_md)
             .with_context(|| format!("failed to read skill {}", skill_md.display()))?;
-        let document = document_from_content(content, collect_supplementary_files(&dir)?)
-            .with_context(|| format!("invalid skill frontmatter in {}", skill_md.display()))?;
+        let document =
+            document_from_content(content, collect_supplementary_files(&dir, locale)?)
+                .with_context(|| format!("invalid skill frontmatter in {}", skill_md.display()))?;
         documents.push(document);
     }
 
@@ -377,7 +378,10 @@ fn parse_frontmatter(content: &str) -> Result<Frontmatter> {
     })
 }
 
-fn collect_supplementary_files(skill_dir: &Path) -> Result<Vec<SupplementaryFile>> {
+fn collect_supplementary_files(
+    skill_dir: &Path,
+    locale: LocaleId,
+) -> Result<Vec<SupplementaryFile>> {
     let mut files = Vec::new();
 
     for subdir_name in SUPPLEMENTARY_DIRS {
@@ -397,12 +401,13 @@ fn collect_supplementary_files(skill_dir: &Path) -> Result<Vec<SupplementaryFile
             if !path.is_file() {
                 continue;
             }
-            let content = fs::read_to_string(&path)
-                .with_context(|| format!("failed to read {}", path.display()))?;
             let relative = format!(
                 "{subdir_name}/{}",
                 path.file_name().unwrap_or_default().to_string_lossy()
             );
+            let localized = localized_supplementary_file(skill_dir, &relative, locale);
+            let content = fs::read_to_string(&localized)
+                .with_context(|| format!("failed to read {}", localized.display()))?;
             files.push(SupplementaryFile {
                 path: relative,
                 content,
@@ -411,6 +416,21 @@ fn collect_supplementary_files(skill_dir: &Path) -> Result<Vec<SupplementaryFile
     }
 
     Ok(files)
+}
+
+fn localized_supplementary_file(skill_dir: &Path, relative: &str, locale: LocaleId) -> PathBuf {
+    if locale == LocaleId::EnUs {
+        return skill_dir.join(relative);
+    }
+    let localized = skill_dir
+        .join("locales")
+        .join(locale.as_str())
+        .join(relative);
+    if localized.is_file() {
+        localized
+    } else {
+        skill_dir.join(relative)
+    }
 }
 
 fn append_supplementary(output: &mut String, supplementary: &[SupplementaryFile]) {
@@ -595,6 +615,9 @@ mod tests {
         let core = skill_data.join("core");
         let price = skill_data.join("price");
         fs::create_dir_all(core.join("locales/zh-CN")).expect("core locale dir");
+        fs::create_dir_all(core.join("references")).expect("core references dir");
+        fs::create_dir_all(core.join("locales/zh-CN/references"))
+            .expect("core locale references dir");
         fs::create_dir_all(&price).expect("price dir");
         fs::write(
             core.join("SKILL.md"),
@@ -606,6 +629,12 @@ mod tests {
             "---\nname: core\ndescription: 核心指南。\n---\n\n# Core\n\n本地化正文\n",
         )
         .expect("localized core skill");
+        fs::write(core.join("references/commands.md"), "## Command Map\n").expect("core reference");
+        fs::write(
+            core.join("locales/zh-CN/references/commands.md"),
+            "## 命令地图\n",
+        )
+        .expect("localized core reference");
         fs::write(
             price.join("SKILL.md"),
             "---\nname: price\ndescription: Price guide.\n---\n\n# Price\n",
@@ -626,6 +655,12 @@ mod tests {
             .expect("price skill");
         assert!(core.contains("本地化正文"));
         assert!(price.contains("Price guide."));
+        let full_core = store
+            .render("core", true)
+            .expect("render")
+            .expect("core skill");
+        assert!(full_core.contains("## 命令地图"));
+        assert!(!full_core.contains("## Command Map"));
 
         fs::remove_dir_all(root).ok();
     }
@@ -681,7 +716,7 @@ mod tests {
         fs::write(skill.join("references/commands.md"), "commands\n").expect("commands");
         fs::write(skill.join("templates/example.sh"), "example\n").expect("template");
 
-        let files = collect_supplementary_files(&skill).expect("files");
+        let files = collect_supplementary_files(&skill, LocaleId::EnUs).expect("files");
 
         assert_eq!(
             files

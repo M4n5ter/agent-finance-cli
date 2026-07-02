@@ -4,6 +4,7 @@ use agent_finance_i18n::LocaleId;
 
 use crate::command::ActionId;
 use crate::hints::{self, StatusHint};
+use crate::i18n::TuiText;
 use crate::state::AppState;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -32,17 +33,19 @@ pub(crate) struct StatusAction {
 }
 
 pub(crate) fn detail(state: &AppState, symbol: &str, errors: usize, width: u16) -> StatusDetail {
-    let runtime = runtime_label(state);
+    let text = TuiText::new(state.locale);
+    let runtime = runtime_label(state, &text);
+    let live = live_label(state, &text);
     let compact = format!(
         " {symbol} {} live:{}{} {runtime} e:{errors} ",
         state.interaction_mode().label(),
-        live_label(state),
+        live,
         compact_config_segment(state),
     );
     let compact_without_errors = format!(
         " {symbol} {} live:{}{} {runtime} ",
         state.interaction_mode().label(),
-        live_label(state),
+        live,
         compact_config_segment(state),
     );
     let terse = format!(" {symbol} {runtime} ");
@@ -51,19 +54,19 @@ pub(crate) fn detail(state: &AppState, symbol: &str, errors: usize, width: u16) 
             (
                 format!(
                     " {symbol} | profile: {profile} | live:{}{} | {} | {runtime} | e:{errors} ",
-                    live_label(state),
+                    live,
                     config_segment(state),
                     state.effective_submit_mode()
                 ),
                 format!(
                     " {symbol} | profile: {profile} | live:{}{} | {} | {runtime} ",
-                    live_label(state),
+                    live,
                     config_segment(state),
                     state.effective_submit_mode()
                 ),
                 format!(
                     " {symbol} profile: {profile} live:{}{} {} {runtime} ",
-                    live_label(state),
+                    live,
                     compact_config_segment(state),
                     state.effective_submit_mode()
                 ),
@@ -73,29 +76,29 @@ pub(crate) fn detail(state: &AppState, symbol: &str, errors: usize, width: u16) 
                 format!(
                     " {symbol} | mode: {} | live:{}{} | {} | focus: {} | {runtime} | e:{errors} ",
                     state.interaction_mode().label(),
-                    live_label(state),
+                    live,
                     config_segment(state),
                     state.effective_submit_mode(),
-                    state.panels.focused().title(),
+                    text.panel_title(state.panels.focused()),
                 ),
                 format!(
                     " {symbol} | mode: {} | live:{}{} | {} | {runtime} ",
                     state.interaction_mode().label(),
-                    live_label(state),
+                    live,
                     config_segment(state),
                     state.effective_submit_mode(),
                 ),
                 format!(
                     " {symbol} mode: {} live:{}{} {} {runtime} ",
                     state.interaction_mode().label(),
-                    live_label(state),
+                    live,
                     compact_config_segment(state),
                     state.effective_submit_mode(),
                 ),
             )
         };
 
-    let long = long_detail(state, symbol, errors, runtime, width);
+    let long = long_detail(state, symbol, errors, &runtime, width, &text);
     fit_status_detail(
         width,
         std::iter::once(long)
@@ -133,8 +136,9 @@ fn long_detail(
     state: &AppState,
     symbol: &str,
     errors: usize,
-    runtime: &'static str,
+    runtime: &str,
     width: u16,
+    text: &TuiText,
 ) -> StatusDetail {
     let profile = state
         .trading_profile
@@ -145,8 +149,8 @@ fn long_detail(
         " {symbol} | mode: {}{profile}{} | {} | focus: {} | visible: {}/{} | {runtime} | errors: {errors} | ",
         state.interaction_mode().label(),
         config_segment(state),
-        write_label(state),
-        state.panels.focused().title(),
+        write_label(state, text),
+        text.panel_title(state.panels.focused()),
         state.visible_panels().len(),
         state.workspace.panels().len(),
     );
@@ -191,29 +195,29 @@ fn fit_status_detail(
         .unwrap_or_else(|| StatusDetail::plain(String::new()))
 }
 
-fn runtime_label(state: &AppState) -> &'static str {
+fn runtime_label(state: &AppState, text: &TuiText) -> String {
     if state.scheduler_error.is_some() {
-        "scheduler error"
+        text.t("tui-status-scheduler-error")
     } else if state.refresh_loading() {
-        "refreshing"
+        text.t("tui-status-refreshing")
     } else {
-        "ready"
+        text.t("tui-status-ready")
     }
 }
 
-fn write_label(state: &AppState) -> String {
+fn write_label(state: &AppState, text: &TuiText) -> String {
     format!(
         "live: {} / write: {}",
-        live_label(state),
+        live_label(state, text),
         state.effective_submit_mode()
     )
 }
 
-fn live_label(state: &AppState) -> &'static str {
+fn live_label(state: &AppState, text: &TuiText) -> String {
     if state.live_writes_enabled {
-        "on"
+        text.t("tui-status-on")
     } else {
-        "off"
+        text.t("tui-status-off")
     }
 }
 

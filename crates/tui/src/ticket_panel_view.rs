@@ -1,5 +1,6 @@
 use crate::action_line_view::{ActionLine, ActionSpan, right_aligned_action_line};
 use crate::command::ActionId;
+use crate::i18n::TuiText;
 use crate::order_ticket::OrderTicketPreview;
 use crate::panel_action_line_view::{PanelActionLine, PanelActionSpan};
 use crate::state::AppState;
@@ -122,7 +123,7 @@ impl TicketPanelRows {
 pub(crate) fn order_ticket_rows(state: &AppState) -> TicketPanelRows {
     let preview = state.order_ticket_preview();
     TicketPanelRows {
-        detail_count: order_ticket_detail_lines(&preview).len(),
+        detail_count: order_ticket_detail_lines(&preview, state.locale).len(),
         actions: crate::order_ticket_controls::ORDER_TICKET_ACTIONS,
         field_adjustable: vec![true; crate::order_ticket::OrderTicketField::COUNT],
         ready: preview.ready,
@@ -130,22 +131,38 @@ pub(crate) fn order_ticket_rows(state: &AppState) -> TicketPanelRows {
     }
 }
 
-pub(crate) fn order_ticket_detail_lines(preview: &OrderTicketPreview) -> Vec<String> {
-    let mut lines = vec![format!(
-        "symbol: {}  profile: {}",
-        preview.symbol.as_deref().unwrap_or("-"),
-        preview.profile.as_deref().unwrap_or("-")
+pub(crate) fn order_ticket_detail_lines(
+    preview: &OrderTicketPreview,
+    locale: agent_finance_i18n::LocaleId,
+) -> Vec<String> {
+    let text = TuiText::new(locale);
+    let mut lines = vec![text.f(
+        "tui-ticket-detail-symbol-profile",
+        &[
+            ("symbol", preview.symbol.as_deref().unwrap_or("-")),
+            ("profile", preview.profile.as_deref().unwrap_or("-")),
+        ],
     )];
     if !preview.protective_draft.is_empty() {
-        lines.push(format!(
-            "protective draft: stop-loss={}  take-profit={}  draft-only",
-            preview.protective_draft.stop_loss.as_deref().unwrap_or("-"),
-            preview
-                .protective_draft
-                .take_profit
-                .as_deref()
-                .unwrap_or("-")
-        ));
+        lines.push(
+            text.f(
+                "tui-ticket-detail-protective-draft",
+                &[
+                    (
+                        "stopLoss",
+                        preview.protective_draft.stop_loss.as_deref().unwrap_or("-"),
+                    ),
+                    (
+                        "takeProfit",
+                        preview
+                            .protective_draft
+                            .take_profit
+                            .as_deref()
+                            .unwrap_or("-"),
+                    ),
+                ],
+            ),
+        );
     }
     lines
 }
@@ -308,7 +325,7 @@ mod tests {
             .capture_protective_reference(90.0, crate::order_ticket::ProtectiveDraftSlot::StopLoss);
 
         let preview = state.order_ticket_preview();
-        let detail_lines = order_ticket_detail_lines(&preview);
+        let detail_lines = order_ticket_detail_lines(&preview, state.locale);
         let rows = order_ticket_rows(&state);
 
         assert_eq!(detail_lines.len(), 2);

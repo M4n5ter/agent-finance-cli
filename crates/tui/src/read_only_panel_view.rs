@@ -7,6 +7,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Paragraph, Wrap};
 
 use crate::command::ActionId;
+use crate::i18n::TuiText;
 use crate::model::Panel;
 use crate::mouse_target::MouseTarget;
 use crate::panel_action_line_view::{
@@ -78,21 +79,26 @@ pub(crate) fn panel_action_line(
     if action_row_count(panel, content_height) == 0 {
         return None;
     }
-    let mut action_line = PanelActionLine::new("actions", width);
+    let text = TuiText::new(state.locale);
+    let mut action_line = PanelActionLine::new(text.t("tui-panel-actions"), width);
     action_line.push_visible_text("  ");
     match panel {
-        Panel::Quote => {
-            action_line.push_visible_action("[refresh]", ActionId::RefreshMarketSnapshot)
-        }
-        Panel::History => {
-            action_line.push_visible_action("[refresh]", ActionId::RefreshSelectedHistory)
-        }
-        Panel::Evidence => {
-            action_line.push_visible_action("[refresh]", ActionId::RefreshSelectedEvidence)
-        }
-        Panel::Polymarket | Panel::Research => {
-            action_line.push_visible_action("[refresh]", ActionId::RefreshSelectedResearch)
-        }
+        Panel::Quote => action_line.push_visible_action(
+            text.t("tui-panel-action-refresh"),
+            ActionId::RefreshMarketSnapshot,
+        ),
+        Panel::History => action_line.push_visible_action(
+            text.t("tui-panel-action-refresh"),
+            ActionId::RefreshSelectedHistory,
+        ),
+        Panel::Evidence => action_line.push_visible_action(
+            text.t("tui-panel-action-refresh"),
+            ActionId::RefreshSelectedEvidence,
+        ),
+        Panel::Polymarket | Panel::Research => action_line.push_visible_action(
+            text.t("tui-panel-action-refresh"),
+            ActionId::RefreshSelectedResearch,
+        ),
         _ => return None,
     }
     Some(render_panel_action_line(
@@ -224,6 +230,7 @@ fn wrapped_line_height(line: &Line<'_>, width: usize) -> usize {
 }
 
 pub(crate) fn quote_lines(state: &AppState) -> Vec<Line<'_>> {
+    let text = TuiText::new(state.locale);
     let symbol = state.selected_symbol().unwrap_or("N/A");
     let quote = state
         .market_snapshot
@@ -239,24 +246,24 @@ pub(crate) fn quote_lines(state: &AppState) -> Vec<Line<'_>> {
                 .add_modifier(ratatui::style::Modifier::BOLD),
         ),
         Span::raw(if state.refresh_loading() {
-            " refreshing..."
+            format!(" {}", text.t("tui-quote-refreshing"))
         } else {
-            " market snapshot"
+            format!(" {}", text.t("tui-quote-market-snapshot"))
         }),
     ])];
     match quote {
-        Some(quote) => lines.extend(quote_detail_lines(quote)),
-        None => lines.push(Line::from(
-            "No quote loaded yet. Waiting for the next refresh.",
-        )),
+        Some(quote) => lines.extend(quote_detail_lines(quote, &text)),
+        None => lines.push(Line::from(text.t("tui-quote-empty"))),
     }
     if let Some(snapshot) = state.market_snapshot.as_ref() {
         if let Some(fetched_at) = snapshot.fetched_at_local.as_ref() {
-            lines.push(Line::from(format!("freshness: {fetched_at}")));
+            lines.push(Line::from(
+                text.f("tui-quote-freshness", &[("time", fetched_at)]),
+            ));
         }
         for error in snapshot.errors.iter().take(2) {
             lines.push(Line::from(Span::styled(
-                format!("provider error: {error}"),
+                text.f("tui-quote-provider-error", &[("error", error)]),
                 state.theme.warning_style(),
             )));
         }
@@ -281,12 +288,13 @@ fn history_summary_rows(
     mouse_target: Option<MouseTarget>,
 ) -> Vec<HistorySummaryRow> {
     let symbol = state.selected_symbol().unwrap_or("N/A");
+    let text = TuiText::new(state.locale);
     let snapshot = state.history.selected_snapshot(symbol);
     let workbench = history_workbench_active(state);
     let loading_text = if state.history.loading() {
-        " history loading..."
+        format!(" {}", text.t("tui-history-loading"))
     } else {
-        " history"
+        format!(" {}", text.t("tui-history-ready"))
     };
     let mut rows = Vec::new();
     push_history_info_row(
@@ -308,24 +316,30 @@ fn history_summary_rows(
             push_history_info_row(
                 &mut rows,
                 Line::from(format!(
-                    "source: {} {} {}/{}  preset={}  bars={}",
+                    "{}: {} {} {}/{}  {}={}  {}={}",
+                    text.t("tui-history-source-label"),
                     snapshot.provider,
                     snapshot.session,
                     snapshot.range,
                     snapshot.interval,
+                    text.t("tui-history-preset-label"),
                     state.chart.preset(),
+                    text.t("tui-history-bars-label"),
                     snapshot.bars.len()
                 )),
             );
             push_history_info_row(
                 &mut rows,
                 Line::from(format!(
-                    "latest: {} at {}  return={}",
+                    "{}: {} {} {}  {}={}",
+                    text.t("tui-history-latest-label"),
                     snapshot
                         .latest_close
                         .map(format_price)
                         .unwrap_or_else(|| "-".to_string()),
+                    text.t("tui-history-at-label"),
                     snapshot.latest_time.as_deref().unwrap_or("-"),
+                    text.t("tui-history-return-label"),
                     snapshot
                         .return_pct
                         .map(|value| format!("{value:.2}%"))
@@ -335,11 +349,13 @@ fn history_summary_rows(
             push_history_info_row(
                 &mut rows,
                 Line::from(format!(
-                    "volume: {}  freshness: {}",
+                    "{}: {}  {}: {}",
+                    text.t("tui-history-volume-label"),
                     snapshot
                         .volume
                         .map(format_volume)
                         .unwrap_or_else(|| "-".to_string()),
+                    text.t("tui-history-freshness-label"),
                     snapshot.fetched_at_local.as_deref().unwrap_or("-")
                 )),
             );
@@ -359,7 +375,7 @@ fn history_summary_rows(
                 mouse_target,
             )));
             if workbench {
-                for line in history_workbench_lines(snapshot, &state.chart, &state.theme) {
+                for line in history_workbench_lines(snapshot, &state.chart, &state.theme, &text) {
                     push_history_info_row(&mut rows, line);
                 }
             }
@@ -367,16 +383,13 @@ fn history_summary_rows(
                 push_history_info_row(
                     &mut rows,
                     Line::from(Span::styled(
-                        format!("history warning: {error}"),
+                        text.f("tui-history-warning", &[("error", error)]),
                         state.theme.warning_style(),
                     )),
                 );
             }
         }
-        None => push_history_info_row(
-            &mut rows,
-            Line::from("No history loaded yet. Waiting for the selected symbol."),
-        ),
+        None => push_history_info_row(&mut rows, Line::from(text.t("tui-history-empty"))),
     }
 
     rows
@@ -451,15 +464,26 @@ fn history_toolbar_line(
     width: u16,
     mouse_target: Option<MouseTarget>,
 ) -> RenderedPanelActionLine {
-    let mut line = PanelActionLine::new(format!("range={}  ", state.chart.preset()), width);
+    let text = TuiText::new(state.locale);
+    let mut line = PanelActionLine::new(
+        format!(
+            "{}={}  ",
+            text.t("tui-history-range-label"),
+            state.chart.preset()
+        ),
+        width,
+    );
     for preset in crate::chart::ChartPreset::ALL {
         line.push_visible_action(preset.action_label(), ActionId::SetChartPreset(preset));
         line.push_visible_text(" ");
     }
-    line.push_visible_text("tools ");
-    line.push_visible_action("[reset]", ActionId::ResetChartView);
+    line.push_visible_text(&format!("{} ", text.t("tui-history-tools-prefix")));
+    line.push_visible_action(text.t("tui-history-action-reset"), ActionId::ResetChartView);
     line.push_visible_text(" ");
-    line.push_visible_action("[overlays]", ActionId::ToggleChartOverlays);
+    line.push_visible_action(
+        text.t("tui-history-action-overlays"),
+        ActionId::ToggleChartOverlays,
+    );
     render_panel_action_line(&line, &state.theme, Panel::History, mouse_target)
 }
 
@@ -468,7 +492,15 @@ fn history_interval_toolbar_line(
     width: u16,
     mouse_target: Option<MouseTarget>,
 ) -> RenderedPanelActionLine {
-    let mut line = PanelActionLine::new(format!("interval={}  ", state.chart.interval()), width);
+    let text = TuiText::new(state.locale);
+    let mut line = PanelActionLine::new(
+        format!(
+            "{}={}  ",
+            text.t("tui-history-interval-label"),
+            state.chart.interval()
+        ),
+        width,
+    );
     let symbol = state.selected_symbol().unwrap_or_default();
     for interval in
         crate::chart::ChartInterval::available_for(symbol, state.providers.equity.provider())
@@ -487,7 +519,15 @@ fn history_glyph_toolbar_line(
     width: u16,
     mouse_target: Option<MouseTarget>,
 ) -> RenderedPanelActionLine {
-    let mut line = PanelActionLine::new(format!("glyph={}  ", state.chart.glyph_mode()), width);
+    let text = TuiText::new(state.locale);
+    let mut line = PanelActionLine::new(
+        format!(
+            "{}={}  ",
+            text.t("tui-history-glyph-label"),
+            state.chart.glyph_mode()
+        ),
+        width,
+    );
     for glyph_mode in crate::chart::ChartGlyphMode::ALL {
         line.push_visible_action(
             glyph_mode.action_label(),
@@ -502,10 +542,11 @@ fn history_workbench_lines(
     snapshot: &HistorySnapshot,
     chart: &crate::chart::ChartState,
     theme: &ThemeConfig,
+    text: &TuiText,
 ) -> Vec<Line<'static>> {
     let Some(first) = snapshot.bars.first() else {
         return vec![Line::from(Span::styled(
-            "workbench: no bars to inspect",
+            text.t("tui-history-workbench-no-bars"),
             theme.warning_style(),
         ))];
     };
@@ -530,27 +571,48 @@ fn history_workbench_lines(
         .count();
     let close_time = last.close_time.as_deref().unwrap_or(&last.open_time);
     let ohlc_warning = if missing_ohlc > 0 {
-        format!("  close-only bars={missing_ohlc}")
+        format!(
+            "  {}={missing_ohlc}",
+            text.t("tui-history-close-only-bars-label")
+        )
     } else {
         String::new()
     };
     let window = chart.window();
     let view = if window.full() {
-        "view=full".to_string()
+        format!(
+            "{}={}",
+            text.t("tui-history-workbench-view-label"),
+            text.t("tui-history-workbench-view-full")
+        )
     } else {
         format!(
-            "view={:.0}-{:.0}%",
+            "{}={:.0}-{:.0}%",
+            text.t("tui-history-workbench-view-label"),
             window.start_bps() as f64 / 100.0,
             window.end_bps() as f64 / 100.0
         )
     };
     let cursor = chart
         .cursor_bps()
-        .map(|value| format!("cursor={:.0}%", value as f64 / 100.0))
-        .unwrap_or_else(|| "cursor=off".to_string());
+        .map(|value| {
+            format!(
+                "{}={:.0}%",
+                text.t("tui-history-workbench-cursor-label"),
+                value as f64 / 100.0
+            )
+        })
+        .unwrap_or_else(|| {
+            format!(
+                "{}={}",
+                text.t("tui-history-workbench-cursor-label"),
+                text.t("tui-history-workbench-cursor-off")
+            )
+        });
     vec![
         Line::from(format!(
-            "range: {} -> {}  O={} H={} L={} C={}{}",
+            "{}: {} -> {}  O={} H={} L={} C={}{}",
+            text.t("tui-history-range-label"),
             first.open_time,
             close_time,
             format_price(open),
@@ -560,7 +622,8 @@ fn history_workbench_lines(
             ohlc_warning
         )),
         Line::from(format!(
-            "{view}  {cursor}  h/l cursor  j/k line  enter copy line  wheel/[ ]/drag zoom  0-6 preset  r refresh  z exit"
+            "{view}  {cursor}  {}",
+            text.t("tui-history-workbench-controls")
         )),
     ]
 }
@@ -578,6 +641,7 @@ fn history_visible_summary_height(area: Rect, workbench: bool) -> usize {
 }
 
 pub(crate) fn evidence_panel_lines(state: &AppState) -> Vec<Line<'static>> {
+    let text = TuiText::new(state.locale);
     let symbol = state.selected_symbol().unwrap_or("N/A");
     match state.evidence.selected_snapshot(symbol) {
         Some(snapshot) => {
@@ -590,12 +654,12 @@ pub(crate) fn evidence_panel_lines(state: &AppState) -> Vec<Line<'static>> {
                         .add_modifier(ratatui::style::Modifier::BOLD),
                 ),
                 Span::raw(if state.evidence.loading() {
-                    " evidence loading..."
+                    format!(" {}", text.t("tui-evidence-loading"))
                 } else {
-                    " evidence"
+                    format!(" {}", text.t("tui-evidence-ready"))
                 }),
             ])];
-            lines.extend(evidence_lines(snapshot, &state.theme));
+            lines.extend(evidence_lines(snapshot, &state.theme, &text));
             lines
         }
         None => vec![
@@ -608,17 +672,18 @@ pub(crate) fn evidence_panel_lines(state: &AppState) -> Vec<Line<'static>> {
                         .add_modifier(ratatui::style::Modifier::BOLD),
                 ),
                 Span::raw(if state.evidence.loading() {
-                    " evidence loading..."
+                    format!(" {}", text.t("tui-evidence-loading"))
                 } else {
-                    " evidence"
+                    format!(" {}", text.t("tui-evidence-ready"))
                 }),
             ]),
-            Line::from("No crypto evidence loaded yet. Waiting for the selected symbol."),
+            Line::from(text.t("tui-evidence-empty")),
         ],
     }
 }
 
 pub(crate) fn research_panel_lines(state: &AppState) -> Vec<Line<'static>> {
+    let text = TuiText::new(state.locale);
     let symbol = state.selected_symbol().unwrap_or("N/A");
     match state.research.selected_snapshot(symbol) {
         Some(snapshot) => {
@@ -631,12 +696,12 @@ pub(crate) fn research_panel_lines(state: &AppState) -> Vec<Line<'static>> {
                         .add_modifier(ratatui::style::Modifier::BOLD),
                 ),
                 Span::raw(if state.research.loading() {
-                    " research loading..."
+                    format!(" {}", text.t("tui-research-loading"))
                 } else {
-                    " research"
+                    format!(" {}", text.t("tui-research-ready"))
                 }),
             ])];
-            lines.extend(research_lines(snapshot, &state.theme));
+            lines.extend(research_lines(snapshot, &state.theme, &text));
             lines
         }
         None => vec![
@@ -649,17 +714,18 @@ pub(crate) fn research_panel_lines(state: &AppState) -> Vec<Line<'static>> {
                         .add_modifier(ratatui::style::Modifier::BOLD),
                 ),
                 Span::raw(if state.research.loading() {
-                    " research loading..."
+                    format!(" {}", text.t("tui-research-loading"))
                 } else {
-                    " research"
+                    format!(" {}", text.t("tui-research-ready"))
                 }),
             ]),
-            Line::from("No research context loaded yet. Waiting for the selected symbol."),
+            Line::from(text.t("tui-research-empty")),
         ],
     }
 }
 
 pub(crate) fn polymarket_panel_lines(state: &AppState) -> Vec<Line<'static>> {
+    let text = TuiText::new(state.locale);
     let symbol = state.selected_symbol().unwrap_or("N/A");
     match state.research.selected_snapshot(symbol) {
         Some(snapshot) => {
@@ -672,12 +738,12 @@ pub(crate) fn polymarket_panel_lines(state: &AppState) -> Vec<Line<'static>> {
                         .add_modifier(ratatui::style::Modifier::BOLD),
                 ),
                 Span::raw(if state.research.loading() {
-                    " prediction signals loading..."
+                    format!(" {}", text.t("tui-prediction-loading"))
                 } else {
-                    " prediction signals"
+                    format!(" {}", text.t("tui-prediction-ready"))
                 }),
             ])];
-            lines.extend(prediction_market_lines(snapshot, &state.theme));
+            lines.extend(prediction_market_lines(snapshot, &state.theme, &text));
             lines
         }
         None => vec![
@@ -690,58 +756,72 @@ pub(crate) fn polymarket_panel_lines(state: &AppState) -> Vec<Line<'static>> {
                         .add_modifier(ratatui::style::Modifier::BOLD),
                 ),
                 Span::raw(if state.research.loading() {
-                    " prediction signals loading..."
+                    format!(" {}", text.t("tui-prediction-loading"))
                 } else {
-                    " prediction signals"
+                    format!(" {}", text.t("tui-prediction-ready"))
                 }),
             ]),
-            Line::from("No prediction market context loaded yet. Waiting for research refresh."),
+            Line::from(text.t("tui-prediction-empty")),
         ],
     }
 }
 
-fn quote_detail_lines(quote: &agent_finance_market::snapshot::QuoteSnapshot) -> Vec<Line<'static>> {
+fn quote_detail_lines(
+    quote: &agent_finance_market::snapshot::QuoteSnapshot,
+    text: &TuiText,
+) -> Vec<Line<'static>> {
     vec![
         Line::from(format!(
-            "current: {} {}  chg={}  session={}",
+            "{}: {} {}  {}={}  {}={}",
+            text.t("tui-quote-current-label"),
             quote.currency.as_deref().unwrap_or(""),
             quote
                 .price
                 .map(format_price)
                 .unwrap_or_else(|| "-".to_string()),
+            text.t("tui-quote-change-label"),
             quote
                 .change_pct
                 .map(|value| format!("{value:.2}%"))
                 .unwrap_or_else(|| "-".to_string()),
+            text.t("tui-quote-session-label"),
             quote.session.as_deref().unwrap_or("-")
         )),
         Line::from(format!(
-            "provider: {}  time={}",
+            "{}: {}  {}={}",
+            text.t("tui-quote-provider-label"),
             quote.provider,
+            text.t("tui-quote-time-label"),
             quote.market_time_local.as_deref().unwrap_or("-")
         )),
         Line::from(format!(
-            "regular: prev={} open={} high={} low={} volume={}",
+            "{}: {}={} {}={} {}={} {}={} {}={}",
+            text.t("tui-quote-regular-label"),
+            text.t("tui-quote-prev-label"),
             quote
                 .regular_basis
                 .previous_close
                 .map(format_price)
                 .unwrap_or_else(|| "-".to_string()),
+            text.t("tui-quote-open-label"),
             quote
                 .regular_basis
                 .open
                 .map(format_price)
                 .unwrap_or_else(|| "-".to_string()),
+            text.t("tui-quote-high-label"),
             quote
                 .regular_basis
                 .high
                 .map(format_price)
                 .unwrap_or_else(|| "-".to_string()),
+            text.t("tui-quote-low-label"),
             quote
                 .regular_basis
                 .low
                 .map(format_price)
                 .unwrap_or_else(|| "-".to_string()),
+            text.t("tui-quote-volume-label"),
             quote
                 .regular_basis
                 .volume
@@ -754,14 +834,20 @@ fn quote_detail_lines(quote: &agent_finance_market::snapshot::QuoteSnapshot) -> 
 fn evidence_lines(
     snapshot: &CryptoQuoteEvidenceSnapshot,
     theme: &ThemeConfig,
+    text: &TuiText,
 ) -> Vec<Line<'static>> {
     let mut lines = vec![
         Line::from(format!(
-            "quote / {}  providers={}/{}",
-            snapshot.instrument, snapshot.ok_providers, snapshot.total_providers
+            "{} / {}  {}={}/{}",
+            text.t("tui-evidence-quote-label"),
+            snapshot.instrument,
+            text.t("tui-evidence-providers-label"),
+            snapshot.ok_providers,
+            snapshot.total_providers
         )),
         Line::from(format!(
-            "freshness: {}",
+            "{}: {}",
+            text.t("tui-freshness-label"),
             snapshot.fetched_at_local.as_deref().unwrap_or("-")
         )),
     ];
@@ -785,8 +871,12 @@ fn evidence_lines(
         lines.push(Line::from(vec![
             Span::styled(provider.provider.clone(), style),
             Span::raw(format!(
-                " endpoints={}/{} required_failed={}",
-                provider.ok_endpoints, provider.total_endpoints, provider.required_failed
+                " {}={}/{} {}={}",
+                text.t("tui-evidence-endpoints-label"),
+                provider.ok_endpoints,
+                provider.total_endpoints,
+                text.t("tui-evidence-required-failed-label"),
+                provider.required_failed
             )),
         ]));
         if let Some(error) = provider.first_error.as_ref() {
@@ -802,16 +892,22 @@ fn evidence_lines(
 pub(crate) fn research_lines(
     snapshot: &ResearchContextSnapshot,
     theme: &ThemeConfig,
+    text: &TuiText,
 ) -> Vec<Line<'static>> {
     let mut lines = vec![Line::from(format!(
-        "freshness: {}  news={}",
+        "{}: {}  {}={}",
+        text.t("tui-freshness-label"),
         snapshot.fetched_at_local.as_deref().unwrap_or("-"),
+        text.t("tui-research-news-label"),
         snapshot.news.len()
     ))];
 
     for item in snapshot.news.iter().take(3) {
         lines.push(Line::from(vec![
-            Span::styled("news ", theme.success_style()),
+            Span::styled(
+                format!("{} ", text.t("tui-research-news-label")),
+                theme.success_style(),
+            ),
             Span::raw(compact_text(&item.title, 96)),
         ]));
     }
@@ -821,7 +917,7 @@ pub(crate) fn research_lines(
         .take(2)
     {
         lines.push(Line::from(Span::styled(
-            format!("research warning: {error}"),
+            text.f("tui-research-warning", &[("error", &error)]),
             theme.warning_style(),
         )));
     }
@@ -832,25 +928,26 @@ pub(crate) fn research_lines(
 pub(crate) fn prediction_market_lines(
     snapshot: &ResearchContextSnapshot,
     theme: &ThemeConfig,
+    text: &TuiText,
 ) -> Vec<Line<'static>> {
     let errors = scoped_errors(snapshot, ResearchErrorScope::Polymarket);
     let mut lines = vec![Line::from(format!(
-        "freshness: {}  markets={}",
+        "{}: {}  {}={}",
+        text.t("tui-freshness-label"),
         snapshot.fetched_at_local.as_deref().unwrap_or("-"),
+        text.t("tui-prediction-markets-label"),
         snapshot.prediction_markets.len()
     ))];
 
     if !errors.is_empty() {
         lines.extend(errors.into_iter().take(2).map(|error| {
             Line::from(Span::styled(
-                format!("polymarket warning: {error}"),
+                text.f("tui-prediction-warning", &[("error", &error)]),
                 theme.warning_style(),
             ))
         }));
     } else if snapshot.prediction_markets.is_empty() {
-        lines.push(Line::from(
-            "No related Polymarket signals found for the selected symbol.",
-        ));
+        lines.push(Line::from(text.t("tui-prediction-no-signals")));
     }
 
     lines.extend(
@@ -858,7 +955,7 @@ pub(crate) fn prediction_market_lines(
             .prediction_markets
             .iter()
             .take(5)
-            .map(|market| prediction_market_line(market, theme)),
+            .map(|market| prediction_market_line(market, theme, text)),
     );
 
     lines
@@ -888,7 +985,11 @@ fn scoped_errors(snapshot: &ResearchContextSnapshot, scope: ResearchErrorScope) 
         .collect()
 }
 
-fn prediction_market_line(market: &PredictionMarketSnapshot, theme: &ThemeConfig) -> Line<'static> {
+fn prediction_market_line(
+    market: &PredictionMarketSnapshot,
+    theme: &ThemeConfig,
+    text: &TuiText,
+) -> Line<'static> {
     let probability = market
         .probability
         .map(|value| format!("{:.0}%", value * 100.0))
@@ -908,9 +1009,14 @@ fn prediction_market_line(market: &PredictionMarketSnapshot, theme: &ThemeConfig
         .unwrap_or_default();
 
     Line::from(vec![
-        Span::styled("market ", theme.prediction_style()),
+        Span::styled(
+            format!("{} ", text.t("tui-prediction-market-label")),
+            theme.prediction_style(),
+        ),
         Span::raw(format!(
-            "{probability} vol={volume} liq={liquidity} {}{url}",
+            "{probability} {}={volume} {}={liquidity} {}{url}",
+            text.t("tui-prediction-volume-label"),
+            text.t("tui-prediction-liquidity-label"),
             compact_text(&market.title, 62)
         )),
     ])

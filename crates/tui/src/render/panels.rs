@@ -483,8 +483,10 @@ fn task_status_style(status: TaskStatus, theme: &ThemeConfig) -> Style {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::i18n::TuiText;
     use crate::read_only_panel_view;
     use crate::theme::ThemeConfig;
+    use agent_finance_i18n::LocaleId;
     use agent_finance_market::research_snapshot::{
         PredictionMarketSnapshot, ResearchContextSnapshot, ResearchNewsSnapshot,
     };
@@ -492,9 +494,11 @@ mod tests {
     #[test]
     fn research_lines_do_not_duplicate_prediction_market_signals() {
         let snapshot = research_snapshot();
+        let tui_text = TuiText::new(LocaleId::EnUs);
         let text = joined_lines(read_only_panel_view::research_lines(
             &snapshot,
             &ThemeConfig::default(),
+            &tui_text,
         ));
 
         assert!(text.contains("news=1"));
@@ -506,9 +510,11 @@ mod tests {
     #[test]
     fn prediction_market_lines_show_probability_and_market_depth() {
         let snapshot = research_snapshot();
+        let tui_text = TuiText::new(LocaleId::EnUs);
         let text = joined_lines(read_only_panel_view::prediction_market_lines(
             &snapshot,
             &ThemeConfig::default(),
+            &tui_text,
         ));
 
         assert!(text.contains("markets=1"));
@@ -527,9 +533,12 @@ mod tests {
         ];
 
         let theme = ThemeConfig::default();
-        let research = joined_lines(read_only_panel_view::research_lines(&snapshot, &theme));
+        let tui_text = TuiText::new(LocaleId::EnUs);
+        let research = joined_lines(read_only_panel_view::research_lines(
+            &snapshot, &theme, &tui_text,
+        ));
         let polymarket = joined_lines(read_only_panel_view::prediction_market_lines(
-            &snapshot, &theme,
+            &snapshot, &theme, &tui_text,
         ));
 
         assert!(research.contains("research warning: provider timeout"));

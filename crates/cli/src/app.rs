@@ -20,7 +20,7 @@ use crate::skills;
 
 pub async fn run() -> Result<()> {
     let raw_args = env::args_os().collect::<Vec<_>>();
-    if localized_help::print_top_level_help_if_requested(&raw_args)? {
+    if localized_help::print_help_if_requested(&raw_args)? {
         return Ok(());
     }
 
@@ -149,7 +149,7 @@ async fn run_market(
         MarketCommand::Polymarket(args) => run_polymarket(&runtime, args).await,
         MarketCommand::Screen(args) => run_screen(&runtime, args).await,
         MarketCommand::Stooq(args) => run_stooq(&runtime, args).await,
-        MarketCommand::Providers(args) => run_providers(args),
+        MarketCommand::Providers(args) => run_providers(args, translator),
         MarketCommand::Watch(args) => run_watch(&runtime, args, translator).await,
         MarketCommand::Stream(args) => run_stream(&runtime, args).await,
     }
@@ -400,12 +400,12 @@ async fn run_provider_quote_summary(
     run_quote_summary(runtime, args.without_provider(), kind, provider).await
 }
 
-fn run_providers(args: ProvidersArgs) -> Result<()> {
+fn run_providers(args: ProvidersArgs, translator: &Translator) -> Result<()> {
     let profiles = service::provider_profiles();
     if args.json {
         println!("{}", serde_json::to_string_pretty(&profiles)?);
     } else {
-        output::print_provider_profiles(&profiles);
+        output::print_provider_profiles(&profiles, translator);
     }
     Ok(())
 }

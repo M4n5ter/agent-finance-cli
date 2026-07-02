@@ -109,6 +109,20 @@ agent-finance skills get profile
 agent-finance skills get tui
 ```
 
+## Localization
+
+Human-facing CLI and TUI text supports `en-US`, `zh-CN`, `ja-JP`, and `ko-KR`.
+
+```bash
+agent-finance --locale zh market price AAPL
+agent-finance --locale ja --help
+AGENT_FINANCE_LOCALE=ko agent-finance skills get core
+```
+
+Locale precedence is: `--locale`, TUI config, `AGENT_FINANCE_LOCALE`, system locale, then `en-US`.
+
+In the TUI, open Settings and change `language` for an immediate UI switch. Saving the config persists the language. JSON output, command names, flags, provider identifiers, schema keys, numeric formats, timestamps, and provider-returned content stay stable and are not localized.
+
 ## Quick Tour
 
 Current price and session context:

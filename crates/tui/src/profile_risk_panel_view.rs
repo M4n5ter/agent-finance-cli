@@ -1,5 +1,6 @@
 use ratatui::text::{Line, Span};
 
+use crate::i18n::TuiText;
 use crate::model::Panel;
 use crate::mouse_target::MouseTarget;
 use crate::panel_action_line_view::{
@@ -65,13 +66,14 @@ pub(crate) fn rows(
     width: u16,
     mouse_target: Option<MouseTarget>,
 ) -> Vec<ProfileRiskPanelRow> {
+    let text = TuiText::new(state.locale);
     let mut rows = vec![
         ProfileRiskPanelRow::line(profile_policy_heading(&state.theme)),
-        ProfileRiskPanelRow::text(format!(
-            "selected profile: {}",
-            state.trading_profile.as_deref().unwrap_or("-")
+        ProfileRiskPanelRow::text(text.f(
+            "tui-profile-risk-selected-profile",
+            &[("profile", state.trading_profile.as_deref().unwrap_or("-"))],
         )),
-        ProfileRiskPanelRow::line(validation_summary_line(state)),
+        ProfileRiskPanelRow::line(validation_summary_line(state, &text)),
     ];
 
     match &state.profile_validation {
@@ -82,7 +84,10 @@ pub(crate) fn rows(
             ..
         } => {
             rows.push(ProfileRiskPanelRow::text(compact_text(
-                &format!("path: {}", path.display()),
+                &text.f(
+                    "tui-profile-risk-path",
+                    &[("path", &path.display().to_string())],
+                ),
                 96,
             )));
             let profile = TradingProfileSnapshot::from(profile_config.as_ref());
@@ -122,31 +127,43 @@ pub(crate) fn action_at_content_cell(
         .panel_action_at(content_column)
 }
 
-fn validation_summary_line(state: &AppState) -> Line<'static> {
+fn validation_summary_line(state: &AppState, text: &TuiText) -> Line<'static> {
     match &state.profile_validation {
         ProfileValidationState::Idle if state.trading_profile.is_some() => {
-            Line::from("validation: pending")
+            Line::from(text.t("tui-profile-risk-validation-pending"))
         }
-        ProfileValidationState::Idle => Line::from("validation: no profile selected"),
-        ProfileValidationState::Loading { profile } => {
-            Line::from(format!("validation: {profile} loading"))
+        ProfileValidationState::Idle => {
+            Line::from(text.t("tui-profile-risk-validation-no-profile"))
         }
+        ProfileValidationState::Loading { profile } => Line::from(text.f(
+            "tui-profile-risk-validation-loading",
+            &[("profile", profile)],
+        )),
         ProfileValidationState::Ready { checks, .. } => {
             let required_failures = checks
                 .iter()
                 .filter(|check| check.required && !check.ok)
                 .count();
             if required_failures == 0 {
-                Line::from(Span::styled("validation: ok", state.theme.success_style()))
+                Line::from(Span::styled(
+                    text.t("tui-profile-risk-validation-ok"),
+                    state.theme.success_style(),
+                ))
             } else {
                 Line::from(Span::styled(
-                    format!("validation: {required_failures} required failure(s)"),
+                    text.f(
+                        "tui-profile-risk-validation-failures",
+                        &[("count", &required_failures.to_string())],
+                    ),
                     state.theme.warning_style(),
                 ))
             }
         }
         ProfileValidationState::Failed { profile, .. } => Line::from(Span::styled(
-            format!("validation: {profile} failed"),
+            text.f(
+                "tui-profile-risk-validation-failed",
+                &[("profile", profile)],
+            ),
             state.theme.warning_style(),
         )),
     }
@@ -156,13 +173,17 @@ fn required_failure_lines(
     state: &AppState,
     checks: &[agent_finance_core::DiagnosticCheck],
 ) -> Vec<ProfileRiskPanelRow> {
+    let text = TuiText::new(state.locale);
     checks
         .iter()
         .filter(|check| check.required && !check.ok)
         .take(3)
         .map(|check| {
             ProfileRiskPanelRow::line(Line::from(Span::styled(
-                compact_text(&format!("failure: {}", check.message), 96),
+                compact_text(
+                    &text.f("tui-profile-risk-failure", &[("message", &check.message)]),
+                    96,
+                ),
                 state.theme.warning_style(),
             )))
         })

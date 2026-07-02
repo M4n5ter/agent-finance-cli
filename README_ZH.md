@@ -109,6 +109,20 @@ agent-finance skills get profile
 agent-finance skills get tui
 ```
 
+## 本地化
+
+面向人的 CLI 和 TUI 文本支持 `en-US`、`zh-CN`、`ja-JP`、`ko-KR`。
+
+```bash
+agent-finance --locale zh market price AAPL
+agent-finance --locale ja --help
+AGENT_FINANCE_LOCALE=ko agent-finance skills get core
+```
+
+语言优先级是：`--locale`、TUI config、`AGENT_FINANCE_LOCALE`、系统语言，最后回退到 `en-US`。
+
+在 TUI 中打开 Settings，修改 `language` 会立即切换界面语言；保存 config 后会持久化。JSON 输出、命令名、flag、provider 标识、schema key、数字格式、时间戳和 provider 返回的原文内容保持稳定，不会被本地化。
+
 ## 快速预览
 
 当前价格和 session：

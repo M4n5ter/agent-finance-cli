@@ -214,30 +214,39 @@ fn settings_action_rows(
     state: &AppState,
     width: u16,
     mouse_target: Option<MouseTarget>,
-    _text: &SettingsText,
+    text: &SettingsText,
 ) -> Vec<SettingsPanelRow> {
     vec![settings_action_row(
         state,
         width,
         mouse_target,
-        "actions",
+        &text.t("tui-settings-actions"),
         &[
             (
-                "[add symbols]",
+                text.t("tui-settings-action-add-symbols"),
                 ActionId::OpenFloating(FloatingKind::WatchlistAdd),
             ),
             (
-                "[set profile]",
+                text.t("tui-settings-action-set-profile"),
                 ActionId::OpenFloating(FloatingKind::TradingProfile),
             ),
-            ("[profile/risk]", ActionId::FocusPanel(Panel::ProfileRisk)),
-            ("[save]", ActionId::SaveConfig),
-            ("[undo]", ActionId::UndoConfigChange),
             (
-                "[providers]",
+                text.t("tui-settings-action-profile-risk"),
+                ActionId::FocusPanel(Panel::ProfileRisk),
+            ),
+            (text.t("tui-settings-action-save"), ActionId::SaveConfig),
+            (
+                text.t("tui-settings-action-undo"),
+                ActionId::UndoConfigChange,
+            ),
+            (
+                text.t("tui-settings-action-providers"),
                 ActionId::OpenFloating(FloatingKind::ProviderDetails),
             ),
-            ("[allow_live]", ActionId::StageProfileLiveToggle),
+            (
+                text.t("tui-settings-action-allow-live"),
+                ActionId::StageProfileLiveToggle,
+            ),
         ],
     )]
 }
@@ -247,12 +256,12 @@ fn settings_action_row(
     width: u16,
     mouse_target: Option<MouseTarget>,
     label: &str,
-    actions: &[(&'static str, ActionId)],
+    actions: &[(String, ActionId)],
 ) -> SettingsPanelRow {
     let mut action_line = PanelActionLine::new(label, width);
     for (label, action) in actions {
         action_line.push_visible_text("  ");
-        action_line.push_visible_action(label, *action);
+        action_line.push_visible_action(label.as_str(), *action);
     }
     SettingsPanelRow::panel_action(render_panel_action_line(
         &action_line,

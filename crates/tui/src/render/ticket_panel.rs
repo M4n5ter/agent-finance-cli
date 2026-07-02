@@ -4,6 +4,7 @@ use ratatui::style::Modifier;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{List, ListItem};
 
+use crate::i18n::TuiText;
 use crate::model::Panel;
 use crate::mouse_target::MouseTarget;
 use crate::panel_action_line_view::styled_panel_action_line;
@@ -16,29 +17,29 @@ use super::widgets::panel_block;
 
 pub(super) struct TicketPanel {
     pub panel: Panel,
-    pub heading: &'static str,
+    pub heading: String,
     pub live_writes_enabled: bool,
     pub effective_mode: String,
     pub detail_lines: Vec<String>,
     pub rows: TicketPanelRows,
     pub fields: Vec<TicketField>,
-    pub ready_label: &'static str,
+    pub ready_label: String,
     pub blockers: Vec<String>,
     pub hint: String,
 }
 
 pub(super) struct TicketField {
-    pub label: &'static str,
+    pub label: String,
     pub value: String,
     pub selected: bool,
 }
 
 impl TicketField {
-    pub(super) fn new(label: &'static str, value: String, selected_label: &'static str) -> Self {
+    pub(super) fn new(label: String, value: String, selected: bool) -> Self {
         Self {
             label,
             value,
-            selected: label == selected_label,
+            selected,
         }
     }
 }
@@ -82,18 +83,19 @@ fn ticket_line(
     width: u16,
     mouse_target: Option<MouseTarget>,
 ) -> Line<'static> {
+    let text = TuiText::new(state.locale);
     match row {
         TicketPanelRow::Header => Line::from(vec![
             Span::styled(
-                ticket.heading,
+                ticket.heading.clone(),
                 state.theme.accent_style().add_modifier(Modifier::BOLD),
             ),
             Span::raw(format!(
                 "  {} / {}",
                 if ticket.live_writes_enabled {
-                    "live:on"
+                    text.t("tui-ticket-live-on")
                 } else {
-                    "live:off"
+                    text.t("tui-ticket-live-off")
                 },
                 ticket.effective_mode
             )),
@@ -115,7 +117,7 @@ fn ticket_line(
             mouse_target,
         ),
         TicketPanelRow::ReadyAction => Line::from(Span::styled(
-            format!("[stage] {}", ticket.ready_label),
+            text.f("tui-ticket-stage", &[("label", &ticket.ready_label)]),
             if ticket_ready_hovered(mouse_target, ticket.panel) {
                 state.theme.selected_style().add_modifier(Modifier::BOLD)
             } else {
@@ -123,7 +125,10 @@ fn ticket_line(
             },
         )),
         TicketPanelRow::Blocker(index) => Line::from(Span::styled(
-            format!("blocked: {}", ticket.blockers[index]),
+            text.f(
+                "tui-ticket-blocked",
+                &[("message", &ticket.blockers[index])],
+            ),
             state.theme.warning_style(),
         )),
         TicketPanelRow::Hint => Line::from(ticket.hint.clone()),

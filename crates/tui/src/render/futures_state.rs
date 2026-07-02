@@ -2,6 +2,7 @@ use ratatui::Frame;
 use ratatui::layout::Rect;
 
 use crate::futures_state_ticket::FuturesStateTicketPreview;
+use crate::i18n::TuiText;
 use crate::model::Panel;
 use crate::mouse_target::MouseTarget;
 use crate::state::AppState;
@@ -16,23 +17,36 @@ pub(super) fn render_futures_state(
 ) {
     let preview = state.futures_state_ticket_preview();
     let selected = state.futures_state_ticket.selected_field_label();
+    let text = TuiText::new(state.locale);
     render_ticket_panel(
         frame,
         state,
         area,
         TicketPanel {
             panel: Panel::FuturesState,
-            heading: "futures state ticket",
+            heading: text.t("tui-ticket-futures-state-heading"),
             live_writes_enabled: preview.live_writes_enabled,
             effective_mode: preview.effective_mode.to_string(),
             detail_lines: Vec::new(),
             rows: crate::ticket_panel_view::futures_state_ticket_rows(state),
             fields: vec![
-                TicketField::new("kind", preview.kind.to_string(), selected),
-                TicketField::new("scope", preview.scope_label(), selected),
-                TicketField::new("value", futures_state_value(&preview), selected),
+                TicketField::new(
+                    text.t("tui-ticket-field-kind"),
+                    preview.kind.to_string(),
+                    selected == "kind",
+                ),
+                TicketField::new(
+                    text.t("tui-ticket-field-scope"),
+                    preview.scope_label(),
+                    selected == "scope",
+                ),
+                TicketField::new(
+                    text.t("tui-ticket-field-value"),
+                    futures_state_value(&preview),
+                    selected == "value",
+                ),
             ],
-            ready_label: "ready",
+            ready_label: text.t("tui-ticket-ready"),
             blockers: preview.blockers,
             hint: crate::futures_state_controls::futures_state_section_hint(),
         },

@@ -6,6 +6,7 @@ use ratatui::widgets::{Block, Borders, List, ListItem, Paragraph, Shadow, Wrap};
 
 use crate::confirmation_dialog::{self, ConfirmationRow};
 use crate::hints;
+use crate::i18n::TuiText;
 use crate::model::FloatingKind;
 use crate::mouse_target::MouseTarget;
 use crate::search_floating_view::SearchFloatingLayout;
@@ -165,6 +166,7 @@ pub(super) fn render_floating(
         return;
     }
 
+    let ui_text = TuiText::new(state.locale);
     let text = match kind {
         FloatingKind::CommandPalette => unreachable!("command palette is rendered separately"),
         FloatingKind::SymbolSearch => unreachable!("symbol search is rendered separately"),
@@ -175,24 +177,22 @@ pub(super) fn render_floating(
             unreachable!("staged execution confirmation is rendered separately")
         }
         FloatingKind::Help => vec![
-            Line::from("agent-finance cockpit"),
-            Line::from("[/]: switch workspace"),
-            Line::from("Tab/Shift-Tab: move pane focus"),
-            Line::from("z: zoom focused pane or restore workspace layout"),
-            Line::from("j/k or arrows: switch selected symbol"),
-            Line::from(
-                "1-7: focus watchlist, quote, history, evidence, Polymarket, research, settings",
-            ),
-            Line::from(": open command palette"),
-            Line::from("/ search watchlist symbols"),
-            Line::from("Enter: execute selected command in command palette"),
-            Line::from("p inspect provider details"),
-            Line::from("x close focused panel"),
-            Line::from("0 restore all panels"),
-            Line::from("r reset layout"),
-            Line::from("mouse: focus panels, drag docked borders, resize floating corners"),
-            Line::from("watchlist focus: a add, d delete, left/right reorder"),
-            Line::from("q quit"),
+            Line::from(ui_text.t("tui-help-title")),
+            Line::from(ui_text.t("tui-help-switch-workspace")),
+            Line::from(ui_text.t("tui-help-move-pane-focus")),
+            Line::from(ui_text.t("tui-help-zoom")),
+            Line::from(ui_text.t("tui-help-symbol-nav")),
+            Line::from(ui_text.t("tui-help-focus-panels")),
+            Line::from(ui_text.t("tui-help-command-palette")),
+            Line::from(ui_text.t("tui-help-search")),
+            Line::from(ui_text.t("tui-help-enter-command")),
+            Line::from(ui_text.t("tui-help-provider-details")),
+            Line::from(ui_text.t("tui-help-close-panel")),
+            Line::from(ui_text.t("tui-help-restore-panels")),
+            Line::from(ui_text.t("tui-help-reset-layout")),
+            Line::from(ui_text.t("tui-help-mouse")),
+            Line::from(ui_text.t("tui-help-watchlist")),
+            Line::from(ui_text.t("tui-help-quit")),
         ],
         FloatingKind::LiveWritesConfirmation => {
             render_confirmation_dialog(frame, state, kind, area, mouse_target);
@@ -219,7 +219,10 @@ pub(super) fn render_floating(
     };
     frame.render_widget(
         Paragraph::new(text)
-            .block(floating_block(kind.title(), &state.theme))
+            .block(dynamic_floating_block(
+                ui_text.floating_title(kind),
+                &state.theme,
+            ))
             .wrap(Wrap { trim: true }),
         area,
     );
@@ -259,7 +262,10 @@ fn render_confirmation_dialog(
     .map(|(index, row)| confirmation_line(state, kind, row, index == 0, mouse_target))
     .map(ListItem::new);
     frame.render_widget(
-        List::new(lines).block(floating_block(kind.title(), &state.theme)),
+        List::new(lines).block(dynamic_floating_block(
+            TuiText::new(state.locale).floating_title(kind),
+            &state.theme,
+        )),
         area,
     );
 }
@@ -345,19 +351,23 @@ fn render_command_palette(
     area: Rect,
     mouse_target: Option<MouseTarget>,
 ) {
+    let text = TuiText::new(state.locale);
     render_search_floating(
         frame,
         area,
         SearchFloating {
-            title: "Command Palette",
+            title: text.t("tui-command-palette-title"),
             input_title: hints::input_floating_title_for_kind(FloatingKind::CommandPalette)
                 .expect("command palette has an input title"),
-            placeholder: "filter commands",
+            placeholder: text.t("tui-command-palette-placeholder"),
             query: state.command_palette.query(),
             selected: state.command_palette.selected(),
             total: state.command_palette.len(),
-            noun: "matches",
-            empty: "No matching commands",
+            noun: text.t("tui-command-palette-noun"),
+            empty: text.t("tui-command-palette-empty"),
+            more_above: text.t("tui-search-more-above"),
+            more_below: text.t("tui-search-more-below"),
+            more_above_below: text.t("tui-search-more-above-below"),
         },
         &state.theme,
         |index, is_selected| {
@@ -369,11 +379,13 @@ fn render_command_palette(
             } else {
                 state.theme.text_style()
             };
+            let title = text.command_title(&command);
+            let description = text.command_description(&command);
             Some(ListItem::new(Line::from(vec![
                 Span::styled(if is_selected { "> " } else { "  " }, style),
-                Span::styled(command.title, style),
+                Span::styled(title, style),
                 Span::styled(" - ", style),
-                Span::styled(command.description, style),
+                Span::styled(description, style),
             ])))
         },
     );
@@ -385,19 +397,23 @@ fn render_symbol_search(
     area: Rect,
     mouse_target: Option<MouseTarget>,
 ) {
+    let text = TuiText::new(state.locale);
     render_search_floating(
         frame,
         area,
         SearchFloating {
-            title: "Symbol Search",
+            title: text.t("tui-symbol-search-title"),
             input_title: hints::input_floating_title_for_kind(FloatingKind::SymbolSearch)
                 .expect("symbol search has an input title"),
-            placeholder: "filter symbols",
+            placeholder: text.t("tui-symbol-search-placeholder"),
             query: state.symbol_search.query(),
             selected: state.symbol_search.selected(),
             total: state.symbol_search.len(),
-            noun: "symbols",
-            empty: "No matching symbols",
+            noun: text.t("tui-symbol-search-noun"),
+            empty: text.t("tui-symbol-search-empty"),
+            more_above: text.t("tui-search-more-above"),
+            more_below: text.t("tui-search-more-below"),
+            more_above_below: text.t("tui-search-more-above-below"),
         },
         &state.theme,
         |index, is_selected| {
@@ -415,26 +431,37 @@ fn render_symbol_search(
             Some(ListItem::new(Line::from(vec![
                 Span::styled(if is_selected { "> " } else { "  " }, style),
                 Span::styled(symbol.clone(), style),
-                Span::styled(if is_current { " current" } else { "" }, style),
+                Span::styled(
+                    if is_current {
+                        format!(" {}", text.t("tui-symbol-search-current"))
+                    } else {
+                        String::new()
+                    },
+                    style,
+                ),
             ])))
         },
     );
 }
 
 fn render_watchlist_add(frame: &mut Frame<'_>, state: &AppState, area: Rect) {
+    let text = TuiText::new(state.locale);
     render_search_floating(
         frame,
         area,
         SearchFloating {
-            title: "Add Symbols",
+            title: text.floating_title(FloatingKind::WatchlistAdd),
             input_title: hints::input_floating_title_for_kind(FloatingKind::WatchlistAdd)
                 .expect("watchlist add has an input title"),
-            placeholder: "LITE, AAOI, BTCUSDT",
+            placeholder: "LITE, AAOI, BTCUSDT".to_string(),
             query: state.watchlist_add.query(),
             selected: 0,
             total: 2,
-            noun: "actions",
-            empty: "Enter adds symbols, Esc cancels",
+            noun: text.t("tui-search-actions-noun"),
+            empty: text.t("tui-watchlist-add-empty"),
+            more_above: text.t("tui-search-more-above"),
+            more_below: text.t("tui-search-more-below"),
+            more_above_below: text.t("tui-search-more-above-below"),
         },
         &state.theme,
         |index, is_selected| {
@@ -443,33 +470,37 @@ fn render_watchlist_add(frame: &mut Frame<'_>, state: &AppState, area: Rect) {
             } else {
                 state.theme.text_style()
             };
-            let text = match index {
-                0 => "Enter - add normalized symbols",
-                1 => "Esc - cancel",
+            let item_text = match index {
+                0 => text.t("tui-watchlist-add-confirm"),
+                1 => text.t("tui-floating-cancel"),
                 _ => return None,
             };
             Some(ListItem::new(Line::from(vec![
                 Span::styled(if is_selected { "> " } else { "  " }, style),
-                Span::styled(text, style),
+                Span::styled(item_text, style),
             ])))
         },
     );
 }
 
 fn render_trading_profile(frame: &mut Frame<'_>, state: &AppState, area: Rect) {
+    let text = TuiText::new(state.locale);
     render_search_floating(
         frame,
         area,
         SearchFloating {
-            title: "Trading Profile",
+            title: text.floating_title(FloatingKind::TradingProfile),
             input_title: hints::input_floating_title_for_kind(FloatingKind::TradingProfile)
                 .expect("trading profile has an input title"),
-            placeholder: "mainnet, testnet, paper",
+            placeholder: "mainnet, testnet, paper".to_string(),
             query: state.profile_editor.query(),
             selected: 0,
             total: 3,
-            noun: "actions",
-            empty: "Enter sets profile, blank clears it, Esc cancels",
+            noun: text.t("tui-search-actions-noun"),
+            empty: text.t("tui-trading-profile-empty"),
+            more_above: text.t("tui-search-more-above"),
+            more_below: text.t("tui-search-more-below"),
+            more_above_below: text.t("tui-search-more-above-below"),
         },
         &state.theme,
         |index, is_selected| {
@@ -478,27 +509,34 @@ fn render_trading_profile(frame: &mut Frame<'_>, state: &AppState, area: Rect) {
             } else {
                 state.theme.text_style()
             };
-            let text = match index {
-                0 => format!(
-                    "current - {}",
-                    state.trading_profile.as_deref().unwrap_or("none")
+            let item_text = match index {
+                0 => text.f(
+                    "tui-trading-profile-current",
+                    &[(
+                        "profile",
+                        state.trading_profile.as_deref().unwrap_or("none"),
+                    )],
                 ),
-                1 => format!(
-                    "next - {}",
-                    state.profile_editor.profile().as_deref().unwrap_or("none")
+                1 => text.f(
+                    "tui-trading-profile-next",
+                    &[(
+                        "profile",
+                        state.profile_editor.profile().as_deref().unwrap_or("none"),
+                    )],
                 ),
-                2 => "Enter - set default trading profile".to_string(),
+                2 => text.t("tui-trading-profile-confirm"),
                 _ => return None,
             };
             Some(ListItem::new(Line::from(vec![
                 Span::styled(if is_selected { "> " } else { "  " }, style),
-                Span::styled(text, style),
+                Span::styled(item_text, style),
             ])))
         },
     );
 }
 
 fn render_ticket_text_input(frame: &mut Frame<'_>, state: &AppState, area: Rect) {
+    let text = TuiText::new(state.locale);
     let target = state.ticket_text_input.target();
     let next_value = state.ticket_text_input.committed_value();
     let next_label = next_value.as_deref().unwrap_or("blank");
@@ -507,15 +545,18 @@ fn render_ticket_text_input(frame: &mut Frame<'_>, state: &AppState, area: Rect)
         frame,
         area,
         SearchFloating {
-            title: "Ticket Text Input",
+            title: text.floating_title(FloatingKind::TicketTextInput),
             input_title: hints::input_floating_title_for_kind(FloatingKind::TicketTextInput)
                 .expect("ticket text input has an input title"),
-            placeholder: target.placeholder(),
+            placeholder: target.placeholder().to_string(),
             query: state.ticket_text_input.query(),
             selected: 0,
             total: 3,
-            noun: "actions",
-            empty: "Enter applies value, Esc cancels",
+            noun: text.t("tui-search-actions-noun"),
+            empty: text.t("tui-ticket-text-input-empty"),
+            more_above: text.t("tui-search-more-above"),
+            more_below: text.t("tui-search-more-below"),
+            more_above_below: text.t("tui-search-more-above-below"),
         },
         &state.theme,
         |index, is_selected| {
@@ -524,33 +565,41 @@ fn render_ticket_text_input(frame: &mut Frame<'_>, state: &AppState, area: Rect)
             } else {
                 state.theme.text_style()
             };
-            let text = match index {
-                0 => format!(
-                    "target - {} {}",
-                    target.ticket_label(),
-                    target.field_label()
+            let item_text = match index {
+                0 => text.f(
+                    "tui-ticket-text-input-target",
+                    &[
+                        ("ticket", target.ticket_label()),
+                        ("field", target.field_label()),
+                    ],
                 ),
-                1 => format!("next - {next_label}"),
-                2 => format!("Enter - apply to {}", target.ticket_label()),
+                1 => text.f("tui-ticket-text-input-next", &[("value", next_label)]),
+                2 => text.f(
+                    "tui-ticket-text-input-apply",
+                    &[("ticket", target.ticket_label())],
+                ),
                 _ => return None,
             };
             Some(ListItem::new(Line::from(vec![
                 Span::styled(if is_selected { "> " } else { "  " }, style),
-                Span::styled(text, style),
+                Span::styled(item_text, style),
             ])))
         },
     );
 }
 
 struct SearchFloating<'a> {
-    title: &'static str,
+    title: String,
     input_title: String,
-    placeholder: &'static str,
+    placeholder: String,
     query: &'a str,
     selected: usize,
     total: usize,
-    noun: &'static str,
-    empty: &'static str,
+    noun: String,
+    empty: String,
+    more_above: String,
+    more_below: String,
+    more_above_below: String,
 }
 
 fn render_search_floating(
@@ -562,7 +611,8 @@ fn render_search_floating(
 ) {
     if area.height < 4 {
         frame.render_widget(
-            Paragraph::new(floating.title).block(floating_block(floating.title, theme)),
+            Paragraph::new(floating.title.clone())
+                .block(dynamic_floating_block(floating.title, theme)),
             area,
         );
         return;
@@ -599,9 +649,9 @@ fn render_search_floating(
         .collect::<Vec<_>>();
     let title = match (floating.total, hidden_before, hidden_after) {
         (0, _, _) => format!("0 {}", floating.noun),
-        (_, true, true) => format!("{}  more above/below", floating.noun),
-        (_, true, false) => format!("{}  more above", floating.noun),
-        (_, false, true) => format!("{}  more below", floating.noun),
+        (_, true, true) => format!("{}  {}", floating.noun, floating.more_above_below),
+        (_, true, false) => format!("{}  {}", floating.noun, floating.more_above),
+        (_, false, true) => format!("{}  {}", floating.noun, floating.more_below),
         (_, false, false) => floating.noun.to_string(),
     };
     let items = if items.is_empty() {
@@ -618,10 +668,6 @@ fn render_search_floating(
     );
 }
 
-fn floating_block(title: &'static str, theme: &ThemeConfig) -> Block<'static> {
-    shadowed_block(simple_block(title), theme)
-}
-
 fn dynamic_floating_block(title: String, theme: &ThemeConfig) -> Block<'static> {
     shadowed_block(Block::default().title(title).borders(Borders::ALL), theme)
 }
@@ -632,8 +678,4 @@ fn shadowed_block(block: Block<'static>, theme: &ThemeConfig) -> Block<'static> 
             .style(theme.shadow_style())
             .offset(Offset::new(1, 1)),
     )
-}
-
-fn simple_block(title: &'static str) -> Block<'static> {
-    Block::default().title(title).borders(Borders::ALL)
 }
