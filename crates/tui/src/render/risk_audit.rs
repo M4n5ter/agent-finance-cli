@@ -18,18 +18,14 @@ pub(super) fn render_risk_audit(
     frame: &mut Frame<'_>,
     state: &AppState,
     area: Rect,
-    mouse_target: Option<MouseTarget>,
+    _mouse_target: Option<MouseTarget>,
 ) {
     let lines = risk_audit_lines(state);
 
     frame.render_widget(
-        Paragraph::new(hover_lines(
-            lines,
-            mouse_target,
-            state.theme.selected_style(),
-        ))
-        .block(panel_block(Panel::RiskAudit, state))
-        .wrap(Wrap { trim: true }),
+        Paragraph::new(lines)
+            .block(panel_block(Panel::RiskAudit, state))
+            .wrap(Wrap { trim: true }),
         area,
     );
 }
@@ -60,26 +56,6 @@ pub(crate) fn risk_audit_lines(state: &AppState) -> Vec<Line<'static>> {
     lines.extend(recent_event_lines(state));
 
     lines
-}
-
-fn hover_lines(
-    lines: Vec<Line<'static>>,
-    mouse_target: Option<MouseTarget>,
-    selected_style: ratatui::style::Style,
-) -> Vec<Line<'static>> {
-    lines
-        .into_iter()
-        .enumerate()
-        .map(|(index, line)| {
-            if mouse_target
-                .is_some_and(|target| target.panel_info_row_hovered(Panel::RiskAudit, index))
-            {
-                line.style(selected_style)
-            } else {
-                line
-            }
-        })
-        .collect()
 }
 
 fn profile_validation_line(state: &AppState) -> Line<'static> {

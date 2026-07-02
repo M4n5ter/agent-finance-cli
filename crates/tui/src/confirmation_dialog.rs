@@ -1,6 +1,7 @@
 use crate::model::FloatingKind;
 use crate::staged_gate_preview::GatePreviewRow;
 use crate::state::{PendingStagedConfirmationView, StagedExecution};
+use unicode_width::UnicodeWidthStr;
 
 pub(crate) const GATE_ROW_PREFIX: &str = "gate: ";
 
@@ -95,7 +96,7 @@ fn push_button_segment(
     action: Option<ConfirmationButtonAction>,
 ) {
     let start = *cursor;
-    *cursor += text.chars().count();
+    *cursor += UnicodeWidthStr::width(text.as_str());
     segments.push(ConfirmationButtonSegment {
         text,
         action,
@@ -238,7 +239,9 @@ fn materialize_visual_rows(
                 .collect::<Vec<_>>(),
             ConfirmationRow::Gate(row) => wrap_text(
                 &row.text,
-                width.saturating_sub(GATE_ROW_PREFIX.chars().count()).max(1),
+                width
+                    .saturating_sub(UnicodeWidthStr::width(GATE_ROW_PREFIX))
+                    .max(1),
             )
             .into_iter()
             .map(|text| {
@@ -258,12 +261,11 @@ fn wrap_text(text: &str, width: usize) -> Vec<String> {
     let mut current = String::new();
     for word in text.split_whitespace() {
         let separator = usize::from(!current.is_empty());
-        if !current.is_empty() && current.chars().count() + separator + word.chars().count() > width
-        {
+        if !current.is_empty() && text_width(&current) + separator + text_width(word) > width {
             lines.push(current);
             current = String::new();
         }
-        if word.chars().count() > width {
+        if text_width(word) > width {
             if !current.is_empty() {
                 lines.push(current);
                 current = String::new();
@@ -288,17 +290,25 @@ fn wrap_text(text: &str, width: usize) -> Vec<String> {
 fn split_long_word(word: &str, width: usize) -> Vec<String> {
     let mut lines = Vec::new();
     let mut current = String::new();
+    let mut current_width = 0usize;
     for character in word.chars() {
-        if current.chars().count() == width {
+        let character_width = unicode_width::UnicodeWidthChar::width(character).unwrap_or(0);
+        if !current.is_empty() && current_width.saturating_add(character_width) > width {
             lines.push(current);
             current = String::new();
+            current_width = 0;
         }
         current.push(character);
+        current_width = current_width.saturating_add(character_width);
     }
     if !current.is_empty() {
         lines.push(current);
     }
     lines
+}
+
+fn text_width(text: &str) -> usize {
+    UnicodeWidthStr::width(text)
 }
 
 #[cfg(test)]
@@ -326,6 +336,31 @@ mod tests {
         );
         assert_eq!(click_action_at(&rows, 20, button_row), None);
         assert_eq!(click_action_at(&rows, 1, 0), None);
+    }
+
+    #[test]
+    fn button_clicks_use_terminal_cells_for_wide_labels() {
+        let buttons = ConfirmationButtons {
+            primary: Some("确认".to_string()),
+            cancel: "取消".to_string(),
+        };
+        let rows = vec![ConfirmationRow::Buttons(buttons)];
+
+        assert_eq!(
+            click_action_at(&rows, 5, 0),
+            Some(ConfirmationButtonAction::Primary)
+        );
+        assert_eq!(click_action_at(&rows, 6, 0), None);
+        assert_eq!(click_action_at(&rows, 7, 0), None);
+        assert_eq!(
+            click_action_at(&rows, 8, 0),
+            Some(ConfirmationButtonAction::Cancel)
+        );
+        assert_eq!(
+            click_action_at(&rows, 13, 0),
+            Some(ConfirmationButtonAction::Cancel)
+        );
+        assert_eq!(click_action_at(&rows, 14, 0), None);
     }
 
     #[test]
@@ -358,7 +393,7 @@ mod tests {
         );
 
         assert!(rows.iter().all(|row| match row {
-            ConfirmationRow::Text(text) => text.chars().count() <= width,
+            ConfirmationRow::Text(text) => text_width(text) <= width,
             _ => true,
         }));
         assert_eq!(
@@ -367,6 +402,27 @@ mod tests {
                 .count(),
             1
         );
+    }
+
+    #[test]
+    fn wide_text_rows_wrap_by_terminal_cell_width() {
+        let rows = materialize_visual_rows(
+            vec![
+                ConfirmationRow::Text("确认确认确认".into()),
+                ConfirmationRow::Gate(GatePreviewRow {
+                    severity: GatePreviewSeverity::Info,
+                    text: "订单订单订单".into(),
+                }),
+            ],
+            8,
+        );
+        let gate_text_width = 8usize.saturating_sub(text_width(GATE_ROW_PREFIX)).max(1);
+
+        assert!(rows.iter().all(|row| match row {
+            ConfirmationRow::Text(text) => text_width(text) <= 8,
+            ConfirmationRow::Gate(row) => text_width(&row.text) <= gate_text_width,
+            _ => true,
+        }));
     }
 
     #[test]

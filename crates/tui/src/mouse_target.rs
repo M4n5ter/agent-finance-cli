@@ -22,12 +22,10 @@ impl MousePosition {
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum MouseTarget {
     WorkspaceTab(WorkspaceKind),
-    Panel(Panel),
     PanelAction {
         panel: Panel,
         action: PanelMouseAction,
     },
-    Floating(FloatingKind),
     FloatingAction {
         kind: FloatingKind,
         action: FloatingMouseAction,
@@ -141,16 +139,6 @@ impl MouseTarget {
         )
     }
 
-    pub fn panel_info_row_hovered(self, panel: Panel, index: usize) -> bool {
-        matches!(
-            self,
-            Self::PanelAction {
-                panel: hover_panel,
-                action: PanelMouseAction::InspectRow { index: hover_index },
-            } if hover_panel == panel && hover_index == index
-        )
-    }
-
     pub fn panel_chart_hovered(self, panel: Panel) -> Option<MousePosition> {
         match self {
             Self::PanelAction {
@@ -204,7 +192,6 @@ pub enum PanelMouseAction {
     RowAction { content_row: usize },
     SettingAdjust { index: usize, direction: isize },
     IntentReviewAction { action: IntentReviewAction },
-    InspectRow { index: usize },
     InspectChart { position: MousePosition },
 }
 
@@ -226,26 +213,14 @@ pub(crate) fn target_at(
     }
 
     match layout.hit_test(position.column, position.row)? {
-        LayoutHit::Panel(panel) => layout
-            .panel_rect(panel)
-            .and_then(|area| {
-                crate::panel_mouse::hover_target(state, panel, area, position.column, position.row)
-            })
-            .or(Some(MouseTarget::Panel(panel))),
+        LayoutHit::Panel(panel) => layout.panel_rect(panel).and_then(|area| {
+            crate::panel_mouse::hover_target(state, panel, area, position.column, position.row)
+        }),
         LayoutHit::DockedSplit(_) => Some(MouseTarget::DockedSplit),
         LayoutHit::FloatingResize(kind) => Some(MouseTarget::FloatingResize(kind)),
-        LayoutHit::Floating(kind) => layout
-            .floating_rect(kind)
-            .and_then(|area| {
-                crate::floating_input::hover_target(
-                    state,
-                    kind,
-                    area,
-                    position.column,
-                    position.row,
-                )
-            })
-            .or(Some(MouseTarget::Floating(kind))),
+        LayoutHit::Floating(kind) => layout.floating_rect(kind).and_then(|area| {
+            crate::floating_input::hover_target(state, kind, area, position.column, position.row)
+        }),
         LayoutHit::Status => workspace_tab_at(layout.status, position.column, state.locale)
             .map(MouseTarget::WorkspaceTab)
             .or_else(|| {

@@ -101,12 +101,10 @@ pub(crate) fn hover_target(
     column: u16,
     row: u16,
 ) -> Option<MouseTarget> {
-    floating_hit_at(state, kind, area, column, row)
-        .map(|hit| MouseTarget::FloatingAction {
-            kind,
-            action: hit.mouse_action(),
-        })
-        .or(Some(MouseTarget::Floating(kind)))
+    floating_hit_at(state, kind, area, column, row).map(|hit| MouseTarget::FloatingAction {
+        kind,
+        action: hit.mouse_action(),
+    })
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]

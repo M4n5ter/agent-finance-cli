@@ -53,8 +53,8 @@ fn status_detail_line(
     let mut spans = Vec::new();
     let mut cursor = 0usize;
     for action in detail.actions {
-        let start = action.start as usize;
-        let end = action.end as usize;
+        let start = action.byte_start;
+        let end = action.byte_end;
         push_status_span(
             &mut spans,
             &detail.text,

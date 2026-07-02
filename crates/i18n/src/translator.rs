@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::rc::Rc;
 
 use anyhow::{Result, anyhow};
 use fluent_bundle::{FluentArgs, FluentBundle, FluentResource, FluentValue};
@@ -9,17 +10,19 @@ pub type MessageArgs<'a> = &'a [(&'a str, &'a str)];
 
 pub struct Translator {
     locale: LocaleId,
+    catalog: Rc<BundleCatalog>,
+}
+
+struct BundleCatalog {
     bundles: BTreeMap<LocaleId, FluentBundle<FluentResource>>,
 }
 
 impl Translator {
     pub fn new(locale: LocaleId) -> Result<Self> {
-        let bundles = LocaleId::ALL
-            .into_iter()
-            .map(|locale| build_bundle(locale).map(|bundle| (locale, bundle)))
-            .collect::<Result<BTreeMap<_, _>>>()?;
-
-        Ok(Self { locale, bundles })
+        Ok(Self {
+            locale,
+            catalog: builtin_catalog()?,
+        })
     }
 
     pub fn locale(&self) -> LocaleId {
@@ -45,7 +48,7 @@ impl Translator {
     }
 
     fn format(&self, locale: LocaleId, key: &str, args: MessageArgs<'_>) -> Option<String> {
-        let bundle = self.bundles.get(&locale)?;
+        let bundle = self.catalog.bundles.get(&locale)?;
         let message = bundle.get_message(key)?;
         let pattern = message.value()?;
         let args = fluent_args(args);
@@ -54,6 +57,38 @@ impl Translator {
 
         errors.is_empty().then(|| value.into_owned())
     }
+
+    #[cfg(test)]
+    fn from_bundles(
+        locale: LocaleId,
+        bundles: BTreeMap<LocaleId, FluentBundle<FluentResource>>,
+    ) -> Self {
+        Self {
+            locale,
+            catalog: Rc::new(BundleCatalog { bundles }),
+        }
+    }
+}
+
+fn builtin_catalog() -> Result<Rc<BundleCatalog>> {
+    thread_local! {
+        static BUILTIN_CATALOG: Result<Rc<BundleCatalog>, String> =
+            build_builtin_catalog().map(Rc::new).map_err(|error| error.to_string());
+    }
+
+    BUILTIN_CATALOG.with(|catalog| match catalog {
+        Ok(catalog) => Ok(Rc::clone(catalog)),
+        Err(error) => Err(anyhow!(error.clone())),
+    })
+}
+
+fn build_builtin_catalog() -> Result<BundleCatalog> {
+    let bundles = LocaleId::ALL
+        .into_iter()
+        .map(|locale| build_bundle(locale).map(|bundle| (locale, bundle)))
+        .collect::<Result<BTreeMap<_, _>>>()?;
+
+    Ok(BundleCatalog { bundles })
 }
 
 fn build_bundle(locale: LocaleId) -> Result<FluentBundle<FluentResource>> {
@@ -98,9 +133,9 @@ mod tests {
 
     #[test]
     fn falls_back_to_english_for_missing_runtime_key() {
-        let translator = Translator {
-            locale: LocaleId::ZhCn,
-            bundles: BTreeMap::from([
+        let translator = Translator::from_bundles(
+            LocaleId::ZhCn,
+            BTreeMap::from([
                 (
                     LocaleId::EnUs,
                     build_bundle_from_source(
@@ -115,7 +150,7 @@ mod tests {
                         .unwrap(),
                 ),
             ]),
-        };
+        );
 
         assert_eq!(
             translator.text_with_args("test-english-only-runtime-fallback", &[("name", "M4n5ter")]),

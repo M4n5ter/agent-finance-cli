@@ -13,61 +13,10 @@ use crate::mouse_target::MouseTarget;
 use crate::panel_action_line_view::{
     PanelActionLine, PanelActionSpan, RenderedPanelActionLine, render_panel_action_line,
 };
-use crate::provider_health::ProviderHealthReport;
 use crate::state::AppState;
 use crate::theme::ThemeConfig;
 
 use crate::render::widgets::{compact_text, format_price, format_volume};
-
-pub(crate) fn info_row_at_content_row(
-    state: &AppState,
-    panel: Panel,
-    area: Rect,
-    content_row: usize,
-) -> Option<usize> {
-    match panel {
-        Panel::Quote => {
-            info_line_at_content_row_after_actions(panel, &quote_lines(state), area, content_row)
-        }
-        Panel::History => history_info_row_at_content_row(state, area, content_row),
-        Panel::Evidence => info_line_at_content_row_after_actions(
-            panel,
-            &evidence_panel_lines(state),
-            area,
-            content_row,
-        ),
-        Panel::Polymarket => info_line_at_content_row_after_actions(
-            panel,
-            &polymarket_panel_lines(state),
-            area,
-            content_row,
-        ),
-        Panel::Research => info_line_at_content_row_after_actions(
-            panel,
-            &research_panel_lines(state),
-            area,
-            content_row,
-        ),
-        Panel::RiskAudit => info_line_at_content_row(
-            &crate::render::risk_audit::risk_audit_lines(state),
-            area,
-            content_row,
-        ),
-        Panel::ProviderHealth => {
-            table_row_at_content_row(provider_health_row_count(state, area), content_row)
-        }
-        Panel::TaskLog => table_row_at_content_row(task_log_row_count(state, area), content_row),
-        Panel::Watchlist
-        | Panel::OrderTicket
-        | Panel::OpenOrders
-        | Panel::IntentReview
-        | Panel::Account
-        | Panel::TransferTicket
-        | Panel::FuturesState
-        | Panel::Settings
-        | Panel::ProfileRisk => None,
-    }
-}
 
 pub(crate) fn panel_action_line(
     state: &AppState,
@@ -149,23 +98,6 @@ pub(crate) fn history_toolbar_action_at_content_cell(
         .and_then(|summary_row| summary_row.action_at(content_column))
 }
 
-fn history_info_row_at_content_row(
-    state: &AppState,
-    area: Rect,
-    content_row: usize,
-) -> Option<usize> {
-    let content_row = content_row.checked_sub(action_row_count(
-        Panel::History,
-        area.height.saturating_sub(2),
-    ))?;
-    if content_row >= history_visible_summary_height(area, history_workbench_active(state)) {
-        return None;
-    }
-    let rows = history_summary_rows(state, area.width.saturating_sub(2), None);
-    let row = history_summary_row_at(&rows, area, content_row)?;
-    row.info_index()
-}
-
 pub(crate) fn history_chart_area(panel_area: Rect, workbench: bool) -> Rect {
     let inner = Rect {
         x: panel_area.x.saturating_add(1),
@@ -186,36 +118,12 @@ pub(crate) fn history_workbench_active(state: &AppState) -> bool {
     state.zoomed && state.panels.focused() == Panel::History
 }
 
-fn info_line_at_content_row_after_actions(
-    panel: Panel,
-    lines: &[Line<'_>],
-    area: Rect,
-    content_row: usize,
-) -> Option<usize> {
-    let content_row =
-        content_row.checked_sub(action_row_count(panel, area.height.saturating_sub(2)))?;
-    info_line_at_content_row(lines, area, content_row)
-}
-
 fn action_row_count(panel: Panel, content_height: u16) -> usize {
     (content_height >= 3
         && matches!(
             panel,
             Panel::Quote | Panel::History | Panel::Evidence | Panel::Polymarket | Panel::Research
         )) as usize
-}
-
-fn info_line_at_content_row(lines: &[Line<'_>], area: Rect, content_row: usize) -> Option<usize> {
-    let width = panel_text_width(area);
-    let mut visual_row = 0;
-    for (index, line) in lines.iter().enumerate() {
-        let line_height = wrapped_line_height(line, width);
-        if content_row < visual_row + line_height {
-            return Some(index);
-        }
-        visual_row += line_height;
-    }
-    None
 }
 
 fn panel_text_width(area: Rect) -> usize {
@@ -397,28 +305,28 @@ fn history_summary_rows(
 
 #[derive(Debug, Clone)]
 enum HistorySummaryRow {
-    Info { line: Line<'static>, index: usize },
+    Info(Line<'static>),
     Action(RenderedPanelActionLine),
 }
 
 impl HistorySummaryRow {
     fn line(self) -> Line<'static> {
         match self {
-            Self::Info { line, .. } => line,
+            Self::Info(line) => line,
             Self::Action(action) => action.line,
         }
     }
 
     fn display_line(&self) -> Line<'static> {
         match self {
-            Self::Info { line, .. } => line.clone(),
+            Self::Info(line) => line.clone(),
             Self::Action(action) => action.line.clone(),
         }
     }
 
     fn action_at(&self, content_column: u16) -> Option<PanelActionSpan> {
         match self {
-            Self::Info { .. } => None,
+            Self::Info(_) => None,
             Self::Action(action) => action
                 .actions
                 .iter()
@@ -426,20 +334,10 @@ impl HistorySummaryRow {
                 .cloned(),
         }
     }
-
-    fn info_index(&self) -> Option<usize> {
-        match self {
-            Self::Info { index, .. } => Some(*index),
-            Self::Action(_) => None,
-        }
-    }
 }
 
 fn push_history_info_row(rows: &mut Vec<HistorySummaryRow>, line: Line<'static>) {
-    rows.push(HistorySummaryRow::Info {
-        index: rows.len(),
-        line,
-    });
+    rows.push(HistorySummaryRow::Info(line));
 }
 
 fn history_summary_row_at(
@@ -1020,80 +918,4 @@ fn prediction_market_line(
             compact_text(&market.title, 62)
         )),
     ])
-}
-
-fn provider_health_row_count(state: &AppState, area: Rect) -> usize {
-    let report = ProviderHealthReport::from_state(state);
-    let count = if report.is_empty() {
-        state.provider_profiles.iter().take(8).count()
-    } else {
-        report.providers.len() + report.tasks.len()
-    };
-    count.min(area.height.saturating_sub(3) as usize)
-}
-
-fn task_log_row_count(state: &AppState, area: Rect) -> usize {
-    state
-        .task_log
-        .iter()
-        .rev()
-        .take(area.height.saturating_sub(3) as usize)
-        .count()
-}
-
-fn table_row_at_content_row(row_count: usize, content_row: usize) -> Option<usize> {
-    let row_index = content_row.checked_sub(1)?;
-    (row_index < row_count).then_some(content_row)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn history_chart_rows_are_not_info_targets() {
-        let state = AppState::from_config(crate::config::TuiConfig::default());
-        let area = Rect::new(0, 0, 80, 20);
-
-        assert_eq!(
-            info_row_at_content_row(&state, Panel::History, area, 6),
-            None
-        );
-    }
-
-    #[test]
-    fn quote_text_rows_are_info_targets() {
-        let state = AppState::from_config(crate::config::TuiConfig::default());
-        let area = Rect::new(0, 0, 80, 20);
-
-        assert_eq!(info_row_at_content_row(&state, Panel::Quote, area, 0), None);
-        assert_eq!(
-            info_row_at_content_row(&state, Panel::Quote, area, 1),
-            Some(0)
-        );
-    }
-
-    #[test]
-    fn wrapped_quote_text_rows_keep_the_same_info_target() {
-        let state = AppState::from_config(crate::config::TuiConfig::default());
-        let area = Rect::new(0, 0, 24, 20);
-
-        assert_eq!(
-            info_row_at_content_row(&state, Panel::Quote, area, 2),
-            Some(1)
-        );
-        assert_eq!(
-            info_row_at_content_row(&state, Panel::Quote, area, 3),
-            Some(1)
-        );
-    }
-
-    #[test]
-    fn word_wrapped_info_rows_match_ratatui_visual_rows_before_next_item() {
-        let lines = [Line::from("aaa aaa aaa aaa"), Line::from("next item")];
-        let area = Rect::new(0, 0, 7, 20);
-
-        assert_eq!(info_line_at_content_row(&lines, area, 3), Some(0));
-        assert_eq!(info_line_at_content_row(&lines, area, 4), Some(1));
-    }
 }

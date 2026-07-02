@@ -333,12 +333,7 @@ fn read_only_panel_lines(
         Panel::Research => read_only_panel_view::research_panel_lines(state),
         _ => Vec::new(),
     };
-    lines.extend(hover_info_lines(
-        content,
-        mouse_target,
-        panel,
-        state.theme.selected_style(),
-    ));
+    lines.extend(content);
     lines
 }
 
@@ -358,7 +353,7 @@ fn render_provider_health(
     frame: &mut Frame<'_>,
     state: &AppState,
     area: Rect,
-    mouse_target: Option<MouseTarget>,
+    _mouse_target: Option<MouseTarget>,
 ) {
     let report = ProviderHealthReport::from_state(state);
     let rows = if report.is_empty() {
@@ -378,13 +373,6 @@ fn render_provider_health(
     } else {
         provider_health::table_rows(report, area.height.saturating_sub(3) as usize, &state.theme)
     };
-    let rows = hover_table_rows(
-        rows,
-        mouse_target,
-        Panel::ProviderHealth,
-        state.theme.selected_style(),
-        1,
-    );
     frame.render_widget(
         Table::new(rows, provider_health::table_widths())
             .header(
@@ -400,7 +388,7 @@ fn render_task_log(
     frame: &mut Frame<'_>,
     state: &AppState,
     area: Rect,
-    mouse_target: Option<MouseTarget>,
+    _mouse_target: Option<MouseTarget>,
 ) {
     let rows = state
         .task_log
@@ -415,59 +403,12 @@ fn render_task_log(
             ])
         })
         .collect::<Vec<_>>();
-    let rows = hover_table_rows(
-        rows,
-        mouse_target,
-        Panel::TaskLog,
-        state.theme.selected_style(),
-        1,
-    );
     frame.render_widget(
         Table::new(rows, [Constraint::Length(10), Constraint::Min(10)])
             .header(Row::new(["status", "event"]).style(state.theme.accent_style()))
             .block(panel_block(Panel::TaskLog, state)),
         area,
     );
-}
-
-fn hover_info_lines<'line>(
-    lines: Vec<Line<'line>>,
-    mouse_target: Option<MouseTarget>,
-    panel: Panel,
-    selected_style: Style,
-) -> Vec<Line<'line>> {
-    lines
-        .into_iter()
-        .enumerate()
-        .map(|(index, line)| {
-            if mouse_target.is_some_and(|target| target.panel_info_row_hovered(panel, index)) {
-                line.style(selected_style)
-            } else {
-                line
-            }
-        })
-        .collect()
-}
-
-fn hover_table_rows(
-    rows: Vec<Row<'static>>,
-    mouse_target: Option<MouseTarget>,
-    panel: Panel,
-    selected_style: Style,
-    content_row_offset: usize,
-) -> Vec<Row<'static>> {
-    rows.into_iter()
-        .enumerate()
-        .map(|(index, row)| {
-            let content_row = index + content_row_offset;
-            if mouse_target.is_some_and(|target| target.panel_info_row_hovered(panel, content_row))
-            {
-                row.style(selected_style)
-            } else {
-                row
-            }
-        })
-        .collect()
 }
 
 fn task_status_style(status: TaskStatus, theme: &ThemeConfig) -> Style {

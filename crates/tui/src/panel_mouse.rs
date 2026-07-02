@@ -31,18 +31,15 @@ pub(crate) fn hover_target(
     column: u16,
     row: u16,
 ) -> Option<MouseTarget> {
-    panel_hit_at(state, panel, area, column, row)
-        .map(|hit| MouseTarget::PanelAction {
-            panel,
-            action: hit.mouse_action(),
-        })
-        .or(Some(MouseTarget::Panel(panel)))
+    panel_hit_at(state, panel, area, column, row).map(|hit| MouseTarget::PanelAction {
+        panel,
+        action: hit.mouse_action(),
+    })
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 enum PanelHit {
     Row(usize),
-    InfoRow(usize),
     TicketField(usize),
     TicketFieldAdjust {
         index: usize,
@@ -126,7 +123,6 @@ impl PanelHit {
     fn mouse_action(self) -> PanelMouseAction {
         match self {
             Self::Row(index) => PanelMouseAction::SelectRow { index },
-            Self::InfoRow(index) => PanelMouseAction::InspectRow { index },
             Self::TicketField(index) => PanelMouseAction::SelectField { index },
             Self::TicketFieldAdjust { index, direction } => {
                 PanelMouseAction::AdjustField { index, direction }
@@ -283,8 +279,7 @@ fn panel_hit_at(
             ) {
                 return Some(PanelHit::from_panel_action(action));
             }
-            crate::read_only_panel_view::info_row_at_content_row(state, panel, area, content_row)
-                .map(PanelHit::InfoRow)
+            None
         }
     }
 }
@@ -317,8 +312,7 @@ fn history_hit_at(state: &AppState, area: Rect, column: u16, row: u16) -> Option
             position: MousePosition::new(column, row),
         });
     }
-    crate::read_only_panel_view::info_row_at_content_row(state, Panel::History, area, content_row)
-        .map(PanelHit::InfoRow)
+    None
 }
 
 fn history_chart_hit_area(state: &AppState, panel_area: Rect, workbench: bool) -> Option<Rect> {

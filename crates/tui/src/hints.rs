@@ -1,6 +1,7 @@
 use crate::command::ActionId;
 use crate::model::{FloatingKind, InteractionMode, Panel};
 use crate::state::AppState;
+use unicode_width::UnicodeWidthStr;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub(crate) struct StatusHint {
@@ -127,7 +128,7 @@ pub(crate) fn status_key_hint_specs(state: &AppState, max_width: usize) -> Vec<S
             .map(|hint| hint.text.as_str())
             .collect::<Vec<_>>()
             .join("  ");
-        if text.len() <= max_width {
+        if UnicodeWidthStr::width(text.as_str()) <= max_width {
             return hints;
         }
         hints.pop();

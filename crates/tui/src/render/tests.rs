@@ -107,6 +107,25 @@ fn mouse_hover_visually_highlights_watchlist_row() {
 }
 
 #[test]
+fn mouse_hover_does_not_highlight_read_only_quote_row() {
+    let area = ratatui::layout::Rect::new(0, 0, 120, 32);
+    let mut state = AppState::from_config(TuiConfig::default());
+    let quote = layout::build(
+        area,
+        &state.layout,
+        &state.floating,
+        &state.visible_panels(),
+    )
+    .panel_rect(Panel::Quote)
+    .expect("quote panel is visible");
+    state.mouse_position = Some(MousePosition::new(quote.x + 3, quote.y + 2));
+
+    let buffer = render_to_buffer(&state, area.width, area.height);
+
+    assert_eq!(buffer[(quote.x + 3, quote.y + 2)].bg, Color::Reset);
+}
+
+#[test]
 fn live_writes_confirmation_overlay_renders_explicit_gate() {
     let mut state = AppState::from_config(TuiConfig::default());
     state.reduce(crate::state::Action::Execute(ActionId::ToggleLiveWrites));

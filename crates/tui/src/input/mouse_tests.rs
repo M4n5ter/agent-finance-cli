@@ -2240,7 +2240,7 @@ fn mouse_click_on_visible_status_action_executes_it() {
 }
 
 #[test]
-fn mouse_movement_tracks_read_only_panel_row_hover() {
+fn mouse_movement_over_read_only_panel_row_has_no_hover_target() {
     let area = Rect::new(0, 0, 120, 32);
     let mut state = AppState::from_config(crate::config::TuiConfig::default());
     let panel = layout::build(
@@ -2260,13 +2260,49 @@ fn mouse_movement_tracks_read_only_panel_row_hover() {
         mouse_event(MouseEventKind::Moved, panel.x + 2, panel.y + 2),
     );
 
-    assert_eq!(
-        current_mouse_target(area, &state),
-        Some(MouseTarget::PanelAction {
-            panel: Panel::Quote,
-            action: PanelMouseAction::InspectRow { index: 0 },
-        })
+    assert_eq!(current_mouse_target(area, &state), None);
+}
+
+#[test]
+fn mouse_movement_over_non_interactive_panel_space_has_no_hover_target() {
+    let area = Rect::new(0, 0, 120, 32);
+    let mut state = AppState::from_config(crate::config::TuiConfig::default());
+    let panel = layout::build(
+        area,
+        &state.layout,
+        &state.floating,
+        &state.visible_panels(),
+    )
+    .panel_rect(Panel::Quote)
+    .expect("quote panel is visible");
+    let mut drag = MouseDrag::default();
+
+    handle_mouse_event(
+        area,
+        &mut state,
+        &mut drag,
+        mouse_event(MouseEventKind::Moved, panel.x + 2, panel.bottom() - 2),
     );
+
+    assert_eq!(current_mouse_target(area, &state), None);
+}
+
+#[test]
+fn mouse_movement_over_non_interactive_floating_space_has_no_hover_target() {
+    let area = Rect::new(0, 0, 120, 32);
+    let mut state = AppState::from_config(crate::config::TuiConfig::default());
+    state.reduce(Action::Execute(ActionId::OpenFloating(FloatingKind::Help)));
+    let floating = floating_rect(area, &state, FloatingKind::Help);
+    let mut drag = MouseDrag::default();
+
+    handle_mouse_event(
+        area,
+        &mut state,
+        &mut drag,
+        mouse_event(MouseEventKind::Moved, floating.x + 2, floating.y + 2),
+    );
+
+    assert_eq!(current_mouse_target(area, &state), None);
 }
 
 #[test]

@@ -1,7 +1,9 @@
 use ratatui::layout::Rect;
+use unicode_width::UnicodeWidthStr;
 
 use agent_finance_i18n::LocaleId;
 
+use crate::action_line_view::{ActionLine, ActionSpan};
 use crate::command::ActionId;
 use crate::hints::{self, StatusHint};
 use crate::i18n::TuiText;
@@ -19,12 +21,7 @@ pub(crate) struct StatusDetail {
     pub actions: Vec<StatusActionSpan>,
 }
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
-pub(crate) struct StatusActionSpan {
-    pub start: u16,
-    pub end: u16,
-    pub action: StatusAction,
-}
+pub(crate) type StatusActionSpan = ActionSpan<StatusAction>;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub(crate) struct StatusAction {
@@ -154,34 +151,35 @@ fn long_detail(
         state.visible_panels().len(),
         state.workspace.panels().len(),
     );
-    let hint_budget = width.saturating_sub(prefix.len() as u16 + 1) as usize;
+    let hint_budget =
+        width.saturating_sub(UnicodeWidthStr::width(prefix.as_str()) as u16 + 1) as usize;
     let key_hints = hints::status_key_hint_specs(state, hint_budget);
     detail_with_hints(prefix, key_hints, " ")
 }
 
 fn detail_with_hints(prefix: String, hints: Vec<StatusHint>, suffix: &'static str) -> StatusDetail {
-    let mut text = prefix;
-    let mut actions = Vec::new();
+    let mut line = ActionLine::new(prefix, u16::MAX);
     for (index, hint) in hints.into_iter().enumerate() {
         if index > 0 {
-            text.push_str("  ");
+            line.push_visible_text("  ");
         }
-        let start = text.len() as u16;
-        text.push_str(&hint.text);
-        let end = text.len() as u16;
         if let Some(action) = hint.action {
-            actions.push(StatusActionSpan {
-                start,
-                end,
-                action: StatusAction {
+            line.push_visible_action(
+                &hint.text,
+                StatusAction {
                     label: action.mouse_label,
                     action: action.action,
                 },
-            });
+            );
+        } else {
+            line.push_visible_text(&hint.text);
         }
     }
-    text.push_str(suffix);
-    StatusDetail { text, actions }
+    line.push_visible_text(suffix);
+    StatusDetail {
+        text: line.text,
+        actions: line.actions,
+    }
 }
 
 fn fit_status_detail(
@@ -191,7 +189,7 @@ fn fit_status_detail(
     let width = width as usize;
     candidates
         .into_iter()
-        .find(|candidate| candidate.text.len() <= width)
+        .find(|candidate| UnicodeWidthStr::width(candidate.text.as_str()) <= width)
         .unwrap_or_else(|| StatusDetail::plain(String::new()))
 }
 
@@ -283,7 +281,7 @@ pub(crate) fn visible_action_at(state: &AppState, area: Rect, column: u16) -> Op
 mod tests {
     use super::*;
     use crate::command::ActionId;
-    use crate::config::TuiConfig;
+    use crate::config::{LocaleConfig, TuiConfig};
     use crate::model::FloatingKind;
 
     #[test]
@@ -333,6 +331,35 @@ mod tests {
     }
 
     #[test]
+    fn action_spans_use_terminal_cells_when_prefix_contains_wide_text() {
+        let state = AppState::from_config(TuiConfig {
+            locale: LocaleConfig {
+                current: Some(LocaleId::ZhCn),
+            },
+            ..TuiConfig::default()
+        });
+        let area = Rect::new(32, 20, 150, 1);
+        let detail = detail(&state, "CRDO", 0, area.width);
+
+        assert!(!detail.text.is_ascii());
+        assert_action_spans(
+            &state,
+            area,
+            &detail,
+            [
+                (
+                    ActionId::OpenFloating(FloatingKind::CommandPalette),
+                    ": command",
+                ),
+                (
+                    ActionId::OpenFloating(FloatingKind::SymbolSearch),
+                    "/ search",
+                ),
+            ],
+        );
+    }
+
+    #[test]
     fn status_areas_share_layout_between_render_and_hit_test() {
         let area = Rect::new(4, 10, 120, 1);
         let areas = areas(area, LocaleId::EnUs);
@@ -354,9 +381,10 @@ mod tests {
                 .iter()
                 .find(|span| span.action.action == action)
                 .expect("status action is visible at representative width");
+            assert_eq!(&detail.text[span.byte_start..span.byte_end], visible_text);
             assert_eq!(
-                &detail.text[span.start as usize..span.end as usize],
-                visible_text
+                UnicodeWidthStr::width(&detail.text[..span.byte_start]),
+                span.start as usize
             );
             assert_eq!(
                 action_at(state, "CRDO", 0, area, area.x + span.start),
