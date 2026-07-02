@@ -117,6 +117,25 @@ fn parse_errors_include_localized_guidance() {
     );
 }
 
+#[test]
+fn skills_commands_use_requested_locale_without_localizing_command_blocks() {
+    let list = command_text(&["--locale", "zh", "skills", "list"]);
+    assert!(
+        list.contains("入口指南"),
+        "skills list should use localized frontmatter: {list}"
+    );
+
+    let core = command_text(&["--locale", "ko", "skills", "get", "core", "--full"]);
+    assert!(
+        core.contains("현지화 안내"),
+        "skills get should return localized body: {core}"
+    );
+    assert!(
+        core.contains("agent-finance market providers"),
+        "command blocks should remain stable English commands: {core}"
+    );
+}
+
 fn command_text(args: &[&str]) -> String {
     let output = command(args)
         .output()

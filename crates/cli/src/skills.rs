@@ -4,10 +4,12 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, anyhow};
 
+use agent_finance_i18n::LocaleId;
+
 const SUPPLEMENTARY_DIRS: &[&str] = &["references", "templates"];
 
-pub fn print_list() -> Result<()> {
-    let store = SkillStore::load()?;
+pub fn print_list(locale: LocaleId) -> Result<()> {
+    let store = SkillStore::load(locale)?;
     let skills = store.visible_skills();
     let width = skills
         .iter()
@@ -23,8 +25,8 @@ pub fn print_list() -> Result<()> {
     Ok(())
 }
 
-pub fn get(name: &str, full: bool) -> Result<Option<String>> {
-    SkillStore::load()?.render(name, full)
+pub fn get(name: &str, full: bool, locale: LocaleId) -> Result<Option<String>> {
+    SkillStore::load(locale)?.render(name, full)
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -61,11 +63,11 @@ enum SkillStore {
 }
 
 impl SkillStore {
-    fn load() -> Result<Self> {
+    fn load(locale: LocaleId) -> Result<Self> {
         if let Some(skill_data_dir) = locate_skill_data_dir()? {
-            return load_filesystem_store(&skill_data_dir).map(Self::Filesystem);
+            return load_filesystem_store(&skill_data_dir, locale).map(Self::Filesystem);
         }
-        Ok(Self::Embedded(load_embedded_store()?))
+        Ok(Self::Embedded(load_embedded_store(locale)?))
     }
 
     fn visible_skills(&self) -> Vec<&SkillInfo> {
@@ -148,7 +150,7 @@ fn find_ancestor_skill_data(start: &Path) -> Option<PathBuf> {
         .find(|candidate| candidate.is_dir())
 }
 
-fn load_filesystem_store(skill_data_dir: &Path) -> Result<Vec<SkillDocument>> {
+fn load_filesystem_store(skill_data_dir: &Path, locale: LocaleId) -> Result<Vec<SkillDocument>> {
     let mut documents = Vec::new();
     let entries = fs::read_dir(skill_data_dir)
         .with_context(|| format!("failed to read {}", skill_data_dir.display()))?;
@@ -161,7 +163,7 @@ fn load_filesystem_store(skill_data_dir: &Path) -> Result<Vec<SkillDocument>> {
             continue;
         }
 
-        let skill_md = dir.join("SKILL.md");
+        let skill_md = localized_skill_file(&dir, locale);
         if !skill_md.is_file() {
             continue;
         }
@@ -177,24 +179,119 @@ fn load_filesystem_store(skill_data_dir: &Path) -> Result<Vec<SkillDocument>> {
     Ok(documents)
 }
 
-fn load_embedded_store() -> Result<Vec<SkillDocument>> {
+fn load_embedded_store(locale: LocaleId) -> Result<Vec<SkillDocument>> {
     let mut documents = vec![
         embedded_document(
             "core",
-            CORE,
-            &[("references/command-map.md", CORE_COMMAND_MAP)],
+            localized_resource(locale, CORE, CORE_ZH_CN, CORE_JA_JP, CORE_KO_KR),
+            &[(
+                "references/command-map.md",
+                localized_resource(
+                    locale,
+                    CORE_COMMAND_MAP,
+                    CORE_COMMAND_MAP_ZH_CN,
+                    CORE_COMMAND_MAP_JA_JP,
+                    CORE_COMMAND_MAP_KO_KR,
+                ),
+            )],
         )?,
-        embedded_document("crypto", CRYPTO, &[])?,
-        embedded_document("history-indicators", HISTORY_INDICATORS, &[])?,
-        embedded_document("prediction-markets", PREDICTION_MARKETS, &[])?,
-        embedded_document("price", PRICE, &[])?,
-        embedded_document("profile", PROFILE, &[])?,
-        embedded_document("providers", PROVIDERS, &[])?,
-        embedded_document("research-data", RESEARCH_DATA, &[])?,
-        embedded_document("tui", TUI, &[])?,
+        embedded_document(
+            "crypto",
+            localized_resource(locale, CRYPTO, CRYPTO_ZH_CN, CRYPTO_JA_JP, CRYPTO_KO_KR),
+            &[],
+        )?,
+        embedded_document(
+            "history-indicators",
+            localized_resource(
+                locale,
+                HISTORY_INDICATORS,
+                HISTORY_INDICATORS_ZH_CN,
+                HISTORY_INDICATORS_JA_JP,
+                HISTORY_INDICATORS_KO_KR,
+            ),
+            &[],
+        )?,
+        embedded_document(
+            "prediction-markets",
+            localized_resource(
+                locale,
+                PREDICTION_MARKETS,
+                PREDICTION_MARKETS_ZH_CN,
+                PREDICTION_MARKETS_JA_JP,
+                PREDICTION_MARKETS_KO_KR,
+            ),
+            &[],
+        )?,
+        embedded_document(
+            "price",
+            localized_resource(locale, PRICE, PRICE_ZH_CN, PRICE_JA_JP, PRICE_KO_KR),
+            &[],
+        )?,
+        embedded_document(
+            "profile",
+            localized_resource(locale, PROFILE, PROFILE_ZH_CN, PROFILE_JA_JP, PROFILE_KO_KR),
+            &[],
+        )?,
+        embedded_document(
+            "providers",
+            localized_resource(
+                locale,
+                PROVIDERS,
+                PROVIDERS_ZH_CN,
+                PROVIDERS_JA_JP,
+                PROVIDERS_KO_KR,
+            ),
+            &[],
+        )?,
+        embedded_document(
+            "research-data",
+            localized_resource(
+                locale,
+                RESEARCH_DATA,
+                RESEARCH_DATA_ZH_CN,
+                RESEARCH_DATA_JA_JP,
+                RESEARCH_DATA_KO_KR,
+            ),
+            &[],
+        )?,
+        embedded_document(
+            "tui",
+            localized_resource(locale, TUI, TUI_ZH_CN, TUI_JA_JP, TUI_KO_KR),
+            &[],
+        )?,
     ];
     documents.sort_by(|left, right| left.info.name.cmp(&right.info.name));
     Ok(documents)
+}
+
+fn localized_skill_file(skill_dir: &Path, locale: LocaleId) -> PathBuf {
+    if locale == LocaleId::EnUs {
+        return skill_dir.join("SKILL.md");
+    }
+    let localized = skill_dir
+        .join("locales")
+        .join(locale.as_str())
+        .join("SKILL.md");
+    if localized.is_file() {
+        localized
+    } else {
+        skill_dir.join("SKILL.md")
+    }
+}
+
+fn localized_resource(
+    locale: LocaleId,
+    en_us: &'static str,
+    zh_cn: &'static str,
+    ja_jp: &'static str,
+    ko_kr: &'static str,
+) -> &'static str {
+    match locale {
+        LocaleId::EnUs => en_us,
+        LocaleId::ZhCn => zh_cn,
+        LocaleId::JaJp => ja_jp,
+        LocaleId::KoKr => ko_kr,
+    }
 }
 
 fn embedded_document(
@@ -331,14 +428,56 @@ fn append_supplementary(output: &mut String, supplementary: &[SupplementaryFile]
 
 const CORE: &str = include_str!("../../../skill-data/core/SKILL.md");
 const CORE_COMMAND_MAP: &str = include_str!("../../../skill-data/core/references/command-map.md");
+const CORE_ZH_CN: &str = include_str!("../../../skill-data/core/locales/zh-CN/SKILL.md");
+const CORE_JA_JP: &str = include_str!("../../../skill-data/core/locales/ja-JP/SKILL.md");
+const CORE_KO_KR: &str = include_str!("../../../skill-data/core/locales/ko-KR/SKILL.md");
+const CORE_COMMAND_MAP_ZH_CN: &str =
+    include_str!("../../../skill-data/core/locales/zh-CN/references/command-map.md");
+const CORE_COMMAND_MAP_JA_JP: &str =
+    include_str!("../../../skill-data/core/locales/ja-JP/references/command-map.md");
+const CORE_COMMAND_MAP_KO_KR: &str =
+    include_str!("../../../skill-data/core/locales/ko-KR/references/command-map.md");
 const CRYPTO: &str = include_str!("../../../skill-data/crypto/SKILL.md");
+const CRYPTO_ZH_CN: &str = include_str!("../../../skill-data/crypto/locales/zh-CN/SKILL.md");
+const CRYPTO_JA_JP: &str = include_str!("../../../skill-data/crypto/locales/ja-JP/SKILL.md");
+const CRYPTO_KO_KR: &str = include_str!("../../../skill-data/crypto/locales/ko-KR/SKILL.md");
 const HISTORY_INDICATORS: &str = include_str!("../../../skill-data/history-indicators/SKILL.md");
+const HISTORY_INDICATORS_ZH_CN: &str =
+    include_str!("../../../skill-data/history-indicators/locales/zh-CN/SKILL.md");
+const HISTORY_INDICATORS_JA_JP: &str =
+    include_str!("../../../skill-data/history-indicators/locales/ja-JP/SKILL.md");
+const HISTORY_INDICATORS_KO_KR: &str =
+    include_str!("../../../skill-data/history-indicators/locales/ko-KR/SKILL.md");
 const PREDICTION_MARKETS: &str = include_str!("../../../skill-data/prediction-markets/SKILL.md");
+const PREDICTION_MARKETS_ZH_CN: &str =
+    include_str!("../../../skill-data/prediction-markets/locales/zh-CN/SKILL.md");
+const PREDICTION_MARKETS_JA_JP: &str =
+    include_str!("../../../skill-data/prediction-markets/locales/ja-JP/SKILL.md");
+const PREDICTION_MARKETS_KO_KR: &str =
+    include_str!("../../../skill-data/prediction-markets/locales/ko-KR/SKILL.md");
 const PRICE: &str = include_str!("../../../skill-data/price/SKILL.md");
+const PRICE_ZH_CN: &str = include_str!("../../../skill-data/price/locales/zh-CN/SKILL.md");
+const PRICE_JA_JP: &str = include_str!("../../../skill-data/price/locales/ja-JP/SKILL.md");
+const PRICE_KO_KR: &str = include_str!("../../../skill-data/price/locales/ko-KR/SKILL.md");
 const PROFILE: &str = include_str!("../../../skill-data/profile/SKILL.md");
+const PROFILE_ZH_CN: &str = include_str!("../../../skill-data/profile/locales/zh-CN/SKILL.md");
+const PROFILE_JA_JP: &str = include_str!("../../../skill-data/profile/locales/ja-JP/SKILL.md");
+const PROFILE_KO_KR: &str = include_str!("../../../skill-data/profile/locales/ko-KR/SKILL.md");
 const PROVIDERS: &str = include_str!("../../../skill-data/providers/SKILL.md");
+const PROVIDERS_ZH_CN: &str = include_str!("../../../skill-data/providers/locales/zh-CN/SKILL.md");
+const PROVIDERS_JA_JP: &str = include_str!("../../../skill-data/providers/locales/ja-JP/SKILL.md");
+const PROVIDERS_KO_KR: &str = include_str!("../../../skill-data/providers/locales/ko-KR/SKILL.md");
 const RESEARCH_DATA: &str = include_str!("../../../skill-data/research-data/SKILL.md");
+const RESEARCH_DATA_ZH_CN: &str =
+    include_str!("../../../skill-data/research-data/locales/zh-CN/SKILL.md");
+const RESEARCH_DATA_JA_JP: &str =
+    include_str!("../../../skill-data/research-data/locales/ja-JP/SKILL.md");
+const RESEARCH_DATA_KO_KR: &str =
+    include_str!("../../../skill-data/research-data/locales/ko-KR/SKILL.md");
 const TUI: &str = include_str!("../../../skill-data/tui/SKILL.md");
+const TUI_ZH_CN: &str = include_str!("../../../skill-data/tui/locales/zh-CN/SKILL.md");
+const TUI_JA_JP: &str = include_str!("../../../skill-data/tui/locales/ja-JP/SKILL.md");
+const TUI_KO_KR: &str = include_str!("../../../skill-data/tui/locales/ko-KR/SKILL.md");
 
 #[cfg(test)]
 mod tests {
@@ -383,7 +522,9 @@ mod tests {
         )
         .expect("price skill");
 
-        let store = SkillStore::Filesystem(load_filesystem_store(&skill_data).expect("skills"));
+        let store = SkillStore::Filesystem(
+            load_filesystem_store(&skill_data, LocaleId::EnUs).expect("skills"),
+        );
 
         assert_eq!(
             store
@@ -399,7 +540,8 @@ mod tests {
 
     #[test]
     fn embedded_store_keeps_standalone_binary_skills_available() {
-        let store = SkillStore::Embedded(load_embedded_store().expect("embedded store"));
+        let store =
+            SkillStore::Embedded(load_embedded_store(LocaleId::EnUs).expect("embedded store"));
 
         assert!(
             store
@@ -413,6 +555,121 @@ mod tests {
             .expect("core skill");
         assert!(core.contains("# agent-finance core skill"));
         assert!(core.contains("--- references/command-map.md ---"));
+    }
+
+    #[test]
+    fn embedded_store_uses_requested_locale_for_skill_documents() {
+        let store =
+            SkillStore::Embedded(load_embedded_store(LocaleId::ZhCn).expect("embedded store"));
+
+        let skills = store.visible_skills();
+        let core = skills
+            .iter()
+            .find(|skill| skill.name == "core")
+            .expect("core skill");
+        assert!(
+            core.description.contains("入口指南"),
+            "localized frontmatter should drive skills list: {core:?}"
+        );
+
+        let content = store
+            .render("core", true)
+            .expect("render")
+            .expect("core skill");
+        assert!(
+            content.contains("本地化说明"),
+            "localized body should be returned: {content}"
+        );
+        assert!(
+            content.contains("--- references/command-map.md ---")
+                && content.contains("代码块")
+                && content.contains("agent-finance market price CRDO"),
+            "localized supplementary files should be appended: {content}"
+        );
+    }
+
+    #[test]
+    fn filesystem_store_prefers_locale_document_and_falls_back_to_english() {
+        let root = temp_test_dir("localized-filesystem");
+        let skill_data = root.join("skill-data");
+        let core = skill_data.join("core");
+        let price = skill_data.join("price");
+        fs::create_dir_all(core.join("locales/zh-CN")).expect("core locale dir");
+        fs::create_dir_all(&price).expect("price dir");
+        fs::write(
+            core.join("SKILL.md"),
+            "---\nname: core\ndescription: Core guide.\n---\n\n# Core\n",
+        )
+        .expect("core skill");
+        fs::write(
+            core.join("locales/zh-CN/SKILL.md"),
+            "---\nname: core\ndescription: 核心指南。\n---\n\n# Core\n\n本地化正文\n",
+        )
+        .expect("localized core skill");
+        fs::write(
+            price.join("SKILL.md"),
+            "---\nname: price\ndescription: Price guide.\n---\n\n# Price\n",
+        )
+        .expect("price skill");
+
+        let store = SkillStore::Filesystem(
+            load_filesystem_store(&skill_data, LocaleId::ZhCn).expect("skills"),
+        );
+
+        let core = store
+            .render("core", false)
+            .expect("render")
+            .expect("core skill");
+        let price = store
+            .render("price", false)
+            .expect("render")
+            .expect("price skill");
+        assert!(core.contains("本地化正文"));
+        assert!(price.contains("Price guide."));
+
+        fs::remove_dir_all(root).ok();
+    }
+
+    #[test]
+    fn localized_embedded_skills_preserve_structure_and_command_blocks() {
+        let en = load_embedded_store(LocaleId::EnUs).expect("en store");
+        for locale in [LocaleId::ZhCn, LocaleId::JaJp, LocaleId::KoKr] {
+            let localized = load_embedded_store(locale).expect("localized store");
+            assert_eq!(localized.len(), en.len());
+            for canonical in &en {
+                let translated = localized
+                    .iter()
+                    .find(|document| document.info.name == canonical.info.name)
+                    .expect("translated document");
+                assert_eq!(translated.info.name, canonical.info.name);
+                assert_eq!(
+                    heading_levels(&translated.content),
+                    heading_levels(&canonical.content),
+                    "heading structure drifted for {} {locale}",
+                    canonical.info.name,
+                );
+                assert_eq!(
+                    fenced_code_blocks(&translated.content),
+                    fenced_code_blocks(&canonical.content),
+                    "command/code blocks drifted for {} {locale}",
+                    canonical.info.name,
+                );
+                for canonical_file in &canonical.supplementary {
+                    let translated_file = translated
+                        .supplementary
+                        .iter()
+                        .find(|file| file.path == canonical_file.path)
+                        .expect("translated supplementary file");
+                    assert_eq!(
+                        fenced_code_blocks(&translated_file.content),
+                        fenced_code_blocks(&canonical_file.content),
+                        "supplementary code blocks drifted for {} {} {locale}",
+                        canonical.info.name,
+                        canonical_file.path,
+                    );
+                }
+            }
+        }
     }
 
     #[test]
@@ -435,6 +692,39 @@ mod tests {
         );
 
         fs::remove_dir_all(root).ok();
+    }
+
+    fn heading_levels(content: &str) -> Vec<usize> {
+        content
+            .lines()
+            .filter_map(|line| {
+                let hashes = line
+                    .chars()
+                    .take_while(|character| *character == '#')
+                    .count();
+                (hashes > 0 && line.chars().nth(hashes) == Some(' ')).then_some(hashes)
+            })
+            .collect()
+    }
+
+    fn fenced_code_blocks(content: &str) -> Vec<String> {
+        let mut blocks = Vec::new();
+        let mut current = Vec::new();
+        let mut in_block = false;
+        for line in content.lines() {
+            if line.starts_with("```") {
+                if in_block {
+                    blocks.push(current.join("\n"));
+                    current.clear();
+                }
+                in_block = !in_block;
+                continue;
+            }
+            if in_block {
+                current.push(line);
+            }
+        }
+        blocks
     }
 
     fn temp_test_dir(name: &str) -> PathBuf {

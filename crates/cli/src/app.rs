@@ -210,11 +210,11 @@ fn run_skills(
     let _ = (locale, translator);
     match args.command {
         crate::cli::SkillsCommand::List => {
-            skills::print_list()?;
+            skills::print_list(locale.locale)?;
             Ok(())
         }
         crate::cli::SkillsCommand::Get(args) => {
-            let Some(content) = skills::get(&args.name, args.full)? else {
+            let Some(content) = skills::get(&args.name, args.full, locale.locale)? else {
                 return Err(anyhow!(
                     "unknown skill '{}'; run `agent-finance skills list`",
                     args.name
